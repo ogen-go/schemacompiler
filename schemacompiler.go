@@ -12,9 +12,6 @@ import (
 	"github.com/go-faster/errors"
 
 	"github.com/ogen-go/schemacompiler/internal/frontend"
-	"github.com/ogen-go/schemacompiler/internal/ir"
-	"github.com/ogen-go/schemacompiler/internal/norm"
-	"github.com/ogen-go/schemacompiler/internal/planner"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -60,13 +57,31 @@ func Compile(ctx context.Context, data []byte, opts Options) (*Result, error) {
 		budget = defaultExpansionBudget
 	}
 
-	expr := norm.Normalize(ir.Compile(schema.Root), budget)
-	res := planner.Build(expr, schema.Registry)
+	root := buildPlan(schema.Root, schema.Registry, budget)
+
+	// Whole-document assembly: compile every $ref target into a named definition and
+	// attach the resulting reference graph to the root plan (design §10.1).
+	defs := buildDefinitions(schema.Registry, budget)
+	if len(defs.plans) > 0 {
+		if schema.Registry.HasDynamicRefs() {
+			root.Plan.Resolution = plan.DynamicReferenceGraph{StaticDefinitions: defs.plans}
+		} else {
+			root.Plan.Resolution = plan.StaticReferenceGraph{Definitions: defs.plans}
+		}
+	}
+
+	// The document's capability and exactness are at least the worst over the root and
+	// every reachable definition (design §22, §24).
+	capLevel := root.Plan.Capability
+	for _, d := range defs.plans {
+		capLevel = maxCapability(capLevel, d.Capability)
+	}
+	root.Plan.Capability = capLevel
 
 	return &Result{
-		Plan:        res.Plan,
-		Capability:  res.Plan.Capability,
-		Exactness:   res.Exactness,
-		Diagnostics: res.Diagnostics,
+		Plan:        root.Plan,
+		Capability:  capLevel,
+		Exactness:   maxExactness(root.Exactness, defs.exactness),
+		Diagnostics: dedupeDiagnostics(append(root.Diagnostics, defs.diags...)),
 	}, nil
 }

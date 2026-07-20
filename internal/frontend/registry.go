@@ -130,3 +130,18 @@ func (r *Registry) ClassifyRecursion(n *Node) RecursionClass {
 func (r *Registry) SCCs() []SCC {
 	return r.sccs
 }
+
+// RefTargets returns every Node that is the resolved target of a static `$ref`, keyed by
+// its SchemaID (the target's [Node.Pointer], the same key used for recursion
+// classification and for ir.Ref.Target). These are exactly the schemas that must become
+// named definitions in a whole-document plan (design §10.1); unresolved and $dynamicRef
+// targets are excluded.
+func (r *Registry) RefTargets() map[string]*Node {
+	out := make(map[string]*Node)
+	for _, n := range r.nodes {
+		if n.Resolved != nil {
+			out[n.Resolved.Pointer] = n.Resolved
+		}
+	}
+	return out
+}

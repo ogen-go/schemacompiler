@@ -115,6 +115,7 @@ Only `plan` and the root package are importable by ogen. Everything analytical i
 | 3 | `norm` | rewrite/subsumption/disjointness/constraint-push/discriminator loop with expansion budget (§15–18) |
 | 4 | `planner` + `plan` | Representation/Validation/Dispatch/Resolution inference + recursive classify → Capability + Exactness + Diagnostics (§7–10, §22, §24, §25) |
 | 5 | `conformance` | JSON-Schema-Test-Suite 2020-12 harness (no silent caps — log skips), e2e goldens, `plan → ogen gen/ir` integration notes |
+| 6 | root `document.go` | whole-document `$ref` assembly: every `$ref` target compiled into `plan.StaticReferenceGraph.Definitions`, keyed by SchemaID; `Registry.RefTargets()` exposes the targets |
 
 Each phase must land with tests green and `golangci-lint run` clean before the next
 starts. Phases 2–4 depend only on the internal AST from Phase 1, so their logic can be

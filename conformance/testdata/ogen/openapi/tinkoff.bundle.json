@@ -1,0 +1,1315 @@
+{
+  "$defs": {
+    "Empty": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        }
+      }
+    },
+    "Error": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Error"
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "code": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "PortfolioResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/Portfolio"
+        }
+      }
+    },
+    "Portfolio": {
+      "type": "object",
+      "required": [
+        "positions"
+      ],
+      "properties": {
+        "positions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PortfolioPosition"
+          }
+        }
+      }
+    },
+    "UserAccountsResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/UserAccounts"
+        }
+      }
+    },
+    "UserAccounts": {
+      "type": "object",
+      "required": [
+        "accounts"
+      ],
+      "properties": {
+        "accounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UserAccount"
+          }
+        }
+      }
+    },
+    "UserAccount": {
+      "type": "object",
+      "required": [
+        "brokerAccountType",
+        "brokerAccountId"
+      ],
+      "properties": {
+        "brokerAccountType": {
+          "$ref": "#/$defs/BrokerAccountType"
+        },
+        "brokerAccountId": {
+          "type": "string"
+        }
+      }
+    },
+    "PortfolioCurrenciesResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/Currencies"
+        }
+      }
+    },
+    "Currencies": {
+      "type": "object",
+      "required": [
+        "currencies"
+      ],
+      "properties": {
+        "currencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CurrencyPosition"
+          }
+        }
+      }
+    },
+    "CurrencyPosition": {
+      "type": "object",
+      "required": [
+        "currency",
+        "balance"
+      ],
+      "properties": {
+        "currency": {
+          "$ref": "#/$defs/Currency"
+        },
+        "balance": {
+          "type": "number",
+          "format": "double"
+        },
+        "blocked": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "PortfolioPosition": {
+      "type": "object",
+      "required": [
+        "figi",
+        "balance",
+        "instrumentType",
+        "lots",
+        "name"
+      ],
+      "properties": {
+        "figi": {
+          "type": "string"
+        },
+        "ticker": {
+          "type": "string"
+        },
+        "isin": {
+          "type": "string"
+        },
+        "instrumentType": {
+          "$ref": "#/$defs/InstrumentType"
+        },
+        "balance": {
+          "type": "number",
+          "format": "double"
+        },
+        "blocked": {
+          "type": "number",
+          "format": "double"
+        },
+        "expectedYield": {
+          "$ref": "#/$defs/MoneyAmount"
+        },
+        "lots": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "averagePositionPrice": {
+          "$ref": "#/$defs/MoneyAmount"
+        },
+        "averagePositionPriceNoNkd": {
+          "$ref": "#/$defs/MoneyAmount"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "MoneyAmount": {
+      "type": "object",
+      "required": [
+        "currency",
+        "value"
+      ],
+      "properties": {
+        "currency": {
+          "$ref": "#/$defs/Currency"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "OrderbookResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/Orderbook"
+        }
+      }
+    },
+    "Orderbook": {
+      "type": "object",
+      "required": [
+        "figi",
+        "depth",
+        "bids",
+        "asks",
+        "tradeStatus",
+        "minPriceIncrement"
+      ],
+      "properties": {
+        "figi": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "bids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OrderResponse"
+          }
+        },
+        "asks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OrderResponse"
+          }
+        },
+        "tradeStatus": {
+          "$ref": "#/$defs/TradeStatus"
+        },
+        "minPriceIncrement": {
+          "type": "number",
+          "format": "double",
+          "description": "Шаг цены"
+        },
+        "faceValue": {
+          "type": "number",
+          "format": "double",
+          "description": "Номинал для облигаций"
+        },
+        "lastPrice": {
+          "type": "number",
+          "format": "double"
+        },
+        "closePrice": {
+          "type": "number",
+          "format": "double"
+        },
+        "limitUp": {
+          "type": "number",
+          "format": "double",
+          "description": "Верхняя граница цены"
+        },
+        "limitDown": {
+          "type": "number",
+          "format": "double",
+          "description": "Нижняя граница цены"
+        }
+      }
+    },
+    "OrderResponse": {
+      "type": "object",
+      "required": [
+        "price",
+        "quantity"
+      ],
+      "properties": {
+        "price": {
+          "type": "number",
+          "format": "double"
+        },
+        "quantity": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "CandlesResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/Candles"
+        }
+      }
+    },
+    "Candles": {
+      "type": "object",
+      "required": [
+        "candles",
+        "figi",
+        "interval"
+      ],
+      "properties": {
+        "figi": {
+          "type": "string"
+        },
+        "interval": {
+          "$ref": "#/$defs/CandleResolution"
+        },
+        "candles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Candle"
+          }
+        }
+      }
+    },
+    "Candle": {
+      "type": "object",
+      "required": [
+        "figi",
+        "interval",
+        "time",
+        "o",
+        "c",
+        "h",
+        "l",
+        "v"
+      ],
+      "properties": {
+        "figi": {
+          "type": "string"
+        },
+        "interval": {
+          "$ref": "#/$defs/CandleResolution"
+        },
+        "o": {
+          "type": "number",
+          "format": "double"
+        },
+        "c": {
+          "type": "number",
+          "format": "double"
+        },
+        "h": {
+          "type": "number",
+          "format": "double"
+        },
+        "l": {
+          "type": "number",
+          "format": "double"
+        },
+        "v": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "time": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO8601",
+          "example": "2019-08-19T18:38:33+03:00"
+        }
+      }
+    },
+    "OperationsResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/Operations"
+        }
+      }
+    },
+    "Operations": {
+      "type": "object",
+      "required": [
+        "operations"
+      ],
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Operation"
+          }
+        }
+      }
+    },
+    "OperationTrade": {
+      "type": "object",
+      "required": [
+        "tradeId",
+        "date",
+        "quantity",
+        "price"
+      ],
+      "properties": {
+        "tradeId": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO8601",
+          "example": "2019-08-19T18:38:33+03:00"
+        },
+        "price": {
+          "type": "number",
+          "format": "double"
+        },
+        "quantity": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "Operation": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "currency",
+        "payment",
+        "isMarginCall",
+        "date"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/OperationStatus"
+        },
+        "trades": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OperationTrade"
+          }
+        },
+        "commission": {
+          "$ref": "#/$defs/MoneyAmount"
+        },
+        "currency": {
+          "$ref": "#/$defs/Currency"
+        },
+        "payment": {
+          "type": "number",
+          "format": "double"
+        },
+        "price": {
+          "type": "number",
+          "format": "double"
+        },
+        "quantity": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Число инструментов в выставленной заявке"
+        },
+        "quantityExecuted": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Число инструментов, исполненных в заявке"
+        },
+        "figi": {
+          "type": "string"
+        },
+        "instrumentType": {
+          "$ref": "#/$defs/InstrumentType"
+        },
+        "isMarginCall": {
+          "type": "boolean"
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO8601",
+          "example": "2019-08-19T18:38:33+03:00"
+        },
+        "operationType": {
+          "$ref": "#/$defs/OperationTypeWithCommission"
+        }
+      }
+    },
+    "OrdersResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Order"
+          }
+        }
+      }
+    },
+    "Order": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "figi",
+        "operation",
+        "status",
+        "requestedLots",
+        "executedLots",
+        "type",
+        "price"
+      ],
+      "properties": {
+        "orderId": {
+          "type": "string"
+        },
+        "figi": {
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/$defs/OperationType"
+        },
+        "status": {
+          "$ref": "#/$defs/OrderStatus"
+        },
+        "requestedLots": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "executedLots": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "type": {
+          "$ref": "#/$defs/OrderType"
+        },
+        "price": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "LimitOrderRequest": {
+      "type": "object",
+      "required": [
+        "operation",
+        "lots",
+        "price"
+      ],
+      "properties": {
+        "lots": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "operation": {
+          "$ref": "#/$defs/OperationType"
+        },
+        "price": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "LimitOrderResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/PlacedLimitOrder"
+        }
+      }
+    },
+    "PlacedLimitOrder": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "operation",
+        "status",
+        "requestedLots",
+        "executedLots"
+      ],
+      "properties": {
+        "orderId": {
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/$defs/OperationType"
+        },
+        "status": {
+          "$ref": "#/$defs/OrderStatus"
+        },
+        "rejectReason": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Сообщение об ошибке",
+          "type": "string"
+        },
+        "requestedLots": {
+          "type": "integer"
+        },
+        "executedLots": {
+          "type": "integer"
+        },
+        "commission": {
+          "$ref": "#/$defs/MoneyAmount"
+        }
+      }
+    },
+    "MarketOrderRequest": {
+      "type": "object",
+      "required": [
+        "operation",
+        "lots"
+      ],
+      "properties": {
+        "lots": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "operation": {
+          "$ref": "#/$defs/OperationType"
+        }
+      }
+    },
+    "MarketOrderResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/PlacedMarketOrder"
+        }
+      }
+    },
+    "PlacedMarketOrder": {
+      "type": "object",
+      "required": [
+        "orderId",
+        "operation",
+        "status",
+        "requestedLots",
+        "executedLots"
+      ],
+      "properties": {
+        "orderId": {
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/$defs/OperationType"
+        },
+        "status": {
+          "$ref": "#/$defs/OrderStatus"
+        },
+        "rejectReason": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Сообщение об ошибке",
+          "type": "string"
+        },
+        "requestedLots": {
+          "type": "integer"
+        },
+        "executedLots": {
+          "type": "integer"
+        },
+        "commission": {
+          "$ref": "#/$defs/MoneyAmount"
+        }
+      }
+    },
+    "TradeStatus": {
+      "type": "string",
+      "enum": [
+        "NormalTrading",
+        "NotAvailableForTrading"
+      ]
+    },
+    "OperationType": {
+      "type": "string",
+      "enum": [
+        "Buy",
+        "Sell"
+      ]
+    },
+    "OperationTypeWithCommission": {
+      "type": "string",
+      "enum": [
+        "Buy",
+        "BuyCard",
+        "Sell",
+        "BrokerCommission",
+        "ExchangeCommission",
+        "ServiceCommission",
+        "MarginCommission",
+        "OtherCommission",
+        "PayIn",
+        "PayOut",
+        "Tax",
+        "TaxLucre",
+        "TaxDividend",
+        "TaxCoupon",
+        "TaxBack",
+        "Repayment",
+        "PartRepayment",
+        "Coupon",
+        "Dividend",
+        "SecurityIn",
+        "SecurityOut"
+      ]
+    },
+    "OperationStatus": {
+      "description": "Статус заявки",
+      "type": "string",
+      "enum": [
+        "Done",
+        "Decline",
+        "Progress"
+      ]
+    },
+    "CandleResolution": {
+      "description": "Интервал свечи и допустимый промежуток запроса:\n- 1min [1 minute, 1 day]\n- 2min [2 minutes, 1 day]\n- 3min [3 minutes, 1 day]\n- 5min [5 minutes, 1 day]\n- 10min [10 minutes, 1 day]\n- 15min [15 minutes, 1 day]\n- 30min [30 minutes, 1 day]\n- hour [1 hour, 7 days]\n- day [1 day, 1 year]\n- week [7 days, 2 years]\n- month [1 month, 10 years]\n",
+      "type": "string",
+      "enum": [
+        "1min",
+        "2min",
+        "3min",
+        "5min",
+        "10min",
+        "15min",
+        "30min",
+        "hour",
+        "day",
+        "week",
+        "month"
+      ]
+    },
+    "OrderStatus": {
+      "description": "Статус заявки",
+      "type": "string",
+      "enum": [
+        "New",
+        "PartiallyFill",
+        "Fill",
+        "Cancelled",
+        "Replaced",
+        "PendingCancel",
+        "Rejected",
+        "PendingReplace",
+        "PendingNew"
+      ]
+    },
+    "OrderType": {
+      "description": "Тип заявки",
+      "type": "string",
+      "enum": [
+        "Limit",
+        "Market"
+      ]
+    },
+    "SandboxRegisterRequest": {
+      "type": "object",
+      "properties": {
+        "brokerAccountType": {
+          "$ref": "#/$defs/BrokerAccountType"
+        }
+      }
+    },
+    "SandboxRegisterResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/SandboxAccount"
+        }
+      }
+    },
+    "SandboxAccount": {
+      "type": "object",
+      "required": [
+        "brokerAccountType",
+        "brokerAccountId"
+      ],
+      "properties": {
+        "brokerAccountType": {
+          "$ref": "#/$defs/BrokerAccountType"
+        },
+        "brokerAccountId": {
+          "type": "string"
+        }
+      }
+    },
+    "SandboxSetCurrencyBalanceRequest": {
+      "type": "object",
+      "required": [
+        "currency",
+        "balance"
+      ],
+      "properties": {
+        "currency": {
+          "$ref": "#/$defs/SandboxCurrency"
+        },
+        "balance": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "SandboxSetPositionBalanceRequest": {
+      "type": "object",
+      "required": [
+        "currency",
+        "balance"
+      ],
+      "properties": {
+        "figi": {
+          "type": "string"
+        },
+        "balance": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "MarketInstrumentListResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/MarketInstrumentList"
+        }
+      }
+    },
+    "MarketInstrumentList": {
+      "type": "object",
+      "required": [
+        "total",
+        "instruments"
+      ],
+      "properties": {
+        "total": {
+          "type": "number",
+          "format": "int32"
+        },
+        "instruments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MarketInstrument"
+          }
+        }
+      }
+    },
+    "SearchMarketInstrumentResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/SearchMarketInstrument"
+        }
+      }
+    },
+    "MarketInstrumentResponse": {
+      "type": "object",
+      "required": [
+        "trackingId",
+        "payload",
+        "status"
+      ],
+      "properties": {
+        "trackingId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "default": "Ok"
+        },
+        "payload": {
+          "$ref": "#/$defs/MarketInstrument"
+        }
+      }
+    },
+    "SearchMarketInstrument": {
+      "type": "object",
+      "required": [
+        "figi",
+        "ticker",
+        "lot",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "figi": {
+          "type": "string"
+        },
+        "ticker": {
+          "type": "string"
+        },
+        "isin": {
+          "type": "string"
+        },
+        "minPriceIncrement": {
+          "type": "number",
+          "format": "double",
+          "description": "Шаг цены"
+        },
+        "lot": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "currency": {
+          "$ref": "#/$defs/Currency"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/InstrumentType"
+        }
+      }
+    },
+    "MarketInstrument": {
+      "type": "object",
+      "required": [
+        "figi",
+        "ticker",
+        "lot",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "figi": {
+          "type": "string"
+        },
+        "ticker": {
+          "type": "string"
+        },
+        "isin": {
+          "type": "string"
+        },
+        "minPriceIncrement": {
+          "type": "number",
+          "format": "double",
+          "description": "Шаг цены"
+        },
+        "lot": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "minQuantity": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Минимальное число инструментов для покупки должно быть не меньше, чем размер лота х количество лотов"
+        },
+        "currency": {
+          "$ref": "#/$defs/Currency"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/InstrumentType"
+        }
+      }
+    },
+    "SandboxCurrency": {
+      "type": "string",
+      "enum": [
+        "RUB",
+        "USD",
+        "EUR",
+        "GBP",
+        "HKD",
+        "CHF",
+        "JPY",
+        "CNY",
+        "TRY"
+      ]
+    },
+    "Currency": {
+      "type": "string",
+      "enum": [
+        "RUB",
+        "USD",
+        "EUR",
+        "GBP",
+        "HKD",
+        "CHF",
+        "JPY",
+        "CNY",
+        "TRY"
+      ]
+    },
+    "InstrumentType": {
+      "type": "string",
+      "enum": [
+        "Stock",
+        "Currency",
+        "Bond",
+        "Etf"
+      ]
+    },
+    "BrokerAccountType": {
+      "type": "string",
+      "enum": [
+        "Tinkoff",
+        "TinkoffIis"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/BrokerAccountType"
+    },
+    {
+      "$ref": "#/$defs/Candle"
+    },
+    {
+      "$ref": "#/$defs/CandleResolution"
+    },
+    {
+      "$ref": "#/$defs/Candles"
+    },
+    {
+      "$ref": "#/$defs/CandlesResponse"
+    },
+    {
+      "$ref": "#/$defs/Currencies"
+    },
+    {
+      "$ref": "#/$defs/Currency"
+    },
+    {
+      "$ref": "#/$defs/CurrencyPosition"
+    },
+    {
+      "$ref": "#/$defs/Empty"
+    },
+    {
+      "$ref": "#/$defs/Error"
+    },
+    {
+      "$ref": "#/$defs/InstrumentType"
+    },
+    {
+      "$ref": "#/$defs/LimitOrderRequest"
+    },
+    {
+      "$ref": "#/$defs/LimitOrderResponse"
+    },
+    {
+      "$ref": "#/$defs/MarketInstrument"
+    },
+    {
+      "$ref": "#/$defs/MarketInstrumentList"
+    },
+    {
+      "$ref": "#/$defs/MarketInstrumentListResponse"
+    },
+    {
+      "$ref": "#/$defs/MarketInstrumentResponse"
+    },
+    {
+      "$ref": "#/$defs/MarketOrderRequest"
+    },
+    {
+      "$ref": "#/$defs/MarketOrderResponse"
+    },
+    {
+      "$ref": "#/$defs/MoneyAmount"
+    },
+    {
+      "$ref": "#/$defs/Operation"
+    },
+    {
+      "$ref": "#/$defs/OperationStatus"
+    },
+    {
+      "$ref": "#/$defs/OperationTrade"
+    },
+    {
+      "$ref": "#/$defs/OperationType"
+    },
+    {
+      "$ref": "#/$defs/OperationTypeWithCommission"
+    },
+    {
+      "$ref": "#/$defs/Operations"
+    },
+    {
+      "$ref": "#/$defs/OperationsResponse"
+    },
+    {
+      "$ref": "#/$defs/Order"
+    },
+    {
+      "$ref": "#/$defs/OrderResponse"
+    },
+    {
+      "$ref": "#/$defs/OrderStatus"
+    },
+    {
+      "$ref": "#/$defs/OrderType"
+    },
+    {
+      "$ref": "#/$defs/Orderbook"
+    },
+    {
+      "$ref": "#/$defs/OrderbookResponse"
+    },
+    {
+      "$ref": "#/$defs/OrdersResponse"
+    },
+    {
+      "$ref": "#/$defs/PlacedLimitOrder"
+    },
+    {
+      "$ref": "#/$defs/PlacedMarketOrder"
+    },
+    {
+      "$ref": "#/$defs/Portfolio"
+    },
+    {
+      "$ref": "#/$defs/PortfolioCurrenciesResponse"
+    },
+    {
+      "$ref": "#/$defs/PortfolioPosition"
+    },
+    {
+      "$ref": "#/$defs/PortfolioResponse"
+    },
+    {
+      "$ref": "#/$defs/SandboxAccount"
+    },
+    {
+      "$ref": "#/$defs/SandboxCurrency"
+    },
+    {
+      "$ref": "#/$defs/SandboxRegisterRequest"
+    },
+    {
+      "$ref": "#/$defs/SandboxRegisterResponse"
+    },
+    {
+      "$ref": "#/$defs/SandboxSetCurrencyBalanceRequest"
+    },
+    {
+      "$ref": "#/$defs/SandboxSetPositionBalanceRequest"
+    },
+    {
+      "$ref": "#/$defs/SearchMarketInstrument"
+    },
+    {
+      "$ref": "#/$defs/SearchMarketInstrumentResponse"
+    },
+    {
+      "$ref": "#/$defs/TradeStatus"
+    },
+    {
+      "$ref": "#/$defs/UserAccount"
+    },
+    {
+      "$ref": "#/$defs/UserAccounts"
+    },
+    {
+      "$ref": "#/$defs/UserAccountsResponse"
+    }
+  ]
+}

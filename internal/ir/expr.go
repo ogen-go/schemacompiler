@@ -31,9 +31,13 @@ type Kinds struct {
 	Numeric plan.NumericDomain
 }
 
-// Literal is an exact JSON value (const), contributing both representation and equality.
+// Literal is an exact JSON value (const/enum element), contributing both representation
+// and equality. Value is the decoded form (used for representation); Raw preserves the
+// source bytes so dedup can compare values with full numeric precision (see the planner's
+// valueSet). Raw may be nil for synthesized literals, in which case Value is compared.
 type Literal struct {
 	Value any
+	Raw   []byte
 }
 
 // Predicate is a residual, kind-guarded check (minLength, minimum, pattern, required, ...).

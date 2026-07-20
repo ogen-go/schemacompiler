@@ -44,12 +44,12 @@ func Compile(n *frontend.Node) Expr {
 	}
 
 	if n.Const != nil {
-		siblings = append(siblings, Literal{Value: n.Const.Decoded})
+		siblings = append(siblings, Literal{Value: n.Const.Decoded, Raw: n.Const.Raw})
 	}
 	if len(n.Enum) > 0 {
 		operands := make([]Expr, len(n.Enum))
 		for i, v := range n.Enum {
-			operands[i] = Literal{Value: v.Decoded}
+			operands[i] = Literal{Value: v.Decoded, Raw: v.Raw}
 		}
 		siblings = append(siblings, AnyOf{Operands: operands})
 	}

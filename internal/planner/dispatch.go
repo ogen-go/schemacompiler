@@ -96,17 +96,17 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 }
 
 // extractLiteral reports whether e is (after flattening) nothing more than a bare
-// literal, with no other structural or predicate content.
-func extractLiteral(e ir.Expr) (any, bool) {
+// literal, with no other structural or predicate content, returning that [ir.Literal].
+func extractLiteral(e ir.Expr) (ir.Literal, bool) {
 	c := flattenAll([]ir.Expr{e})
 	if c.never || c.literal == nil {
-		return nil, false
+		return ir.Literal{}, false
 	}
 	if len(c.shapes) > 0 || len(c.predicates) > 0 || len(c.combinators) > 0 ||
 		len(c.nots) > 0 || len(c.refs) > 0 {
-		return nil, false
+		return ir.Literal{}, false
 	}
-	return c.literal.Value, true
+	return *c.literal, true
 }
 
 // literalCases reports whether every branch is a bare literal (enum/const union,
@@ -115,11 +115,11 @@ func literalCases(branchExprs []ir.Expr) ([]discCase, bool) {
 	cases := make([]discCase, len(branchExprs))
 	seen := newValueSet(len(branchExprs))
 	for i, e := range branchExprs {
-		v, ok := extractLiteral(e)
-		if !ok || !seen.add(v) {
+		lit, ok := extractLiteral(e)
+		if !ok || !seen.add(lit) {
 			return nil, false
 		}
-		cases[i] = discCase{Value: v, Expr: e}
+		cases[i] = discCase{Value: lit.Value, Expr: e}
 	}
 	return cases, true
 }
@@ -180,11 +180,12 @@ func (b *builder) buildKindDisjointDispatch(branchExprs []ir.Expr, path string) 
 }
 
 // discriminatorProperty reports whether e (after flattening) is an object branch that
-// requires a specific literal-const value on some property (design §18.2).
-func discriminatorProperty(e ir.Expr) (string, any, bool) {
+// requires a specific literal-const value on some property (design §18.2), returning the
+// property name and its discriminating [ir.Literal].
+func discriminatorProperty(e ir.Expr) (string, ir.Literal, bool) {
 	c := flattenAll([]ir.Expr{e})
 	if c.never {
-		return "", nil, false
+		return "", ir.Literal{}, false
 	}
 	required := make(map[string]bool)
 	for _, p := range c.predicates {
@@ -203,12 +204,12 @@ func discriminatorProperty(e ir.Expr) (string, any, bool) {
 			if !required[prop.Name] {
 				continue
 			}
-			if v, ok := extractLiteral(prop.Schema); ok {
-				return prop.Name, v, true
+			if lit, ok := extractLiteral(prop.Schema); ok {
+				return prop.Name, lit, true
 			}
 		}
 	}
-	return "", nil, false
+	return "", ir.Literal{}, false
 }
 
 // propertyDispatchCases reports whether every branch is discriminated by the same
@@ -218,7 +219,7 @@ func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCa
 	cases := make([]discCase, len(branchExprs))
 	seen := newValueSet(len(branchExprs))
 	for i, be := range branchExprs {
-		name, val, ok := discriminatorProperty(be)
+		name, lit, ok := discriminatorProperty(be)
 		if !ok {
 			return "", nil, false
 		}
@@ -227,10 +228,10 @@ func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCa
 		} else if name != propName {
 			return "", nil, false
 		}
-		if !seen.add(val) {
+		if !seen.add(lit) {
 			return "", nil, false
 		}
-		cases[i] = discCase{Value: val, Expr: be}
+		cases[i] = discCase{Value: lit.Value, Expr: be}
 	}
 	return propName, cases, true
 }

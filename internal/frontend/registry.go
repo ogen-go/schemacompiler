@@ -30,6 +30,10 @@ type Registry struct {
 
 	// hasDynamicRefs reports whether any node in the document used $dynamicRef.
 	hasDynamicRefs bool
+
+	// uninhabited lists recursive schemas proven to have no finite instance (issue #8),
+	// populated by analyzeInhabitation after SCC analysis.
+	uninhabited []UninhabitedNode
 }
 
 // edge is one outgoing reference/applicator edge in the schema graph.

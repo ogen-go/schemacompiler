@@ -89,10 +89,11 @@ func Compile(ctx context.Context, data []byte, opts Options) (*Result, error) {
 	}
 	root.Plan.Capability = capLevel
 
-	diags := make([]plan.Diagnostic, 0, len(root.Diagnostics)+len(defs.diags)+len(schema.Unresolved))
+	diags := make([]plan.Diagnostic, 0, len(root.Diagnostics)+len(defs.diags)+len(schema.Unresolved)+len(schema.Uninhabited))
 	diags = append(diags, root.Diagnostics...)
 	diags = append(diags, defs.diags...)
 	diags = append(diags, unresolvedDiagnostics(schema)...)
+	diags = append(diags, uninhabitedDiagnostics(schema)...)
 
 	return &Result{
 		Plan:        root.Plan,

@@ -85,7 +85,51 @@ Detection/preference order in `gen/schema_gen_sum.go`: explicit `discriminator` 
 | `LiteralDispatch{Cases}` | `ValueDiscriminators` | Enum/const union (design §18, discriminator class 2); each `LiteralCase.Value` becomes one entry in `ValueToVariant`. |
 | `PropertyDispatch{Property, Cases}` | `Discriminator = Property`, `Mapping` built from `Cases` | Tagged union (design §18.2); this is ogen's explicit/implicit discriminator path. |
 | `PresenceDispatch{Property, Present, Absent}` | `UniqueFields` (or a bespoke two-branch encoding) | `dependentSchemas`-shaped presence dispatch (design §12.7) has no exact ogen precedent (ogen's `UniqueFields` targets "which required field is present" disambiguation among ≥2 object variants, not a binary present/absent split against one schema); the generator should model this as a 2-case `UniqueFields` sum where one branch's unique field set is empty. |
-| `PredicateCountDispatch{Branches, Minimum, Maximum}` | **not representable in `SumSpec` today** | No ogen construct evaluates every branch and counts matches at runtime; static dispatch strategies all assume exactly one statically-determined branch wins. The generator must refuse and surface the plan's `SeverityWarning` diagnostic (design's v1 scope: "contains/minContains/maxContains... overlapping oneOf/anyOf... keep the plan... classify as PredicateDispatch") rather than attempt a lossy `SumSpec` encoding. |
+| `PredicateCountDispatch{Branches, Minimum, Maximum}` | **not representable in `SumSpec` today** | No ogen construct evaluates every branch and counts matches at runtime; static dispatch strategies all assume exactly one statically-determined branch wins. Follow the **PredicateDispatch lowering contract** below: emit the runtime match-count, or refuse and surface the plan's `SeverityWarning` diagnostic. Do not approximate it with a lossy `SumSpec` encoding. |
+
+### PredicateDispatch lowering contract (runtime match-count)
+
+`PredicateCountDispatch` (overlapping `oneOf`/`anyOf`) and `ContainsCountPredicate`
+(`contains`/`minContains`/`maxContains`, §4) are the two `PredicateDispatch`-level
+constructs. Both are **representable** — the plan is emitted, never dropped — but neither
+has a static discriminator. A conforming backend has exactly two options for each: emit the
+runtime match-count described here, or refuse the schema and surface the plan's diagnostic.
+Silently narrowing to a static discriminator, or dropping the constraint, is unsound and
+not permitted (the "no silent caps" rule).
+
+**`PredicateCountDispatch{Branches, Minimum, Maximum}`.** Decode the instance into the
+enclosing `UnionRepresentation` over `Branches` (the sound over-approximation, §1). Then run
+each branch's full `CompilationPlan` — representation decode **and** residual `Validation` —
+against the instance and record whether it accepts. Let `k` be the number of accepting
+branches; the instance is valid iff `Minimum <= k <= Maximum`. `oneOf` yields
+`Minimum == Maximum == 1` (exactly one branch); `anyOf` yields `Minimum == 1`,
+`Maximum == len(Branches)` (at least one). Every branch must be evaluated — the branches
+overlap by construction, so no branch may be skipped on a static guess. For `oneOf` exactly
+one branch accepts, so its representation is the value's authoritative concrete shape. This
+generalizes design §20.6 beyond its `oneOf` `!= 1` sketch:
+
+```go
+matches := 0
+for _, validate := range branchValidators {
+    if validate(raw) == nil {
+        matches++
+    }
+}
+if matches < minimum || matches > maximum {
+    return ErrPredicateCount // oneOf: matches != 1; anyOf: matches < 1
+}
+```
+
+**`ContainsCountPredicate{Schema, Min, Max}`.** For an array instance, run `Schema` (a full
+`CompilationPlan`) against every element and count the elements that accept. Let `n` be that
+count; the instance is valid iff `Min <= n <= Max` (`Max == nil` ⇒ no upper bound). `Min`
+already incorporates the `minContains` default of 1. This is the element-wise counterpart
+of the branch match-count above, and the same "emit or refuse" rule applies.
+
+**Representation.** In both cases the accepted value is stored via the plan's
+`Representation` (a `UnionRepresentation` for dispatch; the array's own representation for
+`contains`). The match-count is a validation step layered on an already-decoded value — it
+accepts or rejects, it does not change the stored shape.
 
 ## 4. Validation → `ir.Validators`
 
@@ -114,7 +158,7 @@ carry `plan.SetString`-applicable predicates. `plan.PredicateExpr` variant → t
 | `MinLengthPredicate`, `MaxLengthPredicate`, `PatternPredicate`, `FormatPredicate` | `Validators.String` |
 | `MinimumPredicate`, `MaximumPredicate`, `MultipleOfPredicate` | `Validators.Int` or `Validators.Float` (per `PrimitiveRepresentation.Numeric`) |
 | `MinItemsPredicate`, `MaxItemsPredicate`, `UniqueItemsPredicate` | `Validators.Array` |
-| `ContainsCountPredicate` | No direct `Validators.Array` field for match-counting; needs custom generated code (or `Validators.Ogen` custom-param escape hatch) — this predicate always also forces `CapabilityLevel.PredicateDispatch` (design's v1 scope), so it arrives already flagged. |
+| `ContainsCountPredicate` | No direct `Validators.Array` field for match-counting; needs custom generated code (or `Validators.Ogen` custom-param escape hatch) per the **PredicateDispatch lowering contract** in §3. This predicate always also forces `CapabilityLevel.PredicateDispatch` (design's v1 scope), so it arrives already flagged. |
 | `RequiredPredicate`, `MinPropertiesPredicate`, `MaxPropertiesPredicate`, `DependentRequiredPredicate`, `PropertyNamesPredicate` | `Validators.Object` (or, for `PropertyNamesPredicate`, a per-key loop calling the nested plan's own validator — no existing single `validate.Object` field covers it, likely another `Ogen` custom-param case) |
 
 `Validators.Decimal` has no `plan.PredicateExpr` counterpart today; it would only come
@@ -141,7 +185,7 @@ past `PredicateDispatch`:
 | `DirectGoType` | **Yes** | Plain `ir.Type`, no validator. |
 | `GoTypeWithValidation` | **Yes** | `ir.Type` + `ir.Validators`. |
 | `StaticDispatch` | **Yes** | `ir.Type{Kind: KindSum}` with a `SumSpec` strategy from §3 (`TypeDiscriminator`/`ValueDiscriminators`/`Discriminator`+`Mapping`). |
-| `PredicateDispatch` | **Partial** | Representable as a sound over-approximation (design §24: the union of all branches, validated by re-running every branch's checks at decode time and counting matches), but ogen has no existing `SumSpec` shape for "runtime match-count over N branches." Until that lowering is built, treat as refuse-with-diagnostic; once built, it is a legitimate (if slower) generation target — the plan is not dropped, per the "no silent caps" rule. |
+| `PredicateDispatch` | **Partial** | Representable as a sound over-approximation (design §24: the union of all branches, validated by re-running every branch's checks at decode time and counting matches) — see the **PredicateDispatch lowering contract** in §3 for the exact match-count algorithm. ogen has no existing `SumSpec` shape for "runtime match-count over N branches," so until that lowering is built, treat as refuse-with-diagnostic; once built, it is a legitimate (if slower) generation target — the plan is not dropped, per the "no silent caps" rule. |
 | `EvaluationStateValidation` | **No — refuse** | No evaluated-annotation tracking in ogen (confirmed: no `unevaluatedProperties`/`dynamicRef` references in `gen/`). Surface the plan's `SeverityError` diagnostic. |
 | `DynamicSchemaResolution` | **No — refuse** | Same: no dynamic-scope resolution engine exists or is planned for v1. |
 | `Unsupported` | **No — refuse** | No sound conversion exists at all (e.g. an unguarded reference cycle, design §19); always carries a `SeverityError` diagnostic explaining why. |

@@ -105,6 +105,34 @@ func TestBuild_PredicateDispatch_OverlappingOneOf(t *testing.T) {
 	require.Equal(t, plan.SeverityWarning, got.Diagnostics[0].Severity)
 }
 
+func TestBuild_PredicateDispatch_OverlappingAnyOf(t *testing.T) {
+	// Overlapping anyOf lowers to PredicateCountDispatch with the anyOf bounds [1, N] —
+	// the lowering contract on plan.PredicateCountDispatch (issue #7). oneOf gives [1,1];
+	// anyOf accepts at least one, up to all branches.
+	branch := func(detail ir.PredicateDetail) ir.Expr {
+		return ir.All{Operands: []ir.Expr{
+			ir.Kinds{Set: plan.SetString},
+			ir.Predicate{Guard: plan.SetString, Detail: detail},
+		}}
+	}
+	e := ir.All{Operands: []ir.Expr{
+		ir.AnyOf{Operands: []ir.Expr{
+			branch(ir.PatternDetail{Regex: "^a"}),
+			branch(ir.MinLengthDetail{Value: 5}),
+			branch(ir.MaxLengthDetail{Value: 9}),
+		}},
+	}}
+
+	got := planner.Build(e, nil)
+
+	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
+	disp, ok := got.Plan.Dispatch.(plan.PredicateCountDispatch)
+	require.True(t, ok, "expected PredicateCountDispatch, got %T", got.Plan.Dispatch)
+	require.Equal(t, 1, disp.Minimum)
+	require.Equal(t, 3, disp.Maximum)
+	require.Len(t, disp.Branches, 3)
+}
+
 func TestBuild_EvaluationStateValidation_UnevaluatedProperties(t *testing.T) {
 	// {"type": "object", "unevaluatedProperties": false}
 	e := ir.All{Operands: []ir.Expr{

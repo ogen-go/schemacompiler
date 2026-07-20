@@ -41,9 +41,22 @@ func Build(e ir.Expr, reg *frontend.Registry) Result {
 // builder carries the shared, read-only recursion index and accumulates diagnostics
 // across one Build call (including into nested dispatch/resolution branches).
 type builder struct {
-	reg   *frontend.Registry
-	recur map[plan.SchemaID]frontend.RecursionClass
-	diags []plan.Diagnostic
+	reg      *frontend.Registry
+	recur    map[plan.SchemaID]frontend.RecursionClass
+	refCache map[string]*frontend.Node
+	diags    []plan.Diagnostic
+}
+
+// refTargets returns the registry's static-$ref target index, built once per Build call.
+// Returns nil when reg is nil (hand-built fixtures), in which case refs are not followed.
+func (b *builder) refTargets() map[string]*frontend.Node {
+	if b.reg == nil {
+		return nil
+	}
+	if b.refCache == nil {
+		b.refCache = b.reg.RefTargets()
+	}
+	return b.refCache
 }
 
 func newBuilder(reg *frontend.Registry) *builder {

@@ -179,11 +179,53 @@ func (b *builder) buildKindDisjointDispatch(branchExprs []ir.Expr, path string) 
 	}
 }
 
-// discriminatorProperty reports whether e (after flattening) is an object branch that
-// requires a specific literal-const value on some property (design §18.2), returning the
-// property name and its discriminating [ir.Literal].
-func discriminatorProperty(e ir.Expr) (string, ir.Literal, bool) {
+// flattenThroughRefs flattens e like [flattenAll], but additionally follows every static
+// $ref leaf into its resolved target and folds the target's object structure (shapes and
+// required-property predicates) into the result, so discriminator analysis can recover a
+// const-tagged property that lives behind a bare $ref (the idiomatic factored union form,
+// issue #2). Only shapes/predicates are merged: pulling a required-const from the target
+// is additive and sound, whereas merging its literals/combinators/nots would misrepresent
+// the branch. $dynamicRefs and unresolved refs are left untouched (conservative), and seen
+// guards against ref cycles.
+func (b *builder) flattenThroughRefs(e ir.Expr, seen map[plan.SchemaID]bool) components {
 	c := flattenAll([]ir.Expr{e})
+	targets := b.refTargets()
+	if targets == nil {
+		return c
+	}
+	for _, r := range c.refs {
+		ref, ok := r.(ir.Ref)
+		if !ok || !ref.KindsKnown {
+			// DynamicRef or unresolved static ref: cannot resolve statically.
+			continue
+		}
+		if seen[ref.Target] {
+			continue
+		}
+		node, ok := targets[string(ref.Target)]
+		if !ok {
+			continue
+		}
+		if seen == nil {
+			seen = make(map[plan.SchemaID]bool)
+		}
+		seen[ref.Target] = true
+		sub := b.flattenThroughRefs(ir.Compile(node), seen)
+		c.shapes = append(c.shapes, sub.shapes...)
+		c.predicates = append(c.predicates, sub.predicates...)
+		if sub.never {
+			c.never = true
+		}
+	}
+	return c
+}
+
+// discriminatorProperty reports whether e (after flattening, and following static $ref
+// branches into their targets) is an object branch that requires a specific literal-const
+// value on some property (design §18.2), returning the property name and its
+// discriminating [ir.Literal].
+func (b *builder) discriminatorProperty(e ir.Expr) (string, ir.Literal, bool) {
+	c := b.flattenThroughRefs(e, nil)
 	if c.never {
 		return "", ir.Literal{}, false
 	}
@@ -219,7 +261,7 @@ func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCa
 	cases := make([]discCase, len(branchExprs))
 	seen := newValueSet(len(branchExprs))
 	for i, be := range branchExprs {
-		name, lit, ok := discriminatorProperty(be)
+		name, lit, ok := b.discriminatorProperty(be)
 		if !ok {
 			return "", nil, false
 		}

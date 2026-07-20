@@ -1,0 +1,20 @@
+Node pointer=""
+  oneOf[0]:
+    Node pointer="/oneOf/0"
+      type=00001000 integer=false
+  oneOf[1]:
+    Node pointer="/oneOf/1"
+      type=00000100 integer=false
+      minimum=0
+  not:
+    Node pointer="/not"
+      const="forbidden"
+  if:
+    Node pointer="/if"
+      type=00100000 integer=false
+  then:
+    Node pointer="/then"
+      required=[kind]
+  else:
+    Node pointer="/else"
+      type=00000001 integer=false

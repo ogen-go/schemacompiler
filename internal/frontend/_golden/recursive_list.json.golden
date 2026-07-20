@@ -1,0 +1,11 @@
+Node pointer=""
+  ref="#/$defs/Node" resolved=true
+  $defs["Node"]:
+    Node pointer="/$defs/Node"
+      type=00100000 integer=false
+      properties["value"]:
+        Node pointer="/$defs/Node/properties/value"
+          type=00000100 integer=false
+      properties["next"]:
+        Node pointer="/$defs/Node/properties/next"
+          ref="#/$defs/Node" resolved=true

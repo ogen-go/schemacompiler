@@ -1,0 +1,22 @@
+Node pointer=""
+  type=00100000 integer=false
+  title="Widget"
+  required=[name]
+  additionalProperties:
+    Always=false
+  properties["name"]:
+    Node pointer="/properties/name"
+      type=00001000 integer=false
+      minLength=1
+      maxLength=64
+  properties["count"]:
+    Node pointer="/properties/count"
+      type=00000100 integer=true
+      minimum=0
+  properties["tags"]:
+    Node pointer="/properties/tags"
+      type=00010000 integer=false
+      uniqueItems=true
+      items:
+        Node pointer="/properties/tags/items"
+          type=00001000 integer=false

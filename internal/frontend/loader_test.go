@@ -257,7 +257,12 @@ func TestLoad_InvalidDocument(t *testing.T) {
 }
 
 func TestLoad_UnresolvableRef(t *testing.T) {
+	// A dangling $ref does not fail loading; it is recorded in Schema.Unresolved and the
+	// referencing node is left with Resolved == nil.
 	doc := `{"$ref": "#/$defs/Missing"}`
-	_, err := Load(context.Background(), []byte(doc), "")
-	require.Error(t, err)
+	s, err := Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+	require.Len(t, s.Unresolved, 1)
+	require.Equal(t, "#/$defs/Missing", s.Unresolved[0].Ref)
+	require.Nil(t, s.Root.Resolved)
 }

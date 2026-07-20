@@ -40,6 +40,24 @@ func buildDefinitions(reg *frontend.Registry, budget int) definitions {
 	return out
 }
 
+// unresolvedDiagnostics reports every dangling `$ref` the loader could not resolve as a
+// SeverityError diagnostic (design §25). Loading does not fail on these, so the rest of
+// the document still yields a plan.
+func unresolvedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
+	if len(s.Unresolved) == 0 {
+		return nil
+	}
+	diags := make([]plan.Diagnostic, len(s.Unresolved))
+	for i, u := range s.Unresolved {
+		diags[i] = plan.Diagnostic{
+			Pointer:  u.Pointer,
+			Severity: plan.SeverityError,
+			Message:  "unresolved $ref " + u.Ref + ": " + u.Reason,
+		}
+	}
+	return diags
+}
+
 // maxCapability returns the higher (more costly) of two capability levels (design §22).
 func maxCapability(a, b plan.CapabilityLevel) plan.CapabilityLevel {
 	if b > a {

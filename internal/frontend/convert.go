@@ -50,6 +50,8 @@ type convState struct {
 	// refBaseURI records, for every node carrying a Ref, the base URI in effect where
 	// that $ref was declared (needed to resolve it in the later resolveAll pass).
 	refBaseURI map[*Node]string
+	// unresolved accumulates references that could not be resolved (see resolveAll).
+	unresolved []UnresolvedRef
 }
 
 // convertRoot converts hs into the internal AST, then resolves references and analyzes
@@ -69,12 +71,10 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 		st.reg.resources[baseURI] = root
 	}
 
-	if err := st.resolveAll(); err != nil {
-		return nil, errors.Wrap(err, "resolve references")
-	}
+	st.resolveAll()
 	st.reg.analyzeSCCs()
 
-	return &Schema{Registry: st.reg, Root: root}, nil
+	return &Schema{Registry: st.reg, Root: root, Unresolved: st.unresolved}, nil
 }
 
 // convertProxy converts a *base.SchemaProxy (a lazily-built child schema position) into a

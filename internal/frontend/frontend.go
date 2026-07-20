@@ -19,4 +19,19 @@ type Schema struct {
 	Registry *Registry
 	// Root is the entry schema.
 	Root *Node
+	// Unresolved lists every `$ref` whose target could not be found. Loading does not
+	// fail on a dangling reference: the reference is left unresolved (its [Node.Resolved]
+	// stays nil) and reported here so callers can surface a diagnostic and still analyze
+	// the rest of the document.
+	Unresolved []UnresolvedRef
+}
+
+// UnresolvedRef records a `$ref` that did not resolve to a target.
+type UnresolvedRef struct {
+	// Pointer is the JSON Pointer to the schema that declared the reference.
+	Pointer string
+	// Ref is the raw `$ref` string.
+	Ref string
+	// Reason explains why resolution failed.
+	Reason string
 }

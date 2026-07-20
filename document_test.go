@@ -2,6 +2,7 @@ package schemacompiler_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,6 +43,28 @@ func TestCompileRefDefinitions(t *testing.T) {
 	require.True(t, ok, "child should be a reference, got %T", child.Representation)
 	_, inGraph := graph.Definitions[plan.SchemaID(ref.Name)]
 	require.True(t, inGraph, "child ref %q must resolve to a definition", ref.Name)
+}
+
+func TestCompileDanglingRef(t *testing.T) {
+	// A $ref to a missing target must not abort compilation: the rest of the document
+	// still yields a plan, and the dangling reference surfaces as an error diagnostic.
+	const schema = `{
+		"type": "object",
+		"properties": {"child": {"$ref": "#/$defs/Missing"}},
+		"$defs": {"Present": {"type": "string"}}
+	}`
+
+	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
+	require.NoError(t, err, "a dangling $ref must not fail Compile")
+	require.NotNil(t, res.Plan.Representation)
+
+	var found bool
+	for _, d := range res.Diagnostics {
+		if d.Severity == plan.SeverityError && strings.Contains(d.Message, "#/$defs/Missing") {
+			found = true
+		}
+	}
+	require.True(t, found, "expected an error diagnostic naming the dangling ref: %+v", res.Diagnostics)
 }
 
 func TestCompileGuardedRecursion(t *testing.T) {

@@ -78,10 +78,15 @@ func Compile(ctx context.Context, data []byte, opts Options) (*Result, error) {
 	}
 	root.Plan.Capability = capLevel
 
+	diags := make([]plan.Diagnostic, 0, len(root.Diagnostics)+len(defs.diags)+len(schema.Unresolved))
+	diags = append(diags, root.Diagnostics...)
+	diags = append(diags, defs.diags...)
+	diags = append(diags, unresolvedDiagnostics(schema)...)
+
 	return &Result{
 		Plan:        root.Plan,
 		Capability:  capLevel,
 		Exactness:   maxExactness(root.Exactness, defs.exactness),
-		Diagnostics: dedupeDiagnostics(append(root.Diagnostics, defs.diags...)),
+		Diagnostics: dedupeDiagnostics(diags),
 	}, nil
 }

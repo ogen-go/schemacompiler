@@ -52,16 +52,24 @@ func splitFragment(u string) (base, fragment string, err error) {
 // its target depends on the dynamic scope accumulated at evaluation time, which later
 // phases own (design §10.2). The `$dynamicAnchor` graph is still exposed via
 // [Registry.DynamicAnchor] so those phases don't need to re-walk the document.
-func (st *convState) resolveAll() error {
+// resolveAll never fails on a dangling `$ref`: an unresolvable reference is recorded in
+// st.unresolved and left with Resolved == nil, so the rest of the document still compiles
+// (design §25 favours diagnostics over aborting). Only genuinely malformed input aborts
+// loading earlier, before this pass.
+func (st *convState) resolveAll() {
 	for n, baseURI := range st.refBaseURI {
 		target, err := st.resolveRef(n.Ref, baseURI)
 		if err != nil {
-			return errors.Wrapf(err, "resolve $ref %q (declared at %q)", n.Ref, n.Pointer)
+			st.unresolved = append(st.unresolved, UnresolvedRef{
+				Pointer: n.Pointer,
+				Ref:     n.Ref,
+				Reason:  err.Error(),
+			})
+			continue
 		}
 		n.Resolved = target
 		st.addEdge(n, target, false)
 	}
-	return nil
 }
 
 func (st *convState) resolveRef(ref, baseURI string) (*Node, error) {

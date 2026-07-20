@@ -11,7 +11,7 @@ import (
 // small opcode-driven recursive descent over a fixed leaf palette, bounded in
 // depth and branching so the fuzzer explores structure rather than blowing
 // the stack.
-func buildExpr(data []byte, depth int) (ir.Expr, []byte) {
+func buildExpr(data []byte, depth int) (expr ir.Expr, rest []byte) {
 	if len(data) == 0 {
 		return ir.Any{}, data
 	}

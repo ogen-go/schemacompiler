@@ -160,7 +160,7 @@ func flattenAnyOfInto(dst []ir.Expr, e ir.Expr) []ir.Expr {
 // acts as identity; IntegerOnly ∩ NonIntegerOnly is a contradiction, which
 // drops the Number kind from the intersection rather than the whole All).
 // isNever reports the resulting set was empty.
-func foldKindsAll(operands []ir.Expr) (result []ir.Expr, kinds ir.Kinds, hasKinds bool, isNever bool) {
+func foldKindsAll(operands []ir.Expr) (result []ir.Expr, kinds ir.Kinds, hasKinds, isNever bool) {
 	set := plan.SetAny
 	numeric := plan.AnyNumber
 	numericSet := false

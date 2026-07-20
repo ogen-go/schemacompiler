@@ -54,7 +54,7 @@ func splitFragment(u string) (base, fragment string, err error) {
 // [Registry.DynamicAnchor] so those phases don't need to re-walk the document.
 // resolveAll never fails on a dangling `$ref`: an unresolvable reference is recorded in
 // st.unresolved and left with Resolved == nil, so the rest of the document still compiles
-// (design §25 favours diagnostics over aborting). Only genuinely malformed input aborts
+// (design §25 favors diagnostics over aborting). Only genuinely malformed input aborts
 // loading earlier, before this pass.
 func (st *convState) resolveAll() {
 	for n, baseURI := range st.refBaseURI {

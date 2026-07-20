@@ -102,7 +102,7 @@ func (st *convState) convertProxy(sp *base.SchemaProxy, sc scope) (*Node, error)
 	return st.convertSchema(hs, sc)
 }
 
-func boolSchemaValue(vn *yaml.Node) (bool, bool) {
+func boolSchemaValue(vn *yaml.Node) (value, ok bool) {
 	n := resolveAlias(vn)
 	if n == nil || n.Kind != yaml.ScalarNode || n.Tag != "!!bool" {
 		return false, false
@@ -479,7 +479,7 @@ func readFloatKeyword(root *yaml.Node, key string) *float64 {
 }
 
 func int64PtrToUint64Ptr(p *int64) *uint64 {
-	if p == nil {
+	if p == nil || *p < 0 {
 		return nil
 	}
 	v := uint64(*p)

@@ -1,20 +1,65 @@
 version: "2"
-
 linters:
+  default: none
   enable:
+    - dogsled
+    - errcheck
+    - goconst
     - gocritic
-    - revive
-    - unconvert
-    - unparam
+    - gosec
+    - govet
+    - ineffassign
     - misspell
     - nakedret
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
     - whitespace
   settings:
-    lll:
-      line-length: 140
+    dupl:
+      threshold: 120
+    goconst:
+      min-len: 3
+      # Short, semantically-distinct labels (JSON kind names, "true"/"false") legitimately
+      # repeat across the dump/frontend renderers; only flag more frequent duplication.
+      min-occurrences: 4
+    gocritic:
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - exitAfterDefer
+        - whyNoLint
+        - singleCaseSwitch
+        - commentedOutCode
+        - appendAssign
+        - unnecessaryBlock
+        - redundantSprint
+        - octalLiteral
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
     gocyclo:
       min-complexity: 15
-
+    lll:
+      line-length: 140
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: unused-parameter
+          disabled: true
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - dupl
+          - gosec
+          - goconst
+        path: _test\.go
 formatters:
   enable:
     - gofumpt

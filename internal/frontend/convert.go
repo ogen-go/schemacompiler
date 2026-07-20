@@ -52,15 +52,30 @@ type convState struct {
 	refBaseURI map[*Node]string
 	// unresolved accumulates references that could not be resolved (see resolveAll).
 	unresolved []UnresolvedRef
+	// loader fetches external documents on demand during resolution (nil disables it).
+	loader Loader
+	// loaded records every external base URI that has been attempted (loaded once,
+	// success or failure), bounding the resolution worklist and breaking document cycles.
+	loaded map[string]bool
+	// loadErrs records why a given external base URI failed to load, folded into the
+	// unresolved-ref diagnostic for refs that targeted it.
+	loadErrs map[string]error
 }
 
 // convertRoot converts hs into the internal AST, then resolves references and analyzes
 // the reference graph.
-func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]string, baseURI string) (*Schema, error) {
+func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]string, baseURI string, loader Loader) (*Schema, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	st := &convState{reg: newRegistry(), refMap: refMap, refBaseURI: make(map[*Node]string)}
+	st := &convState{
+		reg:        newRegistry(),
+		refMap:     refMap,
+		refBaseURI: make(map[*Node]string),
+		loader:     loader,
+		loaded:     make(map[string]bool),
+		loadErrs:   make(map[string]error),
+	}
 	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}}
 
 	root, err := st.convertSchema(hs, sc)
@@ -71,7 +86,7 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 		st.reg.resources[baseURI] = root
 	}
 
-	st.resolveAll()
+	st.resolveAll(ctx)
 	st.reg.analyzeSCCs()
 
 	return &Schema{Registry: st.reg, Root: root, Unresolved: st.unresolved}, nil

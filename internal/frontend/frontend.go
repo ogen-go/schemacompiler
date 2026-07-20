@@ -24,6 +24,18 @@ type Schema struct {
 	// stays nil) and reported here so callers can surface a diagnostic and still analyze
 	// the rest of the document.
 	Unresolved []UnresolvedRef
+	// Uninhabited lists recursive schemas proven to have no finite JSON instance (required
+	// self-recursion). The SCC pass classifies these representable/guarded, but no value
+	// inhabits them; reported here so a caller can warn rather than emit a dead type.
+	Uninhabited []UninhabitedNode
+}
+
+// UninhabitedNode records a recursive schema with no finite instance (issue #8).
+type UninhabitedNode struct {
+	// Pointer is the JSON Pointer to the uninhabited schema.
+	Pointer string
+	// Reason explains why no instance exists.
+	Reason string
 }
 
 // UnresolvedRef records a `$ref` that did not resolve to a target.

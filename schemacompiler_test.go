@@ -3,6 +3,7 @@ package schemacompiler_test
 import (
 	"context"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/go-faster/errors"
@@ -89,6 +90,27 @@ func TestCompileExternalRefWithoutLoader(t *testing.T) {
 		}
 	}
 	require.True(t, sawError, "expected unresolved-ref error diagnostic without a loader")
+}
+
+func TestCompileUninhabitedSchemaDiagnostic(t *testing.T) {
+	// Required self-recursion is representable/guarded but has no finite instance; Compile
+	// surfaces a SeverityWarning so a generator does not emit a dead recursive type (#8).
+	schema := `{
+		"$defs": {
+			"A": {"type": "object", "required": ["self"], "properties": {"self": {"$ref": "#/$defs/A"}}}
+		},
+		"$ref": "#/$defs/A"
+	}`
+	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
+	require.NoError(t, err)
+
+	var sawUninhabited bool
+	for _, d := range res.Diagnostics {
+		if d.Severity == plan.SeverityWarning && strings.Contains(d.Message, "uninhabited") {
+			sawUninhabited = true
+		}
+	}
+	require.True(t, sawUninhabited, "expected an uninhabited-schema warning; got %+v", res.Diagnostics)
 }
 
 func TestCompileDynamicRefDiagnostic(t *testing.T) {

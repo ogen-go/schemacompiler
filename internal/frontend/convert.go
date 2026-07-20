@@ -88,8 +88,14 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 
 	st.resolveAll(ctx)
 	st.reg.analyzeSCCs()
+	st.reg.analyzeInhabitation()
 
-	return &Schema{Registry: st.reg, Root: root, Unresolved: st.unresolved}, nil
+	return &Schema{
+		Registry:    st.reg,
+		Root:        root,
+		Unresolved:  st.unresolved,
+		Uninhabited: st.reg.uninhabited,
+	}, nil
 }
 
 // convertProxy converts a *base.SchemaProxy (a lazily-built child schema position) into a

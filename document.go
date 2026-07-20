@@ -58,6 +58,25 @@ func unresolvedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
 	return diags
 }
 
+// uninhabitedDiagnostics reports every recursive schema proven to have no finite instance
+// (required self-recursion) as a SeverityWarning: the schema is well-formed and its Go type
+// is representable, but no value inhabits it, so a generator should not emit a dead type
+// (design §25, issue #8).
+func uninhabitedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
+	if len(s.Uninhabited) == 0 {
+		return nil
+	}
+	diags := make([]plan.Diagnostic, len(s.Uninhabited))
+	for i, u := range s.Uninhabited {
+		diags[i] = plan.Diagnostic{
+			Pointer:  u.Pointer,
+			Severity: plan.SeverityWarning,
+			Message:  "uninhabited schema: " + u.Reason,
+		}
+	}
+	return diags
+}
+
 // maxCapability returns the higher (more costly) of two capability levels (design §22).
 func maxCapability(a, b plan.CapabilityLevel) plan.CapabilityLevel {
 	if b > a {

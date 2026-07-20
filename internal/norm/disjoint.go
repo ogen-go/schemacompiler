@@ -20,8 +20,8 @@ func disjoint(a, b ir.Expr) bool {
 			return !literalEqual(la.Value, lb.Value)
 		}
 	}
-	// enum desugars to AnyOf(Literal...); a value satisfies the AnyOf iff it
-	// satisfies some operand, so it is disjoint from b iff every operand is.
+	// enum desugars to AnyOf(Literal...); a value satisfies the AnyOf if it
+	// satisfies some operand, so it is disjoint from b if every operand is.
 	if aa, ok := a.(ir.AnyOf); ok {
 		for _, o := range aa.Operands {
 			if !disjoint(o, b) {

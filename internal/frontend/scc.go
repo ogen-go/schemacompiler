@@ -2,7 +2,7 @@ package frontend
 
 // analyzeSCCs runs Tarjan's strongly-connected-component algorithm over the reference
 // graph accumulated in r.nodes/r.edges, then classifies every recursive SCC as guarded or
-// unguarded per design §19: a recursive SCC is guarded iff every cycle within it crosses
+// unguarded per design §19: a recursive SCC is guarded if every cycle within it crosses
 // at least one instance-descent edge (object property / array item traversal).
 //
 // The classification is computed by removing descent edges from the SCC's induced

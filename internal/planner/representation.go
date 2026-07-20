@@ -141,6 +141,7 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 	if c.literal != nil && literalKind(c.literal.Value) == kind {
 		disp = plan.LiteralDispatch{Cases: []plan.LiteralCase{{
 			Value: c.literal.Value,
+			Raw:   c.literal.Raw,
 			Plan: plan.CompilationPlan{
 				Representation: rep,
 				Dispatch:       plan.NoDispatch{},
@@ -172,7 +173,7 @@ func (b *builder) buildLiteral(v ir.Literal, _ string) plan.CompilationPlan {
 	}
 	return plan.CompilationPlan{
 		Representation: rep,
-		Dispatch:       plan.LiteralDispatch{Cases: []plan.LiteralCase{{Value: v.Value, Plan: branch}}},
+		Dispatch:       plan.LiteralDispatch{Cases: []plan.LiteralCase{{Value: v.Value, Raw: v.Raw, Plan: branch}}},
 		Resolution:     plan.FullyResolved{},
 		Capability:     plan.StaticDispatch,
 	}

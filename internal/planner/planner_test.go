@@ -399,6 +399,60 @@ func TestBuild_TaggedUnion_RefCycleTerminates(t *testing.T) {
 	require.False(t, ok, "cyclic ref union has no discriminator")
 }
 
+func TestBuild_LiteralPreservesRawPrecision(t *testing.T) {
+	// A const integer past float64's exact range: the decoded Value is lossy, but Raw must
+	// carry the exact source bytes so a backend can emit the literal precisely (issue #4).
+	doc := `{"const": 9007199254740993}` // 2^53 + 1, not representable as float64
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	disp, ok := got.Plan.Dispatch.(plan.LiteralDispatch)
+	require.True(t, ok, "expected LiteralDispatch, got %T", got.Plan.Dispatch)
+	require.Len(t, disp.Cases, 1)
+	require.JSONEq(t, "9007199254740993", string(disp.Cases[0].Raw))
+}
+
+func TestBuild_LiteralDispatchPreservesRawPrecision(t *testing.T) {
+	// The union path (literalCases -> discCase -> buildLiteralDispatch) must also thread Raw.
+	doc := `{"oneOf": [{"const": 9007199254740993}, {"const": "other"}]}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	disp, ok := got.Plan.Dispatch.(plan.LiteralDispatch)
+	require.True(t, ok, "expected LiteralDispatch, got %T", got.Plan.Dispatch)
+	require.Len(t, disp.Cases, 2)
+	var raws []string
+	for _, c := range disp.Cases {
+		raws = append(raws, string(c.Raw))
+	}
+	require.Contains(t, raws, "9007199254740993")
+}
+
+func TestBuild_PropertyDispatchPreservesRawPrecision(t *testing.T) {
+	// Property-dispatch cases carry Raw too: a numeric discriminator const keeps precision.
+	doc := `{"oneOf": [
+		{"type": "object", "properties": {"tag": {"const": 9007199254740993}}, "required": ["tag"]},
+		{"type": "object", "properties": {"tag": {"const": 9007199254740995}}, "required": ["tag"]}
+	]}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
+	require.Equal(t, "tag", disp.Property)
+	var raws []string
+	for _, c := range disp.Cases {
+		raws = append(raws, string(c.Raw))
+	}
+	require.ElementsMatch(t, []string{"9007199254740993", "9007199254740995"}, raws)
+}
+
 func TestBuild_PresenceDispatch_DependentSchemas(t *testing.T) {
 	// dependentSchemas desugars to AnyOf(Not(Has(p)), All(Has(p), C(S))) (design §12.7).
 	has := ir.Predicate{Guard: plan.SetObject, Detail: ir.RequiredDetail{Properties: []string{"credit_card"}}}

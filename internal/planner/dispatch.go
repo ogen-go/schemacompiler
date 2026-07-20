@@ -34,9 +34,11 @@ func (c components) nonKindOperands() []ir.Expr {
 }
 
 // discCase pairs a discriminator value with the (already context-augmented) branch
-// expression it selects.
+// expression it selects. Raw carries the literal's exact JSON source bytes (may be nil for
+// synthesized literals) so precision survives into the plan (design §4, issue #4).
 type discCase struct {
 	Value any
+	Raw   []byte
 	Expr  ir.Expr
 }
 
@@ -119,7 +121,7 @@ func literalCases(branchExprs []ir.Expr) ([]discCase, bool) {
 		if !ok || !seen.add(lit) {
 			return nil, false
 		}
-		cases[i] = discCase{Value: lit.Value, Expr: e}
+		cases[i] = discCase{Value: lit.Value, Raw: lit.Raw, Expr: e}
 	}
 	return cases, true
 }
@@ -131,7 +133,7 @@ func (b *builder) buildLiteralDispatch(cases []discCase, path string) plan.Compi
 	var resParts []plan.ResolutionPlan
 	for i, c := range cases {
 		sub := b.build(c.Expr, path)
-		lcases[i] = plan.LiteralCase{Value: c.Value, Plan: sub}
+		lcases[i] = plan.LiteralCase{Value: c.Value, Raw: c.Raw, Plan: sub}
 		alts[i] = sub.Representation
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
@@ -273,7 +275,7 @@ func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCa
 		if !seen.add(lit) {
 			return "", nil, false
 		}
-		cases[i] = discCase{Value: lit.Value, Expr: be}
+		cases[i] = discCase{Value: lit.Value, Raw: lit.Raw, Expr: be}
 	}
 	return propName, cases, true
 }
@@ -285,7 +287,7 @@ func (b *builder) buildPropertyDispatch(name string, cases []discCase, path stri
 	var resParts []plan.ResolutionPlan
 	for i, c := range cases {
 		sub := b.build(c.Expr, path)
-		lcases[i] = plan.LiteralCase{Value: c.Value, Plan: sub}
+		lcases[i] = plan.LiteralCase{Value: c.Value, Raw: c.Raw, Plan: sub}
 		alts[i] = sub.Representation
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)

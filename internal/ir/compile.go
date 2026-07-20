@@ -25,7 +25,11 @@ func Compile(n *frontend.Node) Expr {
 	var siblings []Expr
 
 	if n.Ref != "" {
-		siblings = append(siblings, Ref{Target: refTarget(n)})
+		siblings = append(siblings, Ref{
+			Target:      refTarget(n),
+			TargetKinds: refTargetKinds(n),
+			KindsKnown:  n.Resolved != nil,
+		})
 	}
 	if n.DynamicRef != "" {
 		siblings = append(siblings, DynamicRef{Anchor: n.DynamicRef})

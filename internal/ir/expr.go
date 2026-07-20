@@ -76,6 +76,13 @@ type Not struct{ Operand Expr }
 // Ref is a static reference to another schema resource (design §10.1).
 type Ref struct {
 	Target plan.SchemaID
+	// TargetKinds summarizes the JSON kinds the resolved target accepts (design §6),
+	// letting normalization and dispatch see through the reference to prove oneOf/anyOf
+	// branch disjointness. It is meaningful only when KindsKnown is set; an unresolved or
+	// unanalyzed ref reports [plan.SetAny] (conservative). Computed cycle-safely in
+	// refkinds.go: a reference cycle yields SetAny rather than looping.
+	TargetKinds plan.KindSet
+	KindsKnown  bool
 }
 
 // DynamicRef is a scope-sensitive reference resolved during validation (design §10.2).

@@ -89,8 +89,14 @@ func pureKindRestriction(e Expr) (plan.KindSet, bool) {
 	}
 }
 
-// Kinds implements [Expr]; a ref's kinds are refined once resolved (phase 4).
-func (Ref) Kinds() plan.KindSet { return plan.SetAny }
+// Kinds returns the resolved target's kind summary when known, else SetAny (design §6).
+// This is what lets a oneOf/anyOf of bare $ref branches be proven kind-disjoint.
+func (e Ref) Kinds() plan.KindSet {
+	if e.KindsKnown {
+		return e.TargetKinds
+	}
+	return plan.SetAny
+}
 
 // Kinds implements [Expr].
 func (DynamicRef) Kinds() plan.KindSet { return plan.SetAny }

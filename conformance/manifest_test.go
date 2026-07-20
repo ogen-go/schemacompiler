@@ -69,6 +69,11 @@ var manifest = map[string]caseExpectation{
 	"dispatch/oneof_kind_disjoint.json": {Capability: plan.StaticDispatch},
 	"dispatch/oneof_tagged_union.json":  {Capability: plan.StaticDispatch},
 	"dispatch/multi_type.json":          {Capability: plan.StaticDispatch},
+	// A recursive oneOf whose branches are inlined (kind-tagged) vs. factored into named
+	// $refs. Both must reach StaticDispatch: refs carry their target's kind summary, so
+	// the factored form proves branch disjointness just like the inline form.
+	"dispatch/recursive_union_inline.json":       {Capability: plan.StaticDispatch},
+	"dispatch/recursive_union_ref_branches.json": {Capability: plan.StaticDispatch},
 	// dependentSchemas desugars to a two-branch presence dispatch (design §12.7).
 	"object/dependent_schemas.json": {Capability: plan.StaticDispatch},
 	// A $ref to a sibling $defs entry with no residual predicate.

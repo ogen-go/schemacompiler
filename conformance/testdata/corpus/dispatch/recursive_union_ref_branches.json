@@ -1,0 +1,18 @@
+{
+  "$ref": "#/$defs/Node",
+  "$defs": {
+    "Node": {
+      "oneOf": [
+        { "$ref": "#/$defs/Leaf" },
+        { "$ref": "#/$defs/Branch" }
+      ]
+    },
+    "Leaf": { "type": "string" },
+    "Branch": {
+      "type": "object",
+      "properties": {
+        "child": { "$ref": "#/$defs/Node" }
+      }
+    }
+  }
+}

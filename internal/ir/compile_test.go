@@ -260,12 +260,25 @@ func TestCompile_DependentSchemas(t *testing.T) {
 func TestCompile_Ref(t *testing.T) {
 	t.Run("unresolved", func(t *testing.T) {
 		got := Compile(&frontend.Node{Ref: "#/$defs/foo"})
-		require.Equal(t, All{Operands: []Expr{Ref{Target: "#/$defs/foo"}}}, got)
+		require.Equal(t, All{Operands: []Expr{
+			Ref{Target: "#/$defs/foo", TargetKinds: plan.SetAny, KindsKnown: false},
+		}}, got)
 	})
 	t.Run("resolved uses target pointer", func(t *testing.T) {
 		target := &frontend.Node{Pointer: "#/$defs/foo"}
 		got := Compile(&frontend.Node{Ref: "#/$defs/foo", Resolved: target})
-		require.Equal(t, All{Operands: []Expr{Ref{Target: "#/$defs/foo"}}}, got)
+		require.Equal(t, All{Operands: []Expr{
+			Ref{Target: "#/$defs/foo", TargetKinds: plan.SetAny, KindsKnown: true},
+		}}, got)
+	})
+	t.Run("resolved propagates target kinds", func(t *testing.T) {
+		// A ref to a string-typed target carries SetString, so a oneOf of such refs can be
+		// proven kind-disjoint downstream.
+		target := &frontend.Node{Pointer: "#/$defs/leaf", HasType: true, Types: frontend.KindString}
+		got := Compile(&frontend.Node{Ref: "#/$defs/leaf", Resolved: target})
+		require.Equal(t, All{Operands: []Expr{
+			Ref{Target: "#/$defs/leaf", TargetKinds: plan.SetString, KindsKnown: true},
+		}}, got)
 	})
 	t.Run("dynamicRef", func(t *testing.T) {
 		got := Compile(&frontend.Node{DynamicRef: "#node"})

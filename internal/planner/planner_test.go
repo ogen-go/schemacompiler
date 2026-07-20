@@ -255,6 +255,150 @@ func TestBuild_TaggedUnionPropertyDispatch(t *testing.T) {
 	require.ElementsMatch(t, []any{"circle", "rectangle"}, values)
 }
 
+func TestBuild_TaggedUnionPropertyDispatch_ThroughRefs(t *testing.T) {
+	// The idiomatic factored form: each oneOf branch is a bare $ref to a named object
+	// whose const-tagged "kind" property discriminates it (issue #2). Must reach
+	// PropertyDispatch, not degrade to PredicateDispatch.
+	doc := `{
+		"oneOf": [
+			{"$ref": "#/$defs/Circle"},
+			{"$ref": "#/$defs/Rectangle"}
+		],
+		"$defs": {
+			"Circle": {
+				"type": "object",
+				"properties": {"kind": {"const": "circle"}, "radius": {"type": "number"}},
+				"required": ["kind"]
+			},
+			"Rectangle": {
+				"type": "object",
+				"properties": {"kind": {"const": "rectangle"}, "width": {"type": "number"}},
+				"required": ["kind"]
+			}
+		}
+	}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
+	require.Equal(t, "kind", disp.Property)
+	values := []any{disp.Cases[0].Value, disp.Cases[1].Value}
+	require.ElementsMatch(t, []any{"circle", "rectangle"}, values)
+}
+
+func TestBuild_TaggedUnionPropertyDispatch_AnyOfThroughRefs(t *testing.T) {
+	doc := `{
+		"anyOf": [
+			{"$ref": "#/$defs/Circle"},
+			{"$ref": "#/$defs/Rectangle"}
+		],
+		"$defs": {
+			"Circle": {"type": "object", "properties": {"kind": {"const": "circle"}}, "required": ["kind"]},
+			"Rectangle": {"type": "object", "properties": {"kind": {"const": "rectangle"}}, "required": ["kind"]}
+		}
+	}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
+	require.Equal(t, "kind", disp.Property)
+}
+
+func TestBuild_TaggedUnionPropertyDispatch_TransitiveRef(t *testing.T) {
+	// A branch $ref that points at another $ref before reaching the tagged object must
+	// still resolve the discriminator (ref -> ref -> object).
+	doc := `{
+		"oneOf": [
+			{"$ref": "#/$defs/CircleAlias"},
+			{"$ref": "#/$defs/Rectangle"}
+		],
+		"$defs": {
+			"CircleAlias": {"$ref": "#/$defs/Circle"},
+			"Circle": {"type": "object", "properties": {"kind": {"const": "circle"}}, "required": ["kind"]},
+			"Rectangle": {"type": "object", "properties": {"kind": {"const": "rectangle"}}, "required": ["kind"]}
+		}
+	}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
+	require.Equal(t, "kind", disp.Property)
+}
+
+func TestBuild_TaggedUnionPropertyDispatch_MixedInlineAndRef(t *testing.T) {
+	// One inline tagged branch, one factored $ref branch, same discriminator property.
+	doc := `{
+		"oneOf": [
+			{"type": "object", "properties": {"kind": {"const": "circle"}}, "required": ["kind"]},
+			{"$ref": "#/$defs/Rectangle"}
+		],
+		"$defs": {
+			"Rectangle": {"type": "object", "properties": {"kind": {"const": "rectangle"}}, "required": ["kind"]}
+		}
+	}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
+	require.Equal(t, "kind", disp.Property)
+}
+
+func TestBuild_TaggedUnion_SharedConstNotPropertyDispatch(t *testing.T) {
+	// Both branches carry the same const value on "kind": not pairwise-distinct, so it
+	// cannot be a property-discriminated union even though both are const-tagged.
+	doc := `{
+		"oneOf": [
+			{"$ref": "#/$defs/A"},
+			{"$ref": "#/$defs/B"}
+		],
+		"$defs": {
+			"A": {"type": "object", "properties": {"kind": {"const": "same"}, "a": {"type": "string"}}, "required": ["kind"]},
+			"B": {"type": "object", "properties": {"kind": {"const": "same"}, "b": {"type": "number"}}, "required": ["kind"]}
+		}
+	}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	_, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	require.False(t, ok, "shared const value must not yield PropertyDispatch")
+}
+
+func TestBuild_TaggedUnion_RefCycleTerminates(t *testing.T) {
+	// A pure allOf/$ref cycle carries no discriminator; the see-through walk must
+	// terminate via its cycle guard and simply not produce PropertyDispatch.
+	doc := `{
+		"oneOf": [
+			{"$ref": "#/$defs/A"},
+			{"$ref": "#/$defs/B"}
+		],
+		"$defs": {
+			"A": {"allOf": [{"$ref": "#/$defs/B"}]},
+			"B": {"allOf": [{"$ref": "#/$defs/A"}]}
+		}
+	}`
+	s, err := frontend.Load(context.Background(), []byte(doc), "")
+	require.NoError(t, err)
+
+	got := planner.Build(ir.Compile(s.Root), s.Registry)
+
+	_, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	require.False(t, ok, "cyclic ref union has no discriminator")
+}
+
 func TestBuild_PresenceDispatch_DependentSchemas(t *testing.T) {
 	// dependentSchemas desugars to AnyOf(Not(Has(p)), All(Has(p), C(S))) (design §12.7).
 	has := ir.Predicate{Guard: plan.SetObject, Detail: ir.RequiredDetail{Properties: []string{"credit_card"}}}

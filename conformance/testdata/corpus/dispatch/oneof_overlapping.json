@@ -1,0 +1,6 @@
+{
+  "oneOf": [
+    {"type": "string", "pattern": "^a"},
+    {"type": "string", "minLength": 5}
+  ]
+}

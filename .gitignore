@@ -1,0 +1,15 @@
+# IDE / editor
+/.idea/
+/.vscode/
+
+# Claude Code local config
+/.claude/
+/.mcp.json
+
+# Test suite submodule (opt-in, not vendored)
+/testdata/JSON-Schema-Test-Suite/
+
+# Go
+*.out
+*.test
+coverage.txt

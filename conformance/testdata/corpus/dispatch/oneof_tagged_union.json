@@ -1,0 +1,6 @@
+{
+  "oneOf": [
+    {"type": "object", "properties": {"kind": {"const": "circle"}}, "required": ["kind"]},
+    {"type": "object", "properties": {"kind": {"const": "rectangle"}}, "required": ["kind"]}
+  ]
+}

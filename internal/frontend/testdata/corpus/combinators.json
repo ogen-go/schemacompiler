@@ -1,0 +1,10 @@
+{
+  "oneOf": [
+    {"type": "string"},
+    {"type": "number", "minimum": 0}
+  ],
+  "not": {"const": "forbidden"},
+  "if": {"type": "object"},
+  "then": {"required": ["kind"]},
+  "else": {"type": "null"}
+}

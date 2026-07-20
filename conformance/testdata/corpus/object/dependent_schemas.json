@@ -1,0 +1,6 @@
+{
+  "type": "object",
+  "dependentSchemas": {
+    "credit_card": {"type": "object", "required": ["billing_address"]}
+  }
+}

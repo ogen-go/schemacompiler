@@ -1,0 +1,5 @@
+{
+  "if": {"properties": {"a": {"type": "string"}}, "required": ["a"]},
+  "then": {"properties": {"b": {"type": "number"}}},
+  "else": {"properties": {"c": {"type": "boolean"}}}
+}

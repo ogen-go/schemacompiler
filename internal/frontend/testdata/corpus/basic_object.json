@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "title": "Widget",
+  "properties": {
+    "name": {"type": "string", "minLength": 1, "maxLength": 64},
+    "count": {"type": "integer", "minimum": 0},
+    "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  },
+  "required": ["name"],
+  "additionalProperties": false
+}

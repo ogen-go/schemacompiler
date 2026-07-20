@@ -1,0 +1,25 @@
+version: "2"
+
+linters:
+  enable:
+    - gocritic
+    - revive
+    - unconvert
+    - unparam
+    - misspell
+    - nakedret
+    - whitespace
+  settings:
+    lll:
+      line-length: 140
+    gocyclo:
+      min-complexity: 15
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ogen-go/schemacompiler

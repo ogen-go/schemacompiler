@@ -1,0 +1,1 @@
+{"type": "string", "not": {"const": "forbidden"}}

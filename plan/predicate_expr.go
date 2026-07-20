@@ -45,6 +45,17 @@ type UniqueItemsPredicate struct{}
 // ContainsCountPredicate is `contains`/`minContains`/`maxContains`: the number of array
 // elements matching Schema must fall within [Min, Max] (Max nil means unbounded; Min
 // defaults to 1 per spec when minContains is absent).
+//
+// Lowering contract. A backend runs Schema (a full [CompilationPlan]) against every array
+// element and counts the elements that accept it. Letting n be that count, the instance is
+// valid iff
+//
+//	Min <= n <= Max   (Max nil ⇒ no upper bound)
+//
+// This is the element-wise counterpart of [PredicateCountDispatch]'s branch match-count and,
+// like it, forces CapabilityLevel PredicateDispatch: a backend either emits the count or
+// MUST refuse and surface the diagnostic (docs/integration.md §4). The count is a
+// validation step over the array's own representation; it does not change the stored shape.
 type ContainsCountPredicate struct {
 	Schema CompilationPlan
 	Min    uint64

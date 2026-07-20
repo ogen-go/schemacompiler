@@ -2,8 +2,10 @@ package schemacompiler_test
 
 import (
 	"context"
+	"net/url"
 	"testing"
 
+	"github.com/go-faster/errors"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ogen-go/schemacompiler"
@@ -51,6 +53,42 @@ func TestCompile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompileExternalRefWithLoader(t *testing.T) {
+	// An external $ref resolves via Options.Loader, so the document compiles without any
+	// unresolved-ref error diagnostics.
+	const otherURI = "https://ex.com/other.json"
+	loader := func(_ context.Context, u *url.URL) ([]byte, error) {
+		if u.String() != otherURI {
+			return nil, errors.Errorf("unexpected fetch %q", u)
+		}
+		return []byte(`{"$defs": {"Name": {"type": "string", "minLength": 1}}}`), nil
+	}
+
+	res, err := schemacompiler.Compile(context.Background(),
+		[]byte(`{"$ref": "other.json#/$defs/Name"}`),
+		schemacompiler.Options{BaseURI: "https://ex.com/root.json", Loader: loader})
+	require.NoError(t, err)
+	for _, d := range res.Diagnostics {
+		require.NotEqual(t, plan.SeverityError, d.Severity, "unexpected error diagnostic: %s", d.Message)
+	}
+}
+
+func TestCompileExternalRefWithoutLoader(t *testing.T) {
+	// With no loader, the external $ref degrades to an error diagnostic.
+	res, err := schemacompiler.Compile(context.Background(),
+		[]byte(`{"$ref": "https://ex.com/other.json#/$defs/Name"}`),
+		schemacompiler.Options{})
+	require.NoError(t, err)
+
+	var sawError bool
+	for _, d := range res.Diagnostics {
+		if d.Severity == plan.SeverityError {
+			sawError = true
+		}
+	}
+	require.True(t, sawError, "expected unresolved-ref error diagnostic without a loader")
 }
 
 func TestCompileDynamicRefDiagnostic(t *testing.T) {

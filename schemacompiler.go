@@ -8,12 +8,20 @@ package schemacompiler
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/go-faster/errors"
 
 	"github.com/ogen-go/schemacompiler/internal/frontend"
 	"github.com/ogen-go/schemacompiler/plan"
 )
+
+// Loader fetches the raw bytes of an external schema document identified by uri (an
+// absolute URI with the fragment removed). It is invoked lazily during reference
+// resolution for any $ref whose target document is not the root schema. Callers supply the
+// transport (filesystem, HTTP, an in-memory map, ...). A nil [Options.Loader] leaves
+// external references unresolved and reported as diagnostics.
+type Loader func(ctx context.Context, uri *url.URL) ([]byte, error)
 
 // defaultExpansionBudget bounds combinator expansion during normalization when
 // [Options.ExpansionBudget] is zero.
@@ -27,6 +35,9 @@ type Options struct {
 	// factored predicate-dispatch form is preserved instead of exponential IR (design §21).
 	// Zero selects a conservative default.
 	ExpansionBudget int
+	// Loader resolves external/remote $ref documents. When nil, only in-document references
+	// resolve and external ones are reported as diagnostics.
+	Loader Loader
 }
 
 // Result is the public output of compilation (design §25).
@@ -47,7 +58,7 @@ type Result struct {
 // parsed libopenapi schema (e.g. ogen) should use the frontend adapter directly rather
 // than re-serializing.
 func Compile(ctx context.Context, data []byte, opts Options) (*Result, error) {
-	schema, err := frontend.Load(ctx, data, opts.BaseURI)
+	schema, err := frontend.LoadWithLoader(ctx, data, opts.BaseURI, frontend.Loader(opts.Loader))
 	if err != nil {
 		return nil, errors.Wrap(err, "load")
 	}

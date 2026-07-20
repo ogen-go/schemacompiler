@@ -64,8 +64,11 @@ var manifest = map[string]caseExpectation{
 	"object/nullable_field.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
 
 	// --- StaticDispatch: finite alternatives, discriminated at compile time. ---
-	"enum/enum_strings.json":            {Capability: plan.StaticDispatch},
-	"enum/const_value.json":             {Capability: plan.StaticDispatch},
+	"enum/enum_strings.json": {Capability: plan.StaticDispatch},
+	"enum/const_value.json":  {Capability: plan.StaticDispatch},
+	// An enum with array/object members: these JSON values are not valid Go map keys, so
+	// literal-dispatch dedup must not hash them (regression for an unhashable-type panic).
+	"enum/non_primitive_enum.json":      {Capability: plan.StaticDispatch},
 	"dispatch/oneof_kind_disjoint.json": {Capability: plan.StaticDispatch},
 	"dispatch/oneof_tagged_union.json":  {Capability: plan.StaticDispatch},
 	"dispatch/multi_type.json":          {Capability: plan.StaticDispatch},

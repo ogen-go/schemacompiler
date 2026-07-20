@@ -113,13 +113,12 @@ func extractLiteral(e ir.Expr) (any, bool) {
 // design §18 discriminator class 2), returning each branch's value.
 func literalCases(branchExprs []ir.Expr) ([]discCase, bool) {
 	cases := make([]discCase, len(branchExprs))
-	seen := make(map[any]bool, len(branchExprs))
+	seen := newValueSet(len(branchExprs))
 	for i, e := range branchExprs {
 		v, ok := extractLiteral(e)
-		if !ok || seen[v] {
+		if !ok || !seen.add(v) {
 			return nil, false
 		}
-		seen[v] = true
 		cases[i] = discCase{Value: v, Expr: e}
 	}
 	return cases, true
@@ -217,7 +216,7 @@ func discriminatorProperty(e ir.Expr) (string, any, bool) {
 func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCase, bool) {
 	var propName string
 	cases := make([]discCase, len(branchExprs))
-	seen := make(map[any]bool, len(branchExprs))
+	seen := newValueSet(len(branchExprs))
 	for i, be := range branchExprs {
 		name, val, ok := discriminatorProperty(be)
 		if !ok {
@@ -228,10 +227,9 @@ func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCa
 		} else if name != propName {
 			return "", nil, false
 		}
-		if seen[val] {
+		if !seen.add(val) {
 			return "", nil, false
 		}
-		seen[val] = true
 		cases[i] = discCase{Value: val, Expr: be}
 	}
 	return propName, cases, true

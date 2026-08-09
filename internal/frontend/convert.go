@@ -100,10 +100,14 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 
 // convertProxy converts a *base.SchemaProxy (a lazily-built child schema position) into a
 // Node, short-circuiting boolean schemas before they ever reach libopenapi's Schema
-// builder (which only understands mapping nodes).
+// builder (which only understands mapping nodes), and reference proxies before they are
+// followed (see [convState.referenceNode]).
 func (st *convState) convertProxy(sp *base.SchemaProxy, sc scope) (*Node, error) {
 	if sp == nil {
 		return nil, nil
+	}
+	if sp.IsReference() {
+		return st.referenceNode(sp.GetReference(), sc), nil
 	}
 	if vn := sp.GetValueNode(); vn != nil {
 		if b, ok := boolSchemaValue(vn); ok {
@@ -121,6 +125,21 @@ func (st *convState) convertProxy(sp *base.SchemaProxy, sc scope) (*Node, error)
 		return nil, errors.Wrapf(err, "build schema at %q", sc.docPointer)
 	}
 	return st.convertSchema(hs, sc)
+}
+
+// referenceNode converts a `$ref` position into a leaf Node carrying only the reference,
+// left for the later resolveAll pass to resolve against the [Registry].
+//
+// libopenapi's SchemaProxy.Schema() returns the *target* of a reference, not the reference
+// itself, so descending into it would inline the target — losing the reference's identity
+// as a named definition, and never terminating on a recursive schema. The standalone
+// loader path never reaches here because stripRefs (loader.go) removes every `$ref` before
+// libopenapi sees it; this is the equivalent for an already-parsed schema.
+func (st *convState) referenceNode(ref string, sc scope) *Node {
+	n := &Node{Ref: ref, Pointer: sc.docPointer}
+	st.register(n, sc, sc.baseURI())
+	st.refBaseURI[n] = sc.baseURI()
+	return n
 }
 
 func boolSchemaValue(vn *yaml.Node) (value, ok bool) {

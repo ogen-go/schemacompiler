@@ -78,7 +78,7 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 	}
 	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}}
 
-	root, err := st.convertSchema(hs, sc)
+	root, err := st.convertSchema(ctx, hs, sc)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert root schema")
 	}
@@ -100,10 +100,14 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 
 // convertProxy converts a *base.SchemaProxy (a lazily-built child schema position) into a
 // Node, short-circuiting boolean schemas before they ever reach libopenapi's Schema
-// builder (which only understands mapping nodes).
-func (st *convState) convertProxy(sp *base.SchemaProxy, sc scope) (*Node, error) {
+// builder (which only understands mapping nodes), and reference proxies before they are
+// followed (see [convState.referenceNode]).
+func (st *convState) convertProxy(ctx context.Context, sp *base.SchemaProxy, sc scope) (*Node, error) {
 	if sp == nil {
 		return nil, nil
+	}
+	if sp.IsReference() {
+		return st.referenceNode(ctx, sp, sc)
 	}
 	if vn := sp.GetValueNode(); vn != nil {
 		if b, ok := boolSchemaValue(vn); ok {
@@ -120,7 +124,99 @@ func (st *convState) convertProxy(sp *base.SchemaProxy, sc scope) (*Node, error)
 		}
 		return nil, errors.Wrapf(err, "build schema at %q", sc.docPointer)
 	}
-	return st.convertSchema(hs, sc)
+	return st.convertSchema(ctx, hs, sc)
+}
+
+// referenceNode converts a `$ref` position into a Node carrying the reference plus any
+// keywords declared alongside it, left for the later resolveAll pass to resolve against
+// the [Registry].
+//
+// libopenapi's SchemaProxy.Schema() returns the *target* of a reference, not the reference
+// itself, so descending into it would inline the target — losing the reference's identity
+// as a named definition, and never terminating on a recursive schema. The standalone
+// loader path never reaches here because stripRefs (loader.go) removes every `$ref` before
+// libopenapi sees it; this is the equivalent for an already-parsed schema.
+func (st *convState) referenceNode(ctx context.Context, sp *base.SchemaProxy, sc scope) (*Node, error) {
+	ref := sp.GetReference()
+
+	siblings, err := st.siblingSchema(ctx, sp.GetReferenceNode())
+	if err != nil {
+		return nil, errors.Wrapf(err, "build keywords alongside $ref at %q", sc.docPointer)
+	}
+	if siblings == nil {
+		n := &Node{Ref: ref, Pointer: sc.docPointer}
+		st.register(n, sc, sc.baseURI())
+		st.refBaseURI[n] = sc.baseURI()
+		return n, nil
+	}
+
+	n, err := st.convertSchema(ctx, siblings, sc)
+	if err != nil {
+		return nil, err
+	}
+	n.Ref = ref
+	baseURI, err := nodeBaseURI(sc, n.ID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "resolve $id %q at %q", n.ID, sc.docPointer)
+	}
+	st.refBaseURI[n] = baseURI
+	return n, nil
+}
+
+// siblingSchema builds a schema from the keywords declared alongside a `$ref`, or returns
+// nil when the reference stands alone. 2020-12 lets `$ref` coexist with sibling keywords,
+// but a reference proxy's value node is the *target's*, so the siblings are recovered from
+// the node that declared the reference (SchemaProxy.GetReferenceNode) and rebuilt without
+// its `$ref` key.
+//
+// Nested `$ref`s inside those keywords are stripped into st.refMap the same way the
+// standalone loader does, since this build has no index to resolve them against and
+// low/base.Schema.Build would otherwise try to follow them (see stripRefs in loader.go).
+func (st *convState) siblingSchema(ctx context.Context, refNode *yaml.Node) (*base.Schema, error) {
+	n := resolveAlias(refNode)
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil, nil
+	}
+	// The document's nodes are shared with the caller, so strip on a copy.
+	stripped := deepCopyNode(n)
+	if st.refMap == nil {
+		st.refMap = make(map[*yaml.Node]string)
+	}
+	stripRefs(stripped, st.refMap)
+	// stripRefs removed this node's own `$ref`; anything left is a sibling keyword.
+	delete(st.refMap, stripped)
+	if len(stripped.Content) == 0 {
+		return nil, nil
+	}
+
+	low := new(lowbase.Schema)
+	if err := low.Build(ctx, stripped, nil); err != nil {
+		return nil, err
+	}
+	return base.NewSchema(low), nil
+}
+
+// deepCopyNode clones a yaml node tree so it can be modified without touching the document
+// it came from.
+func deepCopyNode(n *yaml.Node) *yaml.Node {
+	if n == nil {
+		return nil
+	}
+	c := *n
+	c.Content = make([]*yaml.Node, len(n.Content))
+	for i, child := range n.Content {
+		c.Content[i] = deepCopyNode(child)
+	}
+	return &c
+}
+
+// nodeBaseURI returns the base URI in effect for a node declaring $id; an empty id keeps
+// the enclosing scope's.
+func nodeBaseURI(sc scope, id string) (string, error) {
+	if id == "" {
+		return sc.baseURI(), nil
+	}
+	return resolveURI(sc.baseURI(), id)
 }
 
 func boolSchemaValue(vn *yaml.Node) (value, ok bool) {
@@ -139,7 +235,7 @@ func boolSchemaValue(vn *yaml.Node) (value, ok bool) {
 }
 
 // convertSchema converts one already-built high-level schema object into a Node.
-func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
+func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scope) (*Node, error) {
 	if hs == nil {
 		return nil, nil
 	}
@@ -152,7 +248,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 	childFrames := sc.frames
 	if hs.Id != "" {
 		n.ID = hs.Id
-		abs, err := resolveURI(effectiveBaseURI, hs.Id)
+		abs, err := nodeBaseURI(sc, hs.Id)
 		if err != nil {
 			return nil, errors.Wrapf(err, "resolve $id %q at %q", hs.Id, sc.docPointer)
 		}
@@ -169,11 +265,10 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.reg.hasDynamicRefs = true
 	}
 
-	if st.refMap != nil {
-		if low != nil && low.RootNode != nil {
-			n.Ref = st.refMap[low.RootNode]
-		}
-	} else if hs.ParentProxy != nil && hs.ParentProxy.IsReference() {
+	if low != nil && low.RootNode != nil {
+		n.Ref = st.refMap[low.RootNode]
+	}
+	if n.Ref == "" && hs.ParentProxy != nil && hs.ParentProxy.IsReference() {
 		n.Ref = hs.ParentProxy.GetReference()
 	}
 	if n.Ref != "" {
@@ -267,7 +362,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 
 	// prefixItems / items / contains (array, instance-descent)
 	for i, sp := range hs.PrefixItems {
-		child, err := st.convertProxy(sp, childScope.child("prefixItems").childIndex(i))
+		child, err := st.convertProxy(ctx, sp, childScope.child("prefixItems").childIndex(i))
 		if err != nil {
 			return nil, err
 		}
@@ -275,7 +370,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, true)
 	}
 	if hs.Items != nil {
-		child, err := st.convertDynamicSchema(hs.Items, childScope.child("items"))
+		child, err := st.convertDynamicSchema(ctx, hs.Items, childScope.child("items"))
 		if err != nil {
 			return nil, err
 		}
@@ -283,7 +378,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, true)
 	}
 	if hs.Contains != nil {
-		child, err := st.convertProxy(hs.Contains, childScope.child("contains"))
+		child, err := st.convertProxy(ctx, hs.Contains, childScope.child("contains"))
 		if err != nil {
 			return nil, err
 		}
@@ -292,20 +387,20 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 	}
 
 	// object keywords (instance-descent for property/item value positions)
-	if err := st.convertNamedSchemas(hs.Properties, childScope, "properties", &n.Properties, n, true); err != nil {
+	if err := st.convertNamedSchemas(ctx, hs.Properties, childScope, "properties", &n.Properties, n, true); err != nil {
 		return nil, err
 	}
-	if err := st.convertNamedSchemas(hs.PatternProperties, childScope, "patternProperties", &n.PatternProperties, n, true); err != nil {
+	if err := st.convertNamedSchemas(ctx, hs.PatternProperties, childScope, "patternProperties", &n.PatternProperties, n, true); err != nil {
 		return nil, err
 	}
-	if err := st.convertNamedSchemas(hs.DependentSchemas, childScope, "dependentSchemas", &n.DependentSchemas, n, false); err != nil {
+	if err := st.convertNamedSchemas(ctx, hs.DependentSchemas, childScope, "dependentSchemas", &n.DependentSchemas, n, false); err != nil {
 		return nil, err
 	}
-	if err := st.convertNamedSchemas(hs.Defs, childScope, "$defs", &n.Defs, nil, false); err != nil {
+	if err := st.convertNamedSchemas(ctx, hs.Defs, childScope, "$defs", &n.Defs, nil, false); err != nil {
 		return nil, err
 	}
 	if hs.AdditionalProperties != nil {
-		child, err := st.convertDynamicSchema(hs.AdditionalProperties, childScope.child("additionalProperties"))
+		child, err := st.convertDynamicSchema(ctx, hs.AdditionalProperties, childScope.child("additionalProperties"))
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +408,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, true)
 	}
 	if hs.PropertyNames != nil {
-		child, err := st.convertProxy(hs.PropertyNames, childScope.child("propertyNames"))
+		child, err := st.convertProxy(ctx, hs.PropertyNames, childScope.child("propertyNames"))
 		if err != nil {
 			return nil, err
 		}
@@ -321,7 +416,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, false)
 	}
 	if hs.UnevaluatedProperties != nil {
-		child, err := st.convertDynamicSchema(hs.UnevaluatedProperties, childScope.child("unevaluatedProperties"))
+		child, err := st.convertDynamicSchema(ctx, hs.UnevaluatedProperties, childScope.child("unevaluatedProperties"))
 		if err != nil {
 			return nil, err
 		}
@@ -329,7 +424,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, true)
 	}
 	if hs.UnevaluatedItems != nil {
-		child, err := st.convertProxy(hs.UnevaluatedItems, childScope.child("unevaluatedItems"))
+		child, err := st.convertProxy(ctx, hs.UnevaluatedItems, childScope.child("unevaluatedItems"))
 		if err != nil {
 			return nil, err
 		}
@@ -344,7 +439,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 
 	// applicators (same instance, not descent)
 	for i, sp := range hs.AllOf {
-		child, err := st.convertProxy(sp, childScope.child("allOf").childIndex(i))
+		child, err := st.convertProxy(ctx, sp, childScope.child("allOf").childIndex(i))
 		if err != nil {
 			return nil, err
 		}
@@ -352,7 +447,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, false)
 	}
 	for i, sp := range hs.AnyOf {
-		child, err := st.convertProxy(sp, childScope.child("anyOf").childIndex(i))
+		child, err := st.convertProxy(ctx, sp, childScope.child("anyOf").childIndex(i))
 		if err != nil {
 			return nil, err
 		}
@@ -360,7 +455,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, false)
 	}
 	for i, sp := range hs.OneOf {
-		child, err := st.convertProxy(sp, childScope.child("oneOf").childIndex(i))
+		child, err := st.convertProxy(ctx, sp, childScope.child("oneOf").childIndex(i))
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +463,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, false)
 	}
 	if hs.Not != nil {
-		child, err := st.convertProxy(hs.Not, childScope.child("not"))
+		child, err := st.convertProxy(ctx, hs.Not, childScope.child("not"))
 		if err != nil {
 			return nil, err
 		}
@@ -376,7 +471,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, false)
 	}
 	if hs.If != nil {
-		child, err := st.convertProxy(hs.If, childScope.child("if"))
+		child, err := st.convertProxy(ctx, hs.If, childScope.child("if"))
 		if err != nil {
 			return nil, err
 		}
@@ -384,7 +479,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, false)
 	}
 	if hs.Then != nil {
-		child, err := st.convertProxy(hs.Then, childScope.child("then"))
+		child, err := st.convertProxy(ctx, hs.Then, childScope.child("then"))
 		if err != nil {
 			return nil, err
 		}
@@ -392,7 +487,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 		st.addEdge(n, child, false)
 	}
 	if hs.Else != nil {
-		child, err := st.convertProxy(hs.Else, childScope.child("else"))
+		child, err := st.convertProxy(ctx, hs.Else, childScope.child("else"))
 		if err != nil {
 			return nil, err
 		}
@@ -405,7 +500,7 @@ func (st *convState) convertSchema(hs *base.Schema, sc scope) (*Node, error) {
 
 // convertDynamicSchema converts a bool-or-schema keyword (additionalProperties, items,
 // unevaluatedProperties) into a Node, representing the boolean arm via Node.Always.
-func (st *convState) convertDynamicSchema(dv *base.DynamicValue[*base.SchemaProxy, bool], sc scope) (*Node, error) {
+func (st *convState) convertDynamicSchema(ctx context.Context, dv *base.DynamicValue[*base.SchemaProxy, bool], sc scope) (*Node, error) {
 	if dv == nil {
 		return nil, nil
 	}
@@ -415,10 +510,11 @@ func (st *convState) convertDynamicSchema(dv *base.DynamicValue[*base.SchemaProx
 		st.register(n, sc, sc.baseURI())
 		return n, nil
 	}
-	return st.convertProxy(dv.A, sc)
+	return st.convertProxy(ctx, dv.A, sc)
 }
 
 func (st *convState) convertNamedSchemas(
+	ctx context.Context,
 	m *orderedmap.Map[string, *base.SchemaProxy],
 	sc scope,
 	keyword string,
@@ -430,7 +526,7 @@ func (st *convState) convertNamedSchemas(
 		return nil
 	}
 	for name, sp := range m.FromOldest() {
-		child, err := st.convertProxy(sp, sc.child(keyword).child(name))
+		child, err := st.convertProxy(ctx, sp, sc.child(keyword).child(name))
 		if err != nil {
 			return errors.Wrapf(err, "%s[%q]", keyword, name)
 		}

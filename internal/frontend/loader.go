@@ -193,7 +193,7 @@ func (st *convState) loadInto(ctx context.Context, data []byte, baseURI string) 
 	maps.Copy(st.refMap, refs)
 
 	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}}
-	root, err := st.convertSchema(hs, sc)
+	root, err := st.convertSchema(ctx, hs, sc)
 	if err != nil {
 		return errors.Wrapf(err, "convert %q", baseURI)
 	}

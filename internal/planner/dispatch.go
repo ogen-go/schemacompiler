@@ -74,11 +74,11 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 
 	// A declared discriminator wins over structural inference (design §18.2, issue #17).
 	if disc != nil {
-		if cases, ok := b.declaredDispatchCases(disc, branchExprs); ok {
+		cases, reason := b.declaredDispatchCases(disc, branchExprs)
+		if reason == "" {
 			return b.buildPropertyDispatch(disc.PropertyName, cases, plan.TagDeclared, path)
 		}
-		b.diag(path, plan.SeverityWarning,
-			"declared discriminator yields no distinct per-branch value; falling back to structural analysis")
+		b.diag(path, plan.SeverityWarning, reason+"; falling back to structural analysis")
 	}
 
 	// Static discriminator analysis, in preference order (design §18).

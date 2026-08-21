@@ -2,6 +2,7 @@ package planner
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/ogen-go/schemacompiler/internal/ir"
@@ -9,64 +10,98 @@ import (
 )
 
 // declaredDispatchCases builds the cases of a union carrying an explicit OpenAPI
-// `discriminator` (issue #17). It reports false when a branch yields no value on the
-// declared property, or when two branches share one, in which case the caller falls back
+// `discriminator` (issue #17). The returned reason is empty on success; otherwise it
+// explains why the declaration cannot drive dispatch, and the caller warns and falls back
 // to structural inference.
-func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Expr) ([]discCase, bool) {
+func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Expr) (cases []discCase, reason string) {
 	if d.PropertyName == "" {
-		return nil, false
+		return nil, "discriminator has no propertyName"
 	}
-	var cases []discCase
-	seen := newValueSet(len(branchExprs))
-	for _, be := range branchExprs {
-		lits := b.declaredBranchValues(d, be)
-		if len(lits) == 0 {
-			return nil, false
+
+	targets := make([][]plan.SchemaID, len(branchExprs))
+	for i, be := range branchExprs {
+		targets[i] = branchRefTargets(be)
+	}
+
+	mapped := make([][]ir.Literal, len(branchExprs))
+	for _, m := range d.Mapping {
+		matched := false
+		for i, ts := range targets {
+			if refMatchesAny(m.Ref, ts) {
+				mapped[i] = append(mapped[i], stringLiteral(m.Value))
+				matched = true
+			}
 		}
-		for _, lit := range lits {
+		if !matched {
+			return nil, fmt.Sprintf("discriminator mapping %q => %q resolves to no branch of this union", m.Value, m.Ref)
+		}
+	}
+
+	seen := newValueSet(len(branchExprs))
+	for i, be := range branchExprs {
+		c := b.flattenThroughRefs(be, nil)
+		if c.never || !declaresProperty(c, d.PropertyName) {
+			return nil, fmt.Sprintf("discriminator property %q is not declared by every branch", d.PropertyName)
+		}
+		values := mapped[i]
+		if len(values) == 0 {
+			values = declaredBranchValues(c, targets[i], d.PropertyName)
+		}
+		if len(values) == 0 {
+			return nil, fmt.Sprintf("discriminator property %q has no value on every branch", d.PropertyName)
+		}
+		for _, lit := range values {
 			if !seen.add(lit) {
-				return nil, false
+				return nil, fmt.Sprintf("discriminator value %s selects more than one branch", literalString(lit))
 			}
 			cases = append(cases, discCase{Value: lit.Value, Raw: lit.Raw, Expr: be})
 		}
 	}
-	return cases, true
+	return cases, ""
 }
 
-// declaredBranchValues returns every value selecting be, in preference order: the
-// `mapping` entries denoting the branch (several are allowed: aliases of one schema), the
-// branch's own const on the declared property, then the implicit mapping — the component
-// name of the branch's `$ref` (OpenAPI 3.1 §4.8.25.1).
-func (b *builder) declaredBranchValues(d *ir.Discriminator, be ir.Expr) []ir.Literal {
-	targets := branchRefTargets(be)
-
-	var mapped []ir.Literal
-	for _, m := range d.Mapping {
-		for _, t := range targets {
-			if refMatchesTarget(m.Ref, t) {
-				mapped = append(mapped, stringLiteral(m.Value))
-				break
-			}
-		}
-	}
-	if len(mapped) > 0 {
-		return mapped
-	}
-
-	c := b.flattenThroughRefs(be, nil)
-	if c.never {
-		return nil
-	}
-	if _, lit, ok := requiredConstProperty(c, d.PropertyName); ok {
+// declaredBranchValues returns the values selecting a branch no mapping entry named: its
+// own const on the declared property, else the implicit mapping — the component name of
+// its `$ref` (OpenAPI 3.1 §4.8.25.1).
+func declaredBranchValues(c components, targets []plan.SchemaID, property string) []ir.Literal {
+	if _, lit, ok := requiredConstProperty(c, property); ok {
 		return []ir.Literal{lit}
 	}
-
 	for _, t := range targets {
 		if name := componentName(string(t)); name != "" {
 			return []ir.Literal{stringLiteral(name)}
 		}
 	}
 	return nil
+}
+
+// declaresProperty reports whether a branch declares the property the discriminator
+// switches on, as a required name or as an object property. OpenAPI requires it on every
+// branch; dispatching on a property no branch carries could never select one at runtime.
+func declaresProperty(c components, name string) bool {
+	for _, p := range c.predicates {
+		rd, ok := p.Detail.(ir.RequiredDetail)
+		if !ok {
+			continue
+		}
+		for _, prop := range rd.Properties {
+			if prop == name {
+				return true
+			}
+		}
+	}
+	for _, sd := range c.shapes {
+		os, ok := sd.(ir.ObjectShape)
+		if !ok {
+			continue
+		}
+		for _, prop := range os.Properties {
+			if prop.Name == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // branchRefTargets returns the targets of the static `$ref`s a branch is built from.
@@ -78,6 +113,15 @@ func branchRefTargets(be ir.Expr) []plan.SchemaID {
 		}
 	}
 	return out
+}
+
+func refMatchesAny(ref string, targets []plan.SchemaID) bool {
+	for _, t := range targets {
+		if refMatchesTarget(ref, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // refMatchesTarget reports whether a `mapping` reference denotes target, which is a
@@ -109,4 +153,11 @@ func stringLiteral(s string) ir.Literal {
 		return ir.Literal{Value: s}
 	}
 	return ir.Literal{Value: s, Raw: raw}
+}
+
+func literalString(l ir.Literal) string {
+	if l.Raw != nil {
+		return string(l.Raw)
+	}
+	return fmt.Sprintf("%v", l.Value)
 }

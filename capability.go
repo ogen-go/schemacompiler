@@ -17,7 +17,7 @@ import "github.com/ogen-go/schemacompiler/plan"
 // raw reference string, since there is no target pointer to key them by. Nothing can be
 // generated for such a name, so the referring plan becomes Unsupported rather than keeping
 // its optimistic level (design §24 forbids under-approximating the cost).
-func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan) []plan.Diagnostic {
+func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan, positions map[plan.SchemaID]plan.Position) []plan.Diagnostic {
 	var diags []plan.Diagnostic
 	deps := make(map[plan.SchemaID][]plan.SchemaID, len(plans))
 	for id, p := range plans {
@@ -33,6 +33,7 @@ func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan) []plan.Dia
 				plans[id] = p
 				diags = append(diags, plan.Diagnostic{
 					Pointer:  string(id),
+					Position: positions[id],
 					Severity: plan.SeverityError,
 					Message:  "reference " + string(target) + " resolves to no compiled schema",
 				})
@@ -60,13 +61,15 @@ func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan) []plan.Dia
 	return diags
 }
 
-// exactnessFloor is the exactness a capability level implies on its own: nothing above
-// PredicateDispatch can be converted at all (design §24, §25).
-func exactnessFloor(level plan.CapabilityLevel) plan.Exactness {
+// exactnessFor keeps a result's exactness consistent with its capability: nothing above
+// PredicateDispatch converts at all, so it cannot also claim an exact Go representation
+// (design §24, §25). The planner already pairs the two per plan; this re-establishes the
+// invariant after [rollUpCapabilities] raises a capability post-hoc.
+func exactnessFor(level plan.CapabilityLevel, observed plan.Exactness) plan.Exactness {
 	if level >= plan.EvaluationStateValidation {
-		return plan.UnsupportedConversion
+		return maxExactness(observed, plan.UnsupportedConversion)
 	}
-	return plan.ExactPureRepresentation
+	return observed
 }
 
 func hasPlan(plans map[plan.SchemaID]plan.CompilationPlan, id plan.SchemaID) bool {

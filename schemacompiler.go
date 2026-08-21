@@ -8,6 +8,7 @@ package schemacompiler
 
 import (
 	"context"
+	"maps"
 	"net/url"
 
 	"github.com/go-faster/errors"
@@ -80,7 +81,24 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	// Whole-document assembly: compile every $ref target into a named definition and
 	// attach the resulting reference graph to the root plan (design §10.1).
 	defs := buildDefinitions(schema.Registry, budget)
-	defs.diags = append(defs.diags, rollUpCapabilities(defs.plans)...)
+
+	// The root joins the roll-up under its own pointer: a `$ref` of its own that resolves
+	// to nothing is as ungeneratable there as it is inside a definition. It is not itself
+	// a named definition, so the roll-up runs over a copy of the graph.
+	rootID := plan.SchemaID(schema.Root.Pointer)
+	rolled := make(map[plan.SchemaID]plan.CompilationPlan, len(defs.plans)+1)
+	maps.Copy(rolled, defs.plans)
+	if _, ok := rolled[rootID]; !ok {
+		rolled[rootID] = root.Plan
+	}
+	positions := refTargetPositions(schema.Registry)
+	positions[rootID] = schema.Root.Position
+	defs.diags = append(defs.diags, rollUpCapabilities(rolled, positions)...)
+	for id := range defs.plans {
+		defs.plans[id] = rolled[id]
+	}
+	root.Plan.Capability = rolled[rootID].Capability
+
 	if len(defs.plans) > 0 {
 		if schema.Registry.HasDynamicRefs() {
 			root.Plan.Resolution = plan.DynamicReferenceGraph{StaticDefinitions: defs.plans}
@@ -106,7 +124,7 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	return &Result{
 		Plan:        root.Plan,
 		Capability:  capLevel,
-		Exactness:   maxExactness(root.Exactness, defs.exactness),
+		Exactness:   exactnessFor(capLevel, maxExactness(root.Exactness, defs.exactness)),
 		Diagnostics: dedupeDiagnostics(diags),
 	}
 }

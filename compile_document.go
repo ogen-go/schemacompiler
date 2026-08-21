@@ -69,15 +69,19 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	res.Exactness = maxExactness(res.Exactness, defs.exactness)
 	diags = append(diags, defs.diags...)
 
-	diags = append(diags, rollUpCapabilities(res.Plans)...)
+	positions := refTargetPositions(d.Registry)
+	for pointer, n := range d.Schemas {
+		positions[plan.SchemaID(pointer)] = n.Position
+	}
+	diags = append(diags, rollUpCapabilities(res.Plans, positions)...)
 	for id, p := range res.Plans {
 		if _, static := p.Resolution.(plan.StaticReferenceGraph); static {
 			p.Resolution = plan.FullyResolved{}
 			res.Plans[id] = p
 		}
 		res.Capability = maxCapability(res.Capability, p.Capability)
-		res.Exactness = maxExactness(res.Exactness, exactnessFloor(p.Capability))
 	}
+	res.Exactness = exactnessFor(res.Capability, res.Exactness)
 
 	diags = append(diags, unresolvedDiagnostics(d.Unresolved)...)
 	diags = append(diags, uninhabitedDiagnostics(d.Uninhabited)...)

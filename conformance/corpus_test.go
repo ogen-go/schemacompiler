@@ -131,6 +131,15 @@ func TestCorpus(t *testing.T) {
 
 			dist[distKey{res.Capability, res.Exactness}]++
 
+			// A capability past PredicateDispatch cannot convert at all, so the result
+			// must not also advertise an exact or merely-validated Go type (design §24,
+			// §25; issue #48).
+			if res.Capability >= plan.EvaluationStateValidation {
+				require.Equal(t, plan.UnsupportedConversion, res.Exactness,
+					"capability %s must not report exactness %s",
+					capabilityName(res.Capability), exactnessName(res.Exactness))
+			}
+
 			for _, diag := range res.Diagnostics {
 				if diag.Severity >= plan.SeverityWarning {
 					flagged = append(flagged, fmt.Sprintf("%s: [%s] %s (pointer=%q)",

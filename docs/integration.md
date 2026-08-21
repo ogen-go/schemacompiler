@@ -232,6 +232,9 @@ second walk over the finished plan, so they survive every shape the planner emit
 the `UnionRepresentation` produced by `type: ["object","null"]`, `oneOf`/`anyOf`, `if`/`then`
 and `dependentSchemas`.
 
+Every value in a `plan.Metadata` is a deep copy: mutating `Extensions`, `Default` or `Examples`
+on a returned plan affects nothing else.
+
 | `plan.Metadata` | ogen |
 |---|---|
 | `Title`, `Description` | Type/field godoc (`jsonschema.Schema.Description`, `jsonschema.Property.Description`). |

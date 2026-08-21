@@ -216,6 +216,42 @@ func TestCompile_ExtensionsSurviveNullableObject(t *testing.T) {
 	require.Equal(t, map[string]any{"x-ogen-name": "Alpha"}, m.Extensions)
 }
 
+func TestCompile_MetadataIsNotSharedBetweenPlans(t *testing.T) {
+	// `/$defs/A/properties/x` is both a field of A's plan and a $ref target with a plan
+	// of its own, so the same source node backs two plans in one compilation.
+	res := compileResult(t, `{
+		"$defs":{"A":{"type":"object","properties":{
+			"x":{"type":"string","title":"X","default":"d","x-k":"v","x-nested":{"k":"v"}}
+		}}},
+		"type":"object",
+		"properties":{
+			"a":{"$ref":"#/$defs/A"},
+			"b":{"$ref":"#/$defs/A/properties/x"}
+		}
+	}`)
+	graph, ok := res.Plan.Resolution.(plan.StaticReferenceGraph)
+	require.True(t, ok, "got %T", res.Plan.Resolution)
+
+	own, ok := graph.Definitions["/$defs/A/properties/x"]
+	require.True(t, ok, "definitions: %v", graph.Definitions)
+	require.Equal(t, "X", own.Metadata.Title)
+
+	aPlan, ok := graph.Definitions["/$defs/A"]
+	require.True(t, ok)
+	aObj, ok := aPlan.Representation.(plan.ObjectRepresentation)
+	require.True(t, ok, "got %T", aPlan.Representation)
+	field := aObj.Fields["x"]
+	require.Equal(t, "X", field.Metadata.Title)
+
+	own.Metadata.Extensions["mutated"] = true
+	own.Metadata.Extensions["x-nested"].(map[string]any)["mutated"] = true
+	own.Metadata.Default[0] = 'Z'
+
+	require.NotContains(t, field.Metadata.Extensions, "mutated")
+	require.NotContains(t, field.Metadata.Extensions["x-nested"], "mutated")
+	require.Equal(t, `"d"`, string(field.Metadata.Default))
+}
+
 func TestCompile_MetadataKeysAreDeterministic(t *testing.T) {
 	p := compile(t, `{"type":"object","properties":{"a":{"type":"string","x-b":1,"x-a":2,"x-c":3}}}`)
 	obj, ok := p.Representation.(plan.ObjectRepresentation)

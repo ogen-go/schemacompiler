@@ -49,3 +49,28 @@ func TestMetadataOf(t *testing.T) {
 		})
 	}
 }
+
+func TestMetadataOf_DeepCopies(t *testing.T) {
+	n := &frontend.Node{
+		Default:  &frontend.Value{Raw: []byte(`"d"`)},
+		Examples: []frontend.Value{{Raw: []byte(`"e"`)}},
+		Extensions: map[string]any{
+			"x-map":   map[string]any{"k": "v"},
+			"x-slice": []any{"a"},
+		},
+	}
+
+	m := MetadataOf(n)
+	m.Extensions["mutated"] = true
+	m.Extensions["x-map"].(map[string]any)["mutated"] = true
+	m.Extensions["x-slice"].([]any)[0] = "b"
+	m.Default[1] = 'z'
+	m.Examples[0][1] = 'z'
+
+	require.Equal(t, map[string]any{
+		"x-map":   map[string]any{"k": "v"},
+		"x-slice": []any{"a"},
+	}, n.Extensions)
+	require.Equal(t, `"d"`, string(n.Default.Raw))
+	require.Equal(t, `"e"`, string(n.Examples[0].Raw))
+}

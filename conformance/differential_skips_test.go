@@ -35,7 +35,6 @@ package conformance
 // Counts at the time of writing:
 //
 //	#74    8 instances
-//	#75    2 instances
 //	#92    1 instances
 var diffSkips = map[string]string{
 	// #74 an integer keyword spelled as a decimal becomes 0. A `max*` bound of 0 rejects
@@ -49,10 +48,6 @@ var diffSkips = map[string]string{
 	"minItems.json :: minItems validation with a decimal :: too short is invalid":                                      "#74",
 	"minLength.json :: minLength validation with a decimal :: too short is invalid":                                    "#74",
 	"minProperties.json :: minProperties validation with a decimal :: too short is invalid":                            "#74",
-
-	// #75 minContains/maxContains without `contains` synthesize a match-count
-	"maxContains.json :: maxContains without contains is ignored :: two items still valid against lone maxContains":  "#75",
-	"minContains.json :: minContains without contains is ignored :: zero items still valid against lone minContains": "#75",
 
 	// #92 `$vocabulary` is ignored, so a keyword a custom metaschema removes is still
 	// enforced. Uncovered by the #72 fix: the schema's `properties` used to be dropped

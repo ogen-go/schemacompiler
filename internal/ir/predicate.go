@@ -44,6 +44,8 @@ type UniqueItemsDetail struct{}
 // ContainsDetail is `contains`/`minContains`/`maxContains` (array-guarded). Schema is
 // the compiled sub-expression each element is tested against; Min/Max are nil when the
 // corresponding keyword is absent (default min is 1 per spec, applied by the planner).
+// Only emitted when `contains` is declared in the same schema object: without it
+// `minContains`/`maxContains` have no effect (draft 2020-12 6.4.4/6.4.5).
 type ContainsDetail struct {
 	Schema Expr
 	Min    *uint64

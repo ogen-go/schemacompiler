@@ -206,7 +206,9 @@ func compileArrayKeywords(n *frontend.Node) []Expr {
 	if n.UniqueItems {
 		guard(UniqueItemsDetail{})
 	}
-	if n.Contains != nil || n.MinContains != nil || n.MaxContains != nil {
+	// Draft 2020-12 6.4.4/6.4.5: minContains/maxContains have no effect unless
+	// `contains` is present in the same schema object.
+	if n.Contains != nil {
 		guard(ContainsDetail{
 			Schema: Compile(n.Contains),
 			Min:    n.MinContains,

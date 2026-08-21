@@ -110,28 +110,52 @@ func (g *planGraph) visitReference(id string, target plan.SchemaID) {
 // plan rendered at id, and recurses into each branch.
 func (g *planGraph) visitDispatch(id string, d plan.DispatchPlan) {
 	switch d := d.(type) {
-	case nil, plan.NoDispatch:
+	case nil:
 		// No branches.
+	case plan.NoDispatch:
+		var t struct{} = d
+		_ = t
 	case plan.KindDispatch:
-		kinds := make([]plan.JSONKind, 0, len(d.Cases))
-		for k := range d.Cases {
+		var t struct {
+			Cases map[plan.JSONKind]plan.CompilationPlan
+		} = d
+		kinds := make([]plan.JSONKind, 0, len(t.Cases))
+		for k := range t.Cases {
 			kinds = append(kinds, k)
 		}
 		sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
 		for _, k := range kinds {
-			g.addBranch(id, jsonKindString(k), d.Cases[k])
+			g.addBranch(id, jsonKindString(k), t.Cases[k])
 		}
 	case plan.LiteralDispatch:
-		g.visitLiteralCases(id, d.Cases)
+		var t struct {
+			Cases []plan.LiteralCase
+		} = d
+		g.visitLiteralCases(id, t.Cases)
 	case plan.PropertyDispatch:
-		for _, c := range sortedLiteralCases(d.Cases) {
-			g.addBranch(id, fmt.Sprintf("%s=%v", d.Property, c.Value), c.Plan)
+		var t struct {
+			Property string
+			Cases    []plan.LiteralCase
+			Tag      plan.TagSource
+		} = d
+		for _, c := range sortedLiteralCases(t.Cases) {
+			g.addBranch(id, fmt.Sprintf("%s=%v", t.Property, c.Value), c.Plan)
 		}
 	case plan.PresenceDispatch:
-		g.addBranch(id, "present", d.Present)
-		g.addBranch(id, "absent", d.Absent)
+		var t struct {
+			Property string
+			Present  plan.CompilationPlan
+			Absent   plan.CompilationPlan
+		} = d
+		g.addBranch(id, "present", t.Present)
+		g.addBranch(id, "absent", t.Absent)
 	case plan.PredicateCountDispatch:
-		for i, br := range d.Branches {
+		var t struct {
+			Branches []plan.CompilationPlan
+			Minimum  int
+			Maximum  int
+		} = d
+		for i, br := range t.Branches {
 			g.addBranch(id, fmt.Sprintf("branch %d", i), br)
 		}
 	default:
@@ -179,29 +203,59 @@ func representationSummary(r plan.Representation) string {
 	case nil:
 		return "<nil>"
 	case plan.AnyRepresentation:
+		var t struct{} = r
+		_ = t
 		return "any"
 	case plan.NeverRepresentation:
+		var t struct{} = r
+		_ = t
 		return "never"
 	case plan.PrimitiveRepresentation:
-		if dom := numericDomainString(r.Numeric); dom != "" {
-			return jsonKindString(r.Kind) + "(" + dom + ")"
+		var t struct {
+			Kind    plan.JSONKind
+			Numeric plan.NumericDomain
+			Format  string
+		} = r
+		if dom := numericDomainString(t.Numeric); dom != "" {
+			return jsonKindString(t.Kind) + "(" + dom + ")"
 		}
-		return jsonKindString(r.Kind)
+		return jsonKindString(t.Kind)
 	case plan.ObjectRepresentation:
-		names := make([]string, 0, len(r.Fields))
-		for name := range r.Fields {
+		var t struct {
+			Fields       map[string]plan.FieldRepresentation
+			Additional   plan.Representation
+			PatternRules []plan.PatternFieldRepresentation
+		} = r
+		names := make([]string, 0, len(t.Fields))
+		for name := range t.Fields {
 			names = append(names, name)
 		}
 		sort.Strings(names)
 		return "object{" + strings.Join(names, ",") + "}"
 	case plan.ArrayRepresentation:
+		var t struct {
+			Prefix []plan.ItemRepresentation
+			Rest   plan.ItemRepresentation
+		} = r
+		_ = t
 		return "array"
 	case plan.UnionRepresentation:
+		var t struct {
+			Alternatives []plan.Representation
+		} = r
+		_ = t
 		return "union"
 	case plan.RecursiveRepresentation:
-		return "rec:" + r.Name
+		var t struct {
+			Name string
+			Body plan.Representation
+		} = r
+		return "rec:" + t.Name
 	case plan.ReferenceRepresentation:
-		return "ref:" + r.Name
+		var t struct {
+			Name string
+		} = r
+		return "ref:" + t.Name
 	default:
 		return fmt.Sprintf("<unknown Representation %T>", r)
 	}

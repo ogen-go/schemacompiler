@@ -1,6 +1,9 @@
 package schemacompiler
 
-import "github.com/ogen-go/schemacompiler/plan"
+import (
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
+	"github.com/ogen-go/schemacompiler/plan"
+)
 
 // rollUpCapabilities raises every plan's capability to at least the capability of the
 // plans it references, transitively (design §22: "the capability of an object is at least
@@ -81,68 +84,9 @@ func hasPlan(plans map[plan.SchemaID]plan.CompilationPlan, id plan.SchemaID) boo
 // in its representation, in its dispatch branches, and in the nested plans a residual
 // predicate carries.
 func planReferences(p plan.CompilationPlan, visit func(plan.SchemaID)) {
-	representationReferences(p.Representation, visit)
-	dispatchReferences(p.Dispatch, visit)
-	validationReferences(p.Validation, visit)
-}
-
-func dispatchReferences(d plan.DispatchPlan, visit func(plan.SchemaID)) {
-	switch d := d.(type) {
-	case plan.KindDispatch:
-		for _, branch := range d.Cases {
-			planReferences(branch, visit)
+	planwalk.Plan(p, func(r plan.Representation) {
+		if ref, ok := r.(plan.ReferenceRepresentation); ok {
+			visit(plan.SchemaID(ref.Name))
 		}
-	case plan.LiteralDispatch:
-		for _, c := range d.Cases {
-			planReferences(c.Plan, visit)
-		}
-	case plan.PropertyDispatch:
-		for _, c := range d.Cases {
-			planReferences(c.Plan, visit)
-		}
-	case plan.PresenceDispatch:
-		planReferences(d.Present, visit)
-		planReferences(d.Absent, visit)
-	case plan.PredicateCountDispatch:
-		for _, branch := range d.Branches {
-			planReferences(branch, visit)
-		}
-	}
-}
-
-func validationReferences(v plan.ValidationPlan, visit func(plan.SchemaID)) {
-	for _, gp := range v.Predicates {
-		switch e := gp.Expression.(type) {
-		case plan.ContainsCountPredicate:
-			planReferences(e.Schema, visit)
-		case plan.PropertyNamesPredicate:
-			planReferences(e.Schema, visit)
-		}
-	}
-}
-
-func representationReferences(r plan.Representation, visit func(plan.SchemaID)) {
-	switch r := r.(type) {
-	case plan.ReferenceRepresentation:
-		visit(plan.SchemaID(r.Name))
-	case plan.RecursiveRepresentation:
-		representationReferences(r.Body, visit)
-	case plan.ObjectRepresentation:
-		for _, f := range r.Fields {
-			representationReferences(f.Representation, visit)
-		}
-		representationReferences(r.Additional, visit)
-		for _, pr := range r.PatternRules {
-			representationReferences(pr.Representation, visit)
-		}
-	case plan.ArrayRepresentation:
-		for _, item := range r.Prefix {
-			representationReferences(item.Representation, visit)
-		}
-		representationReferences(r.Rest.Representation, visit)
-	case plan.UnionRepresentation:
-		for _, alt := range r.Alternatives {
-			representationReferences(alt, visit)
-		}
-	}
+	})
 }

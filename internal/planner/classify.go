@@ -42,19 +42,20 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 }
 
 // exactnessOf derives the top-level Exactness from a finished plan's capability and
-// whether it carries residual validation (design §24, §25). overApproximate reports that
-// the plan admits values the schema rejects for a reason its own structure does not show —
-// a dispatch trusting a declared discriminator instead of proving it ([plan.TagAsserted]),
-// or a constraint dropped because enforcing it would not have been sound (issue #82) —
-// which makes the plan an over-approximation however exact its parts are.
-func exactnessOf(p plan.CompilationPlan, overApproximate bool) plan.Exactness {
+// whether it carries residual validation (design §24, §25). g reports the gaps its own
+// structure does not show, which make the plan an over-approximation however exact its
+// parts are.
+func exactnessOf(p plan.CompilationPlan, g gaps) plan.Exactness {
 	if p.Capability >= plan.EvaluationStateValidation {
 		return plan.UnsupportedConversion
 	}
 	if _, never := p.Representation.(plan.NeverRepresentation); never {
 		return plan.ExactPureRepresentation
 	}
-	if overApproximate {
+	if g.dropped {
+		return plan.DeclaredIncomplete
+	}
+	if g.asserted {
 		return plan.SoundOverApproximation
 	}
 	if _, isAny := p.Representation.(plan.AnyRepresentation); isAny && !p.Validation.Empty() {

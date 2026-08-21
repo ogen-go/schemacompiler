@@ -52,7 +52,7 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 // The negation is not emitted here, because its operand is a `$ref` whose target plan
 // drops the const that tags it (#68), and negating an over-approximation rejects valid
 // instances (#82). What the plan must not do is keep claiming exactness: it now reports
-// SoundOverApproximation and says which constraint went unenforced. Once #68 lands the
+// DeclaredIncomplete and says which constraint went unenforced. Once #68 lands the
 // operand becomes trustworthy, the predicate is emitted, and these move to
 // PredicateDispatch with a non-zero negation count.
 //
@@ -90,8 +90,8 @@ func TestBuild_SubsumedOneOfBranchIsNotClaimedExact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := buildNormalized(t, tt.doc)
 
-			require.Equal(t, plan.SoundOverApproximation, got.Exactness,
-				"the plan accepts the subsumed instances and must say so")
+			require.Equal(t, plan.DeclaredIncomplete, got.Exactness,
+				"the plan accepts the subsumed instances and nothing in it rejects them")
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 			require.Zero(t, countNegations(t, got.Plan),
 				"blocked on #68: the negated $ref target drops the const that tags it")
@@ -214,12 +214,14 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 			if tt.emit {
 				require.Equal(t, 1, countNegations(t, got.Plan), tt.reason)
 				require.Equal(t, plan.PredicateDispatch, got.Plan.Capability, tt.reason)
+				require.Equal(t, plan.SoundOverApproximation, got.Exactness, tt.reason)
 			} else {
 				require.Zero(t, countNegations(t, got.Plan), tt.reason)
 				require.Less(t, got.Plan.Capability, plan.PredicateDispatch,
 					"a dropped negation costs nothing at runtime")
+				require.Equal(t, plan.DeclaredIncomplete, got.Exactness,
+					"nothing left in the plan rejects what the dropped negation would have (#84)")
 			}
-			require.Equal(t, plan.SoundOverApproximation, got.Exactness, tt.reason)
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 		})
 	}

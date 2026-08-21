@@ -89,6 +89,55 @@ properties:
 	require.True(t, named, "expected a diagnostic naming the ungeneratable plan: %+v", res.Diagnostics)
 }
 
+// TestCompileDeclaredIncompleteIsGeneratable pins issue #84: a dropped constraint reports
+// DeclaredIncomplete, and it does so at a capability a backend still generates — the one
+// combination in which the capability gate and the exactness ladder deliberately disagree
+// (docs/integration.md §6).
+func TestCompileDeclaredIncompleteIsGeneratable(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		schema     string
+		capability plan.CapabilityLevel
+		exactness  plan.Exactness
+	}{
+		{
+			name:       "negation over an exactly modeled operand keeps its residual check",
+			schema:     `{"not":{"type":"integer"}}`,
+			capability: plan.PredicateDispatch,
+			exactness:  plan.SoundOverApproximation,
+		},
+		{
+			name:       "negation over an object operand is dropped and nothing closes the gap",
+			schema:     `{"not":{"type":"object","properties":{"a":{"type":"string","minLength":1}}}}`,
+			capability: plan.DirectGoType,
+			exactness:  plan.DeclaredIncomplete,
+		},
+		{
+			name:       "negation over a reference operand is dropped",
+			schema:     `{"not":{"$ref":"#/$defs/S"},"$defs":{"S":{"type":"string"}}}`,
+			capability: plan.DirectGoType,
+			exactness:  plan.DeclaredIncomplete,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := schemacompiler.Compile(context.Background(), []byte(tt.schema), schemacompiler.Options{})
+			require.NoError(t, err)
+			require.Equal(t, tt.capability, res.Capability)
+			require.Equal(t, tt.exactness, res.Exactness)
+			requireExactnessAgrees(t, res.Capability, res.Exactness)
+		})
+	}
+}
+
+// The ladder is ordered worst-last: every rung a backend may still generate sorts before
+// UnsupportedConversion, which is what every ordered comparison against it relies on.
+func TestExactnessOrdering(t *testing.T) {
+	require.Less(t, plan.ExactPureRepresentation, plan.ExactWithValidation)
+	require.Less(t, plan.ExactWithValidation, plan.SoundOverApproximation)
+	require.Less(t, plan.SoundOverApproximation, plan.DeclaredIncomplete)
+	require.Less(t, plan.DeclaredIncomplete, plan.UnsupportedConversion)
+}
+
 func TestCompileDocumentCapabilityExactnessAgree(t *testing.T) {
 	for _, tt := range []struct {
 		name string

@@ -41,17 +41,18 @@ func (b *builder) buildAll(all ir.All, path string) plan.CompilationPlan {
 //     the [plan.PredicateDispatch] tier for the same reason [plan.ContainsCountPredicate]
 //     is (internal/planner/validation.go, docs/implementation.md v1 scope).
 //   - anything else: drop the negation. Removing a conjunct only ever accepts a superset,
-//     which is a legitimate over-approximation, so the plan stays representable and the
-//     exactness is downgraded to say so.
+//     which is a legitimate over-approximation, so the plan stays representable — but
+//     nothing left in it rejects the extra values, so the exactness becomes
+//     [plan.DeclaredIncomplete] rather than [plan.SoundOverApproximation] (issue #84).
 func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, path string) plan.CompilationPlan {
 	if len(nots) == 0 {
 		return p
 	}
 	emitted, dropped := false, false
 	for _, n := range nots {
-		asserted := b.asserted
+		before := b.gaps
 		sub := b.build(n.Operand, path+"/negated")
-		if !exactlyModeled(exactnessOf(sub, b.asserted != asserted)) || !negatable(sub, n.Operand) {
+		if !exactlyModeled(exactnessOf(sub, b.since(before))) || !negatable(sub, n.Operand) {
 			dropped = true
 			continue
 		}
@@ -65,7 +66,7 @@ func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, pa
 	if dropped {
 		// Widening the outer plan is sound, but it no longer reproduces the accepted set,
 		// and nothing downstream can tell from the plan alone that a conjunct is missing.
-		b.overApproximate = true
+		b.dropped = true
 		b.diag(path, plan.SeverityWarning,
 			"negated sub-schema is not exactly modeled; the negation is dropped and the plan accepts more")
 	}

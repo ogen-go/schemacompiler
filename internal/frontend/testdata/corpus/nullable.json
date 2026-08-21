@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "scalar": {"type": "string", "nullable": true},
+    "union": {"oneOf": [{"type": "string"}, {"type": "integer"}], "nullable": true},
+    "any": {"anyOf": [{"type": "string"}, {"type": "integer"}], "nullable": true},
+    "all": {"allOf": [{"type": "string"}], "nullable": true},
+    "ref": {"$ref": "#/$defs/Named", "nullable": true},
+    "bare": {"nullable": true},
+    "choice": {"type": "string", "enum": ["a", "b"], "nullable": true},
+    "declared": {"type": ["string", "null"], "nullable": false}
+  },
+  "$defs": {
+    "Named": {
+      "type": "object",
+      "nullable": true,
+      "properties": {"k": {"type": "string"}}
+    }
+  }
+}

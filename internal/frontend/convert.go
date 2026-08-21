@@ -63,6 +63,9 @@ type convState struct {
 	// loadErrs records why a given external base URI failed to load, folded into the
 	// unresolved-ref diagnostic for refs that targeted it.
 	loadErrs map[string]error
+	// ignoredNullable records every `nullable: true` that OAS 3.0.3 line 2335 leaves
+	// inert because no `type` was declared alongside it.
+	ignoredNullable []IgnoredNullable
 }
 
 func newConvState(refMap map[*yaml.Node]string, loader Loader) *convState {
@@ -113,6 +116,8 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 		Root:        root,
 		Unresolved:  st.unresolved,
 		Uninhabited: st.reg.uninhabited,
+
+		IgnoredNullable: st.ignoredNullable,
 	}, nil
 }
 
@@ -520,6 +525,12 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 		n.Else = child
 		st.addEdge(n, child, false)
 	}
+
+	authored, err := st.authoredSchema(ctx, hs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "build keywords alongside $ref at %q", sc.docPointer)
+	}
+	st.applyNullable(n, authored)
 
 	return n, nil
 }

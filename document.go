@@ -85,6 +85,27 @@ func unresolvedDiagnostics(refs []frontend.UnresolvedRef) []plan.Diagnostic {
 	return diags
 }
 
+// ignoredNullableDiagnostics reports every OpenAPI 3.0 `nullable: true` that had no
+// effect as a SeverityWarning: the document parses and compiles, but null is rejected
+// where the author almost certainly meant to allow it, so silence would be the wrong
+// answer (design §25, issue #20).
+func ignoredNullableDiagnostics(nodes []frontend.IgnoredNullable) []plan.Diagnostic {
+	if len(nodes) == 0 {
+		return nil
+	}
+	diags := make([]plan.Diagnostic, len(nodes))
+	for i, u := range nodes {
+		diags[i] = plan.Diagnostic{
+			Pointer:  u.Pointer,
+			Position: u.Position,
+			Severity: plan.SeverityWarning,
+			Message: "ignoring `nullable: true`: OAS 3.0.3 adds null to the `type` keyword " +
+				"only if `type` is declared in the same Schema Object; spell it `type: [T, \"null\"]`",
+		}
+	}
+	return diags
+}
+
 // uninhabitedDiagnostics reports every recursive schema proven to have no finite instance
 // (required self-recursion) as a SeverityWarning: the schema is well-formed and its Go type
 // is representable, but no value inhabits it, so a generator should not emit a dead type

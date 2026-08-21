@@ -26,6 +26,8 @@ type Document struct {
 	Schemas map[string]*Node
 	// Unresolved lists every `$ref` whose target could not be found.
 	Unresolved []UnresolvedRef
+	// IgnoredNullable lists every inert `nullable: true` (see [Schema.IgnoredNullable]).
+	IgnoredNullable []IgnoredNullable
 	// Uninhabited lists recursive schemas proven to have no finite JSON instance.
 	Uninhabited []UninhabitedNode
 }
@@ -66,6 +68,7 @@ func FromLibOpenAPIDocument(ctx context.Context, schemas *orderedmap.Map[string,
 	out.Registry = st.reg
 	out.Unresolved = st.unresolved
 	out.Uninhabited = st.reg.uninhabited
+	out.IgnoredNullable = st.ignoredNullable
 	return out, nil
 }
 
@@ -101,5 +104,7 @@ func FromLibOpenAPIProxy(ctx context.Context, sp *base.SchemaProxy, baseURI stri
 		Root:        root,
 		Unresolved:  st.unresolved,
 		Uninhabited: st.reg.uninhabited,
+
+		IgnoredNullable: st.ignoredNullable,
 	}, nil
 }

@@ -54,9 +54,11 @@ type Node struct {
 	Types       KindSet
 	IntegerType bool // type included "integer"
 
-	// const / enum.
-	Const *Value
-	Enum  []Value
+	// const / enum. HasEnum reports whether the `enum` keyword was present, telling a
+	// declared-but-empty `enum` (which accepts nothing) apart from an absent one.
+	Const   *Value
+	HasEnum bool
+	Enum    []Value
 
 	// Numeric assertions (nil = unset).
 	Minimum          *float64

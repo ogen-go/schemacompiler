@@ -88,7 +88,7 @@ func (b *builder) buildUnrestricted(c components, path string) plan.CompilationP
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}
 	if len(c.nots) > 0 {
-		b.diag(path, plan.SeverityInfo, "not: residual negation not enforced by the v1 validator")
+		b.diag(path, plan.SeverityInfo, "residual negation is not enforced by the v1 validator")
 	}
 
 	rep := plan.Representation(plan.AnyRepresentation{})
@@ -107,14 +107,43 @@ func (b *builder) buildLeaf(kind plan.JSONKind, c components, path string) plan.
 		rest.combinators = append([]ir.Expr{}, c.combinators[1:]...)
 		return b.buildUnionWithContext(kindBit(kind), primary, rest, path)
 	}
+	var p plan.CompilationPlan
 	switch kind {
 	case plan.KindObject:
-		return b.buildObject(c, path)
+		p = b.buildObject(c, path)
 	case plan.KindArray:
-		return b.buildArray(c, path)
+		p = b.buildArray(c, path)
 	default:
-		return b.buildScalar(kind, c, path)
+		p = b.buildScalar(kind, c, path)
 	}
+	return pinLiteral(p, kind, c.literal)
+}
+
+// pinLiteral enforces a sibling `const`/`enum` literal that survived alongside a `type`
+// (design §11.3: a literal contributes both representation information and an equality
+// predicate). Without it the kind-restricted representation alone would accept every
+// value of that kind — an over-approximation with no residual check, which §24 forbids.
+// The literal is lowered as a single-case LiteralDispatch, exactly as a bare `const` is
+// (design §18 discriminator class 2).
+func pinLiteral(p plan.CompilationPlan, kind plan.JSONKind, lit *ir.Literal) plan.CompilationPlan {
+	if lit == nil || literalKind(lit.Value) != kind {
+		return p
+	}
+	if _, plain := p.Dispatch.(plan.NoDispatch); !plain {
+		return p
+	}
+	p.Dispatch = plan.LiteralDispatch{Cases: []plan.LiteralCase{{
+		Value: lit.Value,
+		Raw:   lit.Raw,
+		Plan: plan.CompilationPlan{
+			Representation: p.Representation,
+			Dispatch:       plan.NoDispatch{},
+			Resolution:     plan.FullyResolved{},
+			Capability:     plan.DirectGoType,
+		},
+	}}}
+	p.Capability = maxCapability(p.Capability, classify(p.Representation, p.Validation, p.Dispatch, p.Resolution))
+	return p
 }
 
 func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) plan.CompilationPlan {
@@ -146,20 +175,8 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 		Format:  b.pickFormat(formats, path),
 	})
 	var disp plan.DispatchPlan = plan.NoDispatch{}
-	if c.literal != nil && literalKind(c.literal.Value) == kind {
-		disp = plan.LiteralDispatch{Cases: []plan.LiteralCase{{
-			Value: c.literal.Value,
-			Raw:   c.literal.Raw,
-			Plan: plan.CompilationPlan{
-				Representation: rep,
-				Dispatch:       plan.NoDispatch{},
-				Resolution:     plan.FullyResolved{},
-				Capability:     plan.DirectGoType,
-			},
-		}}}
-	}
 	if len(c.nots) > 0 {
-		b.diag(path, plan.SeverityInfo, "not: residual negation not enforced by the v1 validator")
+		b.diag(path, plan.SeverityInfo, "residual negation is not enforced by the v1 validator")
 	}
 
 	res := mergeResolution(resParts...)

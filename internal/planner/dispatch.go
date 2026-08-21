@@ -109,7 +109,7 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 		maximum = 1
 	}
 	b.diag(path, plan.SeverityWarning,
-		"oneOf/anyOf branches overlap; requires runtime predicate-count validation")
+		"union alternatives overlap; requires predicate-count dispatch")
 	return b.buildPredicateCountDispatch(branchExprs, minimum, maximum, path)
 }
 

@@ -1,8 +1,6 @@
 package norm
 
 import (
-	"reflect"
-
 	"github.com/ogen-go/schemacompiler/internal/ir"
 )
 
@@ -17,7 +15,7 @@ func disjoint(a, b ir.Expr) bool {
 	}
 	if la, ok := a.(ir.Literal); ok {
 		if lb, ok := b.(ir.Literal); ok {
-			return !literalEqual(la.Value, lb.Value)
+			return !la.Equal(lb)
 		}
 	}
 	// enum desugars to AnyOf(Literal...); a value satisfies the AnyOf if it
@@ -56,28 +54,4 @@ func allPairwiseDisjoint(exprs []ir.Expr) bool {
 		}
 	}
 	return true
-}
-
-// literalEqual compares two decoded JSON literal values, treating any
-// numeric representation (float64/int/int64) as comparable by value so that
-// e.g. const 1 and const 1.0 are recognized as the same JSON number.
-func literalEqual(a, b any) bool {
-	if af, ok := asFloat(a); ok {
-		if bf, ok := asFloat(b); ok {
-			return af == bf
-		}
-	}
-	return reflect.DeepEqual(a, b)
-}
-
-func asFloat(v any) (float64, bool) {
-	switch v := v.(type) {
-	case float64:
-		return v, true
-	case int:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	}
-	return 0, false
 }

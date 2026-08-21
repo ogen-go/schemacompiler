@@ -46,7 +46,10 @@ func Compile(n *frontend.Node) Expr {
 	if n.Const != nil {
 		siblings = append(siblings, Literal{Value: n.Const.Decoded, Raw: n.Const.Raw})
 	}
-	if len(n.Enum) > 0 {
+	if n.HasEnum || len(n.Enum) > 0 {
+		// enum: [v1, ..., vn] -> AnyOf(Literal(v1), ..., Literal(vn)) (design §11.4). A
+		// declared-but-empty enum is therefore AnyOf(), the empty disjunction, which is
+		// false for every instance: Never (design §15.1), not Any.
 		operands := make([]Expr, len(n.Enum))
 		for i, v := range n.Enum {
 			operands[i] = Literal{Value: v.Decoded, Raw: v.Raw}

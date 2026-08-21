@@ -329,6 +329,7 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 		}
 		n.Const = v
 	}
+	n.HasEnum = low != nil && !low.Enum.IsEmpty()
 	for _, e := range hs.Enum {
 		v, err := valueFromNode(e)
 		if err != nil {

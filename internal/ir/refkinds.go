@@ -66,7 +66,7 @@ func (a kindAnalyzer) compute(n *frontend.Node) plan.KindSet {
 	if n.Const != nil {
 		set &= literalKind(n.Const.Decoded)
 	}
-	if len(n.Enum) > 0 {
+	if n.HasEnum || len(n.Enum) > 0 {
 		var u plan.KindSet
 		for _, v := range n.Enum {
 			u |= literalKind(v.Decoded)

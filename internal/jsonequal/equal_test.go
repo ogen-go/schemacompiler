@@ -27,6 +27,12 @@ func TestEqual(t *testing.T) {
 		// High-precision integers that both round to the same float64 must stay distinct.
 		{`9007199254740992`, `9007199254740993`, false},
 		{`9007199254740993`, `9007199254740993`, true},
+		// Same, for decimals: both round to the same float64, so only an exact
+		// comparison keeps them apart.
+		{`0.10000000000000000000000001`, `0.10000000000000000000000002`, false},
+		{`0.1`, `0.10000000000000000000000000`, true},
+		{`1e2`, `100`, true},
+		{`0`, `-0.0`, true},
 	}
 	for _, tt := range tests {
 		got, err := Equal([]byte(tt.a), []byte(tt.b))

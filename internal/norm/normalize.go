@@ -154,9 +154,48 @@ func normalizePredicate(e ir.Predicate, st *state) ir.Expr {
 	}
 }
 
-// exprEqual is exact structural (syntactic) equality over the finite Expr
-// tree — sufficient for dedup/idempotence/fixpoint checks since Expr never
-// contains cycles (recursive schemas go through Ref, not an inline cycle).
+// exprEqual is structural equality over the finite Expr tree — sufficient for
+// dedup/idempotence/fixpoint checks since Expr never contains cycles (recursive schemas
+// go through Ref, not an inline cycle). Literals compare by JSON value rather than by
+// source bytes ([ir.Literal.Equal]), so `1` and `1.0`, or two objects listing the same
+// members in different orders, are recognized as one value. Leaves that can nest an Expr
+// only inside a predicate or shape detail fall back to [reflect.DeepEqual]: that is
+// stricter than JSON equality, so it can only decline a rewrite, never license a wrong one.
 func exprEqual(a, b ir.Expr) bool {
-	return reflect.DeepEqual(a, b)
+	switch a := a.(type) {
+	case ir.Literal:
+		b, ok := b.(ir.Literal)
+		return ok && a.Equal(b)
+	case ir.All:
+		b, ok := b.(ir.All)
+		return ok && operandsEqual(a.Operands, b.Operands)
+	case ir.AnyOf:
+		b, ok := b.(ir.AnyOf)
+		return ok && reflect.DeepEqual(a.Discriminator, b.Discriminator) &&
+			operandsEqual(a.Operands, b.Operands)
+	case ir.ExactlyOne:
+		b, ok := b.(ir.ExactlyOne)
+		return ok && reflect.DeepEqual(a.Discriminator, b.Discriminator) &&
+			operandsEqual(a.Operands, b.Operands)
+	case ir.Not:
+		b, ok := b.(ir.Not)
+		return ok && exprEqual(a.Operand, b.Operand)
+	case ir.Annotated:
+		b, ok := b.(ir.Annotated)
+		return ok && a.Annotations == b.Annotations && exprEqual(a.Expr, b.Expr)
+	default:
+		return reflect.DeepEqual(a, b)
+	}
+}
+
+func operandsEqual(a, b []ir.Expr) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !exprEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
 }

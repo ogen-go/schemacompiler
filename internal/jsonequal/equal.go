@@ -62,15 +62,17 @@ func (c compare) equalNumber() (bool, error) {
 		// so they are not equal as numbers.
 		return false, nil
 	default:
-		lnum, err := lval.Float64()
-		if err != nil {
-			break
+		// Rounding to float64 is a function of the real value, so two numbers that round
+		// to different float64s cannot be equal. Rounding to the *same* float64 proves
+		// nothing past float64's ~17 significant digits, so that case falls through to
+		// the exact big.Rat comparison below. (ogen's json.Equal returns the float
+		// comparison directly here, which reports 0.10000000000000000000000001 and
+		// 0.10000000000000000000000002 as one value.)
+		lnum, lerr := lval.Float64()
+		rnum, rerr := rval.Float64()
+		if lerr == nil && rerr == nil && lnum != rnum {
+			return false, nil
 		}
-		rnum, err := rval.Float64()
-		if err != nil {
-			break
-		}
-		return lnum == rnum, nil
 	}
 
 	lnum, rnum := new(big.Rat), new(big.Rat)

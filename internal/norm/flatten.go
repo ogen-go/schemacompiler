@@ -31,6 +31,14 @@ func normalizeAll(e ir.All, st *state) ir.Expr {
 		flat = flattenAllInto(flat, normalize(o, st))
 	}
 
+	if (ir.All{Operands: flat}).Kinds() == 0 {
+		// The kind sets of the operands do not intersect, so nothing satisfies all of
+		// them (design §15.5). foldKindsAll below only folds Kinds siblings; this also
+		// catches an operand whose kind set is implied rather than declared, such as a
+		// Literal of the wrong kind under a sibling `type` (design §16.2).
+		return ir.Never{}
+	}
+
 	flat, kinds, hasKinds, isNever := foldKindsAll(flat)
 	if isNever {
 		return ir.Never{}

@@ -14,6 +14,61 @@ entry points in `cmd/jschemagen/main.go:165` and `:276` call it after parsing wi
 means reworking that front half of the generator: the `gen/ir` output types below are
 unaffected, only what feeds them changes.
 
+## 0. What a plan accepts
+
+The sections below map each plan variant onto ogen's IR — how to *lower* a plan. This
+section states what a plan *means*: given a plan and a JSON instance, what must hold for
+the instance to be valid. A decoder and a validator are both implementations of this
+rule, so it is the contract both are written against.
+
+Design §24 gives it only indirectly, as a soundness inequality over the whole conversion.
+The operational reading is:
+
+> An instance `x` satisfies a `CompilationPlan` `P` iff all three hold:
+>
+> - **`P.Representation` can hold `x`.** Design §24 requires the generated type to hold
+>   every valid instance, so a value the representation cannot hold is thereby invalid.
+> - **`P.Validation` accepts `x`**: every `GuardedPredicate` whose `Applicability`
+>   contains `x`'s JSON kind accepts it. A predicate whose guard excludes the kind is
+>   not applicable and does not reject (§3 of the design: a type-specific keyword does
+>   not assert its type).
+> - **`P.Dispatch` selects a branch whose own `CompilationPlan` accepts `x`**, by this
+>   same rule, recursively.
+
+The three are a conjunction, evaluated at the same instance node. `P.Resolution` is not a
+fourth conjunct; see the reference-graph row below.
+
+**The representation is a check, not only a storage choice.** This is the point most
+easily missed when reading §1, which describes the Go type each variant becomes.
+`PrimitiveRepresentation{Kind: KindString}` rejects `1`; `NeverRepresentation` rejects
+everything; `ObjectRepresentation` rejects a non-object. Lowering a representation to a
+Go type and letting the decoder's type mismatch be the rejection is a correct
+implementation of this — but it must be a rejection, not a coercion.
+
+### 0.1. Cases the variants do not settle on their face
+
+| Case | Reading | Why |
+|---|---|---|
+| `ObjectRepresentation.Additional == nil` | Does **not** reject. Unmatched properties are simply not stored. | "Additional properties are not representable as a field" is a statement about storage, not validity. `additionalProperties: false` is carried as `NeverRepresentation`, and an absent `additionalProperties` as `AnyRepresentation` — the planner emits neither as nil today, so nil never means "reject". |
+| `ArrayRepresentation.Rest.Plan.Representation == nil` | **Rejects** every item past `Prefix`. | Here nil is documented as "there are none", which is a statement about validity: a tuple of fixed length. §1's `Rest == nil` row describes the fixed-length *lowering*; this is the same fact stated as acceptance. Note the asymmetry with `Additional` above is deliberate, not an oversight — the two nils are documented to mean different things. |
+| A property matched by both a `Fields` entry and a `PatternRules` pattern | The declared **field owns** the name; the pattern rule is not additionally run against it. | The plan states one storage slot per property, and the planner has already intersected every matching pattern schema into that field's own plan (design §12.3). Running the rule again would double-apply it. |
+| `PresenceDispatch` against a non-object | **Accepts.** | It comes from `dependentSchemas`, which applies to objects only (design §12.7), but a `DispatchPlan` carries no kind guard the way a `GuardedPredicate` does. A dispatch that cannot select cannot reject. |
+| `KindDispatch` with no case for the instance's kind | **Rejects.** | Unlike the row above, the dispatch *can* select and declines to: the kinds in `Cases` are the kinds admitted. `Cases` is not required to cover every kind the paired representation admits. |
+| A `ReferenceRepresentation` inside a nested plan | Resolve against the **root** plan's `Resolution`. | Only the root plan carries a populated `StaticReferenceGraph`; every nested plan gets `StaticReferenceGraph{}` with empty `Definitions` (§5, §8). A nested plan's `Resolution` is not a second copy of the graph, and reading it as one resolves nothing. |
+
+`internal/planterp` is the executable form of this section: it interprets a plan as a
+JSON validator and nothing else, and the conformance harness differentially tests it
+against the JSON-Schema-Test-Suite. A disagreement between this section and that
+interpreter is a bug in one of them, not a matter of reading.
+
+### 0.2. What acceptance does *not* tell you
+
+A plan accepting an instance the schema rejects is only a defect when the plan claims to
+be exact. `Result.Exactness` is what says whether it does — `SoundOverApproximation` and
+`DeclaredIncomplete` both announce that the plan admits a superset. Design §24 permits a
+superset; it never permits a plan to reject an instance the schema accepts, at any
+exactness. See §6 for how `Capability` and `Exactness` gate lowering.
+
 ## 1. Representation → `ir.Type`
 
 `gen/ir/type.go:13-28` discriminates `ir.Type` by `ir.Kind`: `KindPrimitive, KindArray,

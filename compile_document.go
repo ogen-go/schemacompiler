@@ -26,8 +26,9 @@ type Document struct {
 type DocumentResult struct {
 	// Plans holds one analyzed plan per named schema, keyed by its JSON Pointer
 	// (`/components/schemas/<name>`), plus a plan for every other static $ref target
-	// reachable from them. It is the reference graph a generator resolves
-	// [plan.ReferenceRepresentation] names against.
+	// reachable from them. It is the document's reference graph: a
+	// [plan.ReferenceRepresentation] name is a key into it, so every component plan is
+	// [plan.FullyResolved] rather than carrying a graph of its own.
 	Plans map[plan.SchemaID]plan.CompilationPlan
 	// Capability is the worst capability level over every plan.
 	Capability plan.CapabilityLevel
@@ -46,7 +47,7 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 		baseURI = opts.BaseURI
 	}
 
-	d, err := frontend.FromLibOpenAPIDocument(ctx, doc.Schemas, baseURI)
+	d, err := frontend.FromLibOpenAPIDocument(ctx, doc.Schemas, baseURI, frontend.Loader(opts.Loader))
 	if err != nil {
 		return nil, errors.Wrap(err, "convert document")
 	}
@@ -57,23 +58,25 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	for _, pointer := range slices.Sorted(maps.Keys(d.Schemas)) {
 		built := buildPlan(d.Schemas[pointer], d.Registry, budget)
 		res.Plans[plan.SchemaID(pointer)] = built.Plan
-		res.Capability = maxCapability(res.Capability, built.Plan.Capability)
 		res.Exactness = maxExactness(res.Exactness, built.Exactness)
 		diags = append(diags, built.Diagnostics...)
 	}
 
 	// A $ref may target a schema nested inside a component rather than a component root;
 	// those need a plan under their own pointer too.
-	defs := buildDefinitions(d.Registry, budget)
-	for id, p := range defs.plans {
-		if _, ok := res.Plans[id]; ok {
-			continue
-		}
-		res.Plans[id] = p
-		res.Capability = maxCapability(res.Capability, p.Capability)
-	}
+	defs := buildDefinitionsExcept(d.Registry, budget, res.Plans)
+	maps.Copy(res.Plans, defs.plans)
 	res.Exactness = maxExactness(res.Exactness, defs.exactness)
 	diags = append(diags, defs.diags...)
+
+	rollUpCapabilities(res.Plans)
+	for id, p := range res.Plans {
+		if _, static := p.Resolution.(plan.StaticReferenceGraph); static {
+			p.Resolution = plan.FullyResolved{}
+			res.Plans[id] = p
+		}
+		res.Capability = maxCapability(res.Capability, p.Capability)
+	}
 
 	diags = append(diags, unresolvedDiagnostics(d.Unresolved)...)
 	diags = append(diags, uninhabitedDiagnostics(d.Uninhabited)...)
@@ -85,7 +88,7 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 // caller that holds one component rather than a whole document (e.g. ogen). References to
 // sibling components stay unresolved: use [CompileDocument] to resolve those.
 func CompileSchema(ctx context.Context, sp *base.SchemaProxy, opts Options) (*Result, error) {
-	schema, err := frontend.FromLibOpenAPIProxy(ctx, sp, opts.BaseURI)
+	schema, err := frontend.FromLibOpenAPIProxy(ctx, sp, opts.BaseURI, frontend.Loader(opts.Loader))
 	if err != nil {
 		return nil, errors.Wrap(err, "convert schema")
 	}

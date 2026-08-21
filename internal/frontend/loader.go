@@ -112,9 +112,13 @@ func LoadWithLoader(ctx context.Context, data []byte, baseURI string, loader Loa
 	}
 
 	if boolValue != nil {
+		normalized, err := normalizeBaseURI(baseURI)
+		if err != nil {
+			return nil, err
+		}
 		reg := newRegistry()
 		n := &Node{Always: boolValue, Position: nodePosition(baseURI, root)}
-		reg.resources[baseURI] = n
+		reg.resources[normalized] = n
 		reg.nodes = append(reg.nodes, n)
 		reg.analyzeSCCs()
 		return &Schema{Registry: reg, Root: n}, nil
@@ -193,7 +197,7 @@ func (st *convState) loadInto(ctx context.Context, data []byte, baseURI string) 
 	}
 	maps.Copy(st.refMap, refs)
 
-	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}}
+	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}, source: baseURI}
 	root, err := st.convertSchema(ctx, hs, sc)
 	if err != nil {
 		return errors.Wrapf(err, "convert %q", baseURI)

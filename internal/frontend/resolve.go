@@ -33,6 +33,25 @@ func resolveURI(base, ref string) (string, error) {
 	return r.String(), nil
 }
 
+// normalizeBaseURI resolves a retrieval URI the same way a reference declared against it
+// resolves, so resource registration and reference lookup agree on one key. Without it a
+// relative base (`schema.yml`) is registered raw but looked up RFC 3986-resolved
+// (`/schema.yml`), and every in-document `$ref` dangles (issue #28).
+func normalizeBaseURI(baseURI string) (string, error) {
+	if baseURI == "" {
+		return "", nil
+	}
+	abs, err := resolveURI(baseURI, "#")
+	if err != nil {
+		return "", err
+	}
+	normalized, _, err := splitFragment(abs)
+	if err != nil {
+		return "", err
+	}
+	return normalized, nil
+}
+
 // splitFragment splits an absolute URI reference into its base (no fragment) and
 // fragment parts. The fragment is percent-decoded by url.Parse.
 func splitFragment(u string) (base, fragment string, err error) {

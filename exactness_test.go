@@ -107,13 +107,13 @@ func TestCompileDeclaredIncompleteIsGeneratable(t *testing.T) {
 			exactness:  plan.ExactWithValidation,
 		},
 		{
-			name:       "negation over an object operand is dropped and nothing closes the gap",
+			name:       "negation over an object operand keeps its residual check",
 			schema:     `{"not":{"type":"object","properties":{"a":{"type":"string","minLength":1}}}}`,
-			capability: plan.DirectGoType,
-			exactness:  plan.DeclaredIncomplete,
+			capability: plan.PredicateDispatch,
+			exactness:  plan.ExactWithValidation,
 		},
 		{
-			name:       "negation over a reference operand is dropped",
+			name:       "negation over a reference operand is dropped and nothing closes the gap",
 			schema:     `{"not":{"$ref":"#/$defs/S"},"$defs":{"S":{"type":"string"}}}`,
 			capability: plan.DirectGoType,
 			exactness:  plan.DeclaredIncomplete,

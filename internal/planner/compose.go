@@ -87,26 +87,23 @@ func exactlyModeled(e plan.Exactness) bool {
 // negatable reports whether p can be trusted to accept exactly what its schema accepts,
 // which is stricter than p's own [plan.Exactness] and is what negating it requires.
 //
-// Exactness is computed from a plan's shape, not from what the plan actually enforces, and
-// two constructs make it optimistic today. An object or array shape merged out of an
-// applicator lets `additionalProperties`/`items` cover names and indexes they do not
-// really cover, while the plan still reports DirectGoType (#94). And a reference exactness
-// never consults its target, so a reference claims to be exact whatever its target is.
-// Everywhere else those are harmless over-approximations; under a negation each one
-// rejects valid instances (#82).
+// [buildRef] plans a reference from its identity alone — the target's plan is assembled by
+// a separate [BuildAt] call, so its exactness never reaches this one and a reference reads
+// as ExactPureRepresentation whatever its target turns out to be. Everywhere else that is a
+// harmless over-approximation; under a negation it rejects valid instances (#82), so a
+// reference anywhere in p disqualifies it.
 //
-// So only plans built from primitives, literals and kinds are negated for now. Object and
-// array representations no longer drop what is inside a field or an item (#68), nor the
-// shape itself when there is no sibling `type` (#72), so widening this is gated on #94 and
-// on reference exactness alone (#82).
+// Object and array representations used to be excluded for the same reason and no longer
+// are: they carry the whole sub-plan of a field or an item (#68), keep the shape when there
+// is no sibling `type` (#72), and scope `additionalProperties`/`items` to the names and
+// indexes their own schema object declared (#94), so their exactness is now what it says.
 func negatable(p plan.CompilationPlan, operand ir.Expr) bool {
 	if vacuous(p, operand) {
 		return false
 	}
 	trusted := true
 	planwalk.Plan(p, func(r plan.Representation) {
-		switch r.(type) {
-		case plan.ReferenceRepresentation, plan.ObjectRepresentation, plan.ArrayRepresentation:
+		if _, isRef := r.(plan.ReferenceRepresentation); isRef {
 			trusted = false
 		}
 	})

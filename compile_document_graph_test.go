@@ -2,6 +2,7 @@ package schemacompiler_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -74,4 +75,40 @@ func TestCompileDocumentPlansAreFullyResolved(t *testing.T) {
 	for id, p := range res.Plans {
 		require.IsType(t, plan.FullyResolved{}, p.Resolution, "plan %q", id)
 	}
+}
+
+const danglingRefDoc = `
+openapi: 3.1.0
+info: {title: t, version: v}
+paths: {}
+components:
+  schemas:
+    A:
+      type: object
+      properties:
+        gone: {$ref: 'https://ex.test/gone.json'}
+    B:
+      type: string
+`
+
+// A reference that resolves to nothing — here an external document with no Loader to
+// fetch it — is not generatable, so the referring plan must not keep its optimistic
+// capability (design §24).
+func TestCompileDocumentDanglingTarget(t *testing.T) {
+	res, err := schemacompiler.CompileDocument(context.Background(), schemacompiler.Document{
+		Schemas: componentSchemas(t, danglingRefDoc),
+	}, schemacompiler.Options{})
+	require.NoError(t, err)
+
+	require.Equal(t, plan.Unsupported, res.Plans["/components/schemas/A"].Capability)
+	require.Equal(t, plan.DirectGoType, res.Plans["/components/schemas/B"].Capability)
+	require.Equal(t, plan.UnsupportedConversion, res.Exactness)
+
+	var named bool
+	for _, d := range res.Diagnostics {
+		if d.Severity == plan.SeverityError && strings.Contains(d.Message, "https://ex.test/gone.json") {
+			named = true
+		}
+	}
+	require.True(t, named, "the dangling reference must be named in a diagnostic: %+v", res.Diagnostics)
 }

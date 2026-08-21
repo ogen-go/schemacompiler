@@ -21,9 +21,10 @@ func refPlan(target string, level plan.CapabilityLevel) plan.CompilationPlan {
 
 func TestRollUpCapabilities(t *testing.T) {
 	for _, tt := range []struct {
-		name  string
-		plans map[plan.SchemaID]plan.CompilationPlan
-		want  map[plan.SchemaID]plan.CapabilityLevel
+		name      string
+		plans     map[plan.SchemaID]plan.CompilationPlan
+		want      map[plan.SchemaID]plan.CapabilityLevel
+		wantDiags int
 	}{
 		{
 			name: "reference raises referrer",
@@ -72,20 +73,29 @@ func TestRollUpCapabilities(t *testing.T) {
 			},
 		},
 		{
-			name: "dangling reference ignored",
+			name: "reference to no plan is unsupported",
 			plans: map[plan.SchemaID]plan.CompilationPlan{
 				"A": refPlan("Missing", plan.DirectGoType),
+				"B": refPlan("A", plan.DirectGoType),
 			},
-			want: map[plan.SchemaID]plan.CapabilityLevel{"A": plan.DirectGoType},
+			want: map[plan.SchemaID]plan.CapabilityLevel{
+				"A": plan.Unsupported,
+				"B": plan.Unsupported,
+			},
+			wantDiags: 1,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			rollUpCapabilities(tt.plans)
+			diags := rollUpCapabilities(tt.plans)
 			got := make(map[plan.SchemaID]plan.CapabilityLevel, len(tt.plans))
 			for id, p := range tt.plans {
 				got[id] = p.Capability
 			}
 			require.Equal(t, tt.want, got)
+			require.Len(t, diags, tt.wantDiags)
+			for _, d := range diags {
+				require.Equal(t, plan.SeverityError, d.Severity)
+			}
 		})
 	}
 }
@@ -93,10 +103,12 @@ func TestRollUpCapabilities(t *testing.T) {
 func TestPlanReferencesNested(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.ArrayRepresentation{
-			Prefix: []plan.Representation{plan.ReferenceRepresentation{Name: "P"}},
-			Rest: plan.UnionRepresentation{Alternatives: []plan.Representation{
-				plan.ReferenceRepresentation{Name: "U"},
-				plan.RecursiveRepresentation{Name: "R", Body: plan.ReferenceRepresentation{Name: "B"}},
+			Prefix: []plan.ItemRepresentation{{Representation: plan.ReferenceRepresentation{Name: "P"}}},
+			Rest: plan.ItemRepresentation{Representation: plan.UnionRepresentation{
+				Alternatives: []plan.Representation{
+					plan.ReferenceRepresentation{Name: "U"},
+					plan.RecursiveRepresentation{Name: "R", Body: plan.ReferenceRepresentation{Name: "B"}},
+				},
 			}},
 		},
 		Dispatch: plan.PredicateCountDispatch{
@@ -104,9 +116,17 @@ func TestPlanReferencesNested(t *testing.T) {
 				{Representation: plan.ReferenceRepresentation{Name: "D"}},
 			},
 		},
+		Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+			{Expression: plan.ContainsCountPredicate{
+				Schema: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "C"}},
+			}},
+			{Expression: plan.PropertyNamesPredicate{
+				Schema: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "N"}},
+			}},
+		}},
 	}
 
 	var got []plan.SchemaID
 	planReferences(p, func(id plan.SchemaID) { got = append(got, id) })
-	require.ElementsMatch(t, []plan.SchemaID{"P", "U", "B", "D"}, got)
+	require.ElementsMatch(t, []plan.SchemaID{"P", "U", "B", "D", "C", "N"}, got)
 }

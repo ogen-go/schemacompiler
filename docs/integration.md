@@ -222,7 +222,9 @@ The generator should switch on `plan.CompilationPlan.Capability` before attempti
 lower anything, and refuse — surfacing `Result.Diagnostics` to the user — for anything
 past `PredicateDispatch`. The gate is per plan and sound to use that way: a plan's
 capability is rolled up to at least that of every plan it references (design §22), so a
-generatable plan never points at a refused one.
+generatable plan never points at a refused one. A reference that resolves to no compiled
+schema at all (a dangling or unfetchable `$ref`) makes the referring plan `Unsupported`
+with a `SeverityError` diagnostic, rather than leaving it optimistically generatable.
 
 | `CapabilityLevel` | ogen generation | Rationale |
 |---|---|---|

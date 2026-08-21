@@ -69,13 +69,14 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	res.Exactness = maxExactness(res.Exactness, defs.exactness)
 	diags = append(diags, defs.diags...)
 
-	rollUpCapabilities(res.Plans)
+	diags = append(diags, rollUpCapabilities(res.Plans)...)
 	for id, p := range res.Plans {
 		if _, static := p.Resolution.(plan.StaticReferenceGraph); static {
 			p.Resolution = plan.FullyResolved{}
 			res.Plans[id] = p
 		}
 		res.Capability = maxCapability(res.Capability, p.Capability)
+		res.Exactness = maxExactness(res.Exactness, exactnessFloor(p.Capability))
 	}
 
 	diags = append(diags, unresolvedDiagnostics(d.Unresolved)...)

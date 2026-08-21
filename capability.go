@@ -4,20 +4,38 @@ import "github.com/ogen-go/schemacompiler/plan"
 
 // rollUpCapabilities raises every plan's capability to at least the capability of the
 // plans it references, transitively (design §22: "the capability of an object is at least
-// the maximum capability of ... local resolution").
+// the maximum capability of ... local resolution"), and reports the references that name
+// no plan at all.
 //
 // A `$ref` leaf is planned as DirectGoType because the planner only knows the reference's
 // identity, not its target's cost; the target's plan is assembled here, so this is the
 // first point where the roll-up can happen. Without it a component referencing an
 // Unsupported one advertises DirectGoType, and a generator gating per plan
 // (docs/integration.md §6) emits a type pointing at one it must refuse.
-func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan) {
+//
+// A reference the map cannot answer is a dangling `$ref`: [internal/ir] keys those by the
+// raw reference string, since there is no target pointer to key them by. Nothing can be
+// generated for such a name, so the referring plan becomes Unsupported rather than keeping
+// its optimistic level (design §24 forbids under-approximating the cost).
+func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan) []plan.Diagnostic {
+	var diags []plan.Diagnostic
 	deps := make(map[plan.SchemaID][]plan.SchemaID, len(plans))
 	for id, p := range plans {
 		var refs []plan.SchemaID
 		planReferences(p, func(target plan.SchemaID) {
-			if _, ok := plans[target]; ok && target != id {
+			switch {
+			case target == id:
+				// A plan cannot raise its own level.
+			case hasPlan(plans, target):
 				refs = append(refs, target)
+			default:
+				p.Capability = plan.Unsupported
+				plans[id] = p
+				diags = append(diags, plan.Diagnostic{
+					Pointer:  string(id),
+					Severity: plan.SeverityError,
+					Message:  "reference " + string(target) + " resolves to no compiled schema",
+				})
 			}
 		})
 		deps[id] = refs
@@ -39,13 +57,34 @@ func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan) {
 			}
 		}
 	}
+	return diags
 }
 
-// planReferences reports every [plan.ReferenceRepresentation] name reachable within p,
-// including the ones nested in dispatch branches.
+// exactnessFloor is the exactness a capability level implies on its own: nothing above
+// PredicateDispatch can be converted at all (design §24, §25).
+func exactnessFloor(level plan.CapabilityLevel) plan.Exactness {
+	if level >= plan.EvaluationStateValidation {
+		return plan.UnsupportedConversion
+	}
+	return plan.ExactPureRepresentation
+}
+
+func hasPlan(plans map[plan.SchemaID]plan.CompilationPlan, id plan.SchemaID) bool {
+	_, ok := plans[id]
+	return ok
+}
+
+// planReferences reports every [plan.ReferenceRepresentation] name reachable within p:
+// in its representation, in its dispatch branches, and in the nested plans a residual
+// predicate carries.
 func planReferences(p plan.CompilationPlan, visit func(plan.SchemaID)) {
 	representationReferences(p.Representation, visit)
-	switch d := p.Dispatch.(type) {
+	dispatchReferences(p.Dispatch, visit)
+	validationReferences(p.Validation, visit)
+}
+
+func dispatchReferences(d plan.DispatchPlan, visit func(plan.SchemaID)) {
+	switch d := d.(type) {
 	case plan.KindDispatch:
 		for _, branch := range d.Cases {
 			planReferences(branch, visit)
@@ -68,6 +107,17 @@ func planReferences(p plan.CompilationPlan, visit func(plan.SchemaID)) {
 	}
 }
 
+func validationReferences(v plan.ValidationPlan, visit func(plan.SchemaID)) {
+	for _, gp := range v.Predicates {
+		switch e := gp.Expression.(type) {
+		case plan.ContainsCountPredicate:
+			planReferences(e.Schema, visit)
+		case plan.PropertyNamesPredicate:
+			planReferences(e.Schema, visit)
+		}
+	}
+}
+
 func representationReferences(r plan.Representation, visit func(plan.SchemaID)) {
 	switch r := r.(type) {
 	case plan.ReferenceRepresentation:
@@ -84,9 +134,9 @@ func representationReferences(r plan.Representation, visit func(plan.SchemaID)) 
 		}
 	case plan.ArrayRepresentation:
 		for _, item := range r.Prefix {
-			representationReferences(item, visit)
+			representationReferences(item.Representation, visit)
 		}
-		representationReferences(r.Rest, visit)
+		representationReferences(r.Rest.Representation, visit)
 	case plan.UnionRepresentation:
 		for _, alt := range r.Alternatives {
 			representationReferences(alt, visit)

@@ -4,8 +4,16 @@ import (
 	"strconv"
 
 	"github.com/ogen-go/schemacompiler/internal/ir"
+	"github.com/ogen-go/schemacompiler/internal/norm"
 	"github.com/ogen-go/schemacompiler/plan"
 )
+
+// renormalizeBudget bounds the distribution steps spent re-normalizing an intersection
+// the planner composes itself (design §21.2). Its operands are already normalized and
+// only one kind restriction is pushed in, so the work is bounded by the sub-expression's
+// own combinator nesting; exhausting the budget only means staying factored, which is
+// what the planner did unconditionally before.
+const renormalizeBudget = 64
 
 // unionRepresentation collapses a single alternative to itself, and wraps two or more
 // into a UnionRepresentation (design §7).
@@ -187,21 +195,13 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 // buildLiteral builds the plan for a bare literal (const), lowered as a single-case
 // LiteralDispatch (design §18 discriminator class 2) so the exact value is enforced by
 // dispatch rather than left unchecked in an over-broad primitive representation.
-func (b *builder) buildLiteral(v ir.Literal, _ string) plan.CompilationPlan {
-	kind := literalKind(v.Value)
-	rep := plan.Representation(plan.PrimitiveRepresentation{Kind: kind})
-	branch := plan.CompilationPlan{
-		Representation: rep,
-		Dispatch:       plan.NoDispatch{},
-		Resolution:     plan.FullyResolved{},
-		Capability:     plan.DirectGoType,
-	}
-	return plan.CompilationPlan{
-		Representation: rep,
-		Dispatch:       plan.LiteralDispatch{Cases: []plan.LiteralCase{{Value: v.Value, Raw: v.Raw, Plan: branch}}},
-		Resolution:     plan.FullyResolved{},
-		Capability:     plan.StaticDispatch,
-	}
+//
+// The literal's own kind picks the representation through the same kind-restricted
+// builders a sibling `type` would go through, so an object- or array-valued literal
+// yields an Object/ArrayRepresentation rather than a PrimitiveRepresentation, which
+// docs/integration.md §1 reserves for Go scalars (issue #58).
+func (b *builder) buildLiteral(v ir.Literal, path string) plan.CompilationPlan {
+	return b.buildLeaf(literalKind(v.Value), components{numeric: plan.AnyNumber, literal: &v}, path)
 }
 
 // mergedObject is the result of intersecting every ObjectShape sibling found in an All
@@ -293,8 +293,12 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 		if nullable {
 			if nonNull := subExpr.Kinds() &^ plan.SetNull; nonNull != 0 {
 				// Strip null out of the field's own representation: nullability is
-				// carried by FieldRepresentation.Nullable instead (design §7.1).
-				buildExpr = ir.All{Operands: []ir.Expr{subExpr, ir.Kinds{Set: nonNull}}}
+				// carried by FieldRepresentation.Nullable instead (design §7.1). The
+				// intersection is composed here rather than by norm, so it has to be
+				// re-normalized: otherwise the null branch of a union survives as a
+				// hollow Never alternative instead of being dropped (design §15.4-15.5,
+				// issue #50).
+				buildExpr = norm.Normalize(ir.All{Operands: []ir.Expr{subExpr, ir.Kinds{Set: nonNull}}}, renormalizeBudget)
 			}
 		}
 		sub := b.build(buildExpr, pointerAppend(path+"/properties", name))

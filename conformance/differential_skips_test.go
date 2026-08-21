@@ -7,10 +7,17 @@ package conformance
 // and each value names the issue it waits on. Deleting an entry is how a fix is
 // confirmed: the test fails when an entry stops firing.
 //
+// #73 had five entries and now has none: the planner carries a `not` as a
+// plan.NegationPredicate where the negated sub-schema is exactly modeled, and declares the
+// over-approximation where it is not. #73 stays open for the case where the `not` sits in a
+// property subschema, whose one suite instance is "not.json :: forbidden property ::
+// property present" above — it is quarantined under #72, because the enclosing `properties`
+// is dropped before the `not` is ever reached, and it waits on #68/#72 rather than on
+// anything about negation.
+//
 // Counts at the time of writing:
 //
 //	#72   70 instances
-//	#73    5 instances
 //	#68    4 instances
 //	#74    4 instances
 //	#75    2 instances
@@ -87,13 +94,6 @@ var diffSkips = map[string]string{
 	"unevaluatedProperties.json :: property is evaluated in an uncle schema to unevaluatedProperties :: uncle keyword evaluation is not significant": "#72",
 	"uniqueItems.json :: uniqueItems=false with an array of items and additionalItems=false :: extra items are invalid even if unique":               "#72",
 	"vocabulary.json :: schema that uses custom metaschema with with no validation vocabulary :: applicator vocabulary still works":                  "#72",
-
-	// #73 `not` is dropped with no residual check, still reported exact
-	"not.json :: collect annotations inside a 'not', even if collection is disabled :: annotations are still collected inside a 'not'": "#73",
-	"not.json :: not :: disallowed":                    "#73",
-	"not.json :: not more complex schema :: mismatch":  "#73",
-	"not.json :: not multiple types :: mismatch":       "#73",
-	"not.json :: not multiple types :: other mismatch": "#73",
 
 	// #68 nested subschema plans are dropped from Field/Item/PatternField representations
 	"default.json :: the default keyword does not do anything if the property is missing :: an explicit property value is checked against maximum (failing)": "#68",

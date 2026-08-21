@@ -137,6 +137,10 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 		var t struct{ Entries []plan.DependentRequiredEntry } = e
 		return dependentRequired(t.Entries, value)
 
+	case plan.NegationPredicate:
+		var t struct{ Schema plan.CompilationPlan } = e
+		return in.negation(t.Schema, value, f)
+
 	case plan.PropertyNamesPredicate:
 		var t struct{ Schema plan.CompilationPlan } = e
 		return in.propertyNames(t.Schema, value, f)
@@ -302,6 +306,20 @@ func (in *interp) containsCount(schema plan.CompilationPlan, minCount uint64, ma
 	if maxCount != nil && n > *maxCount {
 		return rejected("contains: " + strconv.FormatUint(n, 10) + " matches, want at most " +
 			strconv.FormatUint(*maxCount, 10)), nil
+	}
+	return accepted(), nil
+}
+
+// negation runs the negated sub-plan against the whole instance and inverts the verdict.
+// The planner only emits a [plan.NegationPredicate] over a sub-plan it proved exact, so
+// inverting it here is exact too (design §11.8).
+func (in *interp) negation(schema plan.CompilationPlan, value any, f frame) (Verdict, error) {
+	v, err := in.sub(schema, value, f)
+	if err != nil {
+		return Verdict{}, err
+	}
+	if v.Accepted {
+		return rejected("not: the negated schema accepts this instance"), nil
 	}
 	return accepted(), nil
 }

@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,6 +41,22 @@ func dumpNode(n *Node, indent string, out *strings.Builder) {
 	}
 	if n.Title != "" {
 		fmt.Fprintf(out, "%s  title=%q\n", indent, n.Title)
+	}
+	if n.Description != "" {
+		fmt.Fprintf(out, "%s  description=%q\n", indent, n.Description)
+	}
+	if n.Deprecated {
+		fmt.Fprintf(out, "%s  deprecated=true\n", indent)
+	}
+	if n.XML != nil {
+		fmt.Fprintf(out, "%s  xml=%+v\n", indent, *n.XML)
+	}
+	for _, name := range sortedKeys(n.Extensions) {
+		v, err := json.Marshal(n.Extensions[name])
+		if err != nil {
+			v = []byte(fmt.Sprintf("%q", err))
+		}
+		fmt.Fprintf(out, "%s  extension[%q]=%s\n", indent, name, v)
 	}
 	if len(n.Required) > 0 {
 		req := append([]string(nil), n.Required...)
@@ -97,6 +114,15 @@ func dumpNode(n *Node, indent string, out *strings.Builder) {
 		fmt.Fprintf(out, "%s  else:\n", indent)
 		dumpNode(n.Else, indent+"    ", out)
 	}
+}
+
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func TestLoad_Golden(t *testing.T) {

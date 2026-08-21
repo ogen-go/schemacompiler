@@ -22,6 +22,24 @@ type Metadata struct {
 	Title       string
 	Description string
 	Deprecated  bool
+	ReadOnly    bool
+	WriteOnly   bool
+	// Default and Examples are raw JSON, as written in the source document.
+	Default  []byte
+	Examples [][]byte
+	XML      *XMLMetadata
+	// Extensions holds every `x-*` keyword of the schema, decoded to Go-native values
+	// and otherwise uninterpreted: the compiler assigns no meaning to any key.
+	Extensions map[string]any
+}
+
+// XMLMetadata is the OpenAPI `xml` object of a schema.
+type XMLMetadata struct {
+	Name      string
+	Namespace string
+	Prefix    string
+	Attribute bool
+	Wrapped   bool
 }
 
 // Diagnostic explains why a stronger conversion was not possible (design §25).

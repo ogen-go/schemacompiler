@@ -18,9 +18,7 @@ func Plan(w io.Writer, p plan.CompilationPlan) {
 func writePlan(t *tw, p plan.CompilationPlan, visiting map[plan.SchemaID]bool) {
 	t.line("Plan capability=%s", capabilityString(p.Capability))
 	t.enter(func() {
-		if p.Metadata.Title != "" {
-			t.line("title=%q", p.Metadata.Title)
-		}
+		writeMetadata(t, p.Metadata)
 
 		t.line("Representation")
 		t.enter(func() { writeRepresentation(t, p.Representation) })
@@ -82,7 +80,10 @@ func writeRepresentation(t *tw, r plan.Representation) {
 			for _, name := range names {
 				f := r.Fields[name]
 				t.line("field %q presence=%s nullable=%v", name, presenceString(f.Presence), f.Nullable)
-				t.enter(func() { writeRepresentation(t, f.Representation) })
+				t.enter(func() {
+					writeMetadata(t, f.Metadata)
+					writeRepresentation(t, f.Representation)
+				})
 			}
 			if r.Additional != nil {
 				t.line("additional")

@@ -1,0 +1,18 @@
+Node pointer=""
+  type=00100000 integer=false
+  title="Account"
+  description="A billing account."
+  extension["x-ogen-name"]="Acct"
+  extension["x-vendor-config"]={"enabled":true,"modes":["fast","slow"],"retries":3}
+  required=[id]
+  properties["id"]:
+    Node pointer="/properties/id"
+      type=00001000 integer=false
+      title="Identifier"
+      description="Opaque account id."
+      xml={Name:AccountId Namespace:urn:acct Prefix:a Attribute:true Wrapped:false}
+      extension["x-ogen-type"]="uuid.UUID"
+  properties["legacy"]:
+    Node pointer="/properties/legacy"
+      type=00001000 integer=false
+      deprecated=true

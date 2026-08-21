@@ -49,3 +49,21 @@ func TestPlanDOT_RefAndStub(t *testing.T) {
 	got = out.String()
 	require.Contains(t, got, `label="?/$defs/Named"`)
 }
+
+func TestPlanDOT_RefUnderObjectProperty(t *testing.T) {
+	result, err := schemacompiler.Compile(context.Background(),
+		[]byte(`{"$defs": {"A": {"type": "string"}}, "type": "object", "properties": {"a": {"$ref": "#/$defs/A"}}}`),
+		schemacompiler.Options{})
+	require.NoError(t, err)
+
+	defs, ok := result.Plan.Resolution.(plan.StaticReferenceGraph)
+	require.True(t, ok)
+
+	var out strings.Builder
+	dump.PlanDOT(&out, result.Plan, defs.Definitions)
+	got := out.String()
+
+	require.Contains(t, got, `label="object{a} [direct-go-type]"`)
+	require.Contains(t, got, `[style=dashed label="ref"]`)
+	require.Contains(t, got, `label="string [direct-go-type]"`)
+}

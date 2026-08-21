@@ -62,13 +62,8 @@ type convState struct {
 	loadErrs map[string]error
 }
 
-// convertRoot converts hs into the internal AST, then resolves references and analyzes
-// the reference graph.
-func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]string, baseURI string, loader Loader) (*Schema, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	st := &convState{
+func newConvState(refMap map[*yaml.Node]string, loader Loader) *convState {
+	return &convState{
 		reg:        newRegistry(),
 		refMap:     refMap,
 		refBaseURI: make(map[*Node]string),
@@ -76,6 +71,23 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 		loaded:     make(map[string]bool),
 		loadErrs:   make(map[string]error),
 	}
+}
+
+// analyze resolves every recorded reference, then classifies recursion and inhabitation
+// over the whole converted set.
+func (st *convState) analyze(ctx context.Context) {
+	st.resolveAll(ctx)
+	st.reg.analyzeSCCs()
+	st.reg.analyzeInhabitation()
+}
+
+// convertRoot converts hs into the internal AST, then resolves references and analyzes
+// the reference graph.
+func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]string, baseURI string, loader Loader) (*Schema, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	st := newConvState(refMap, loader)
 	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}}
 
 	root, err := st.convertSchema(ctx, hs, sc)
@@ -86,9 +98,7 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 		st.reg.resources[baseURI] = root
 	}
 
-	st.resolveAll(ctx)
-	st.reg.analyzeSCCs()
-	st.reg.analyzeInhabitation()
+	st.analyze(ctx)
 
 	return &Schema{
 		Registry:    st.reg,

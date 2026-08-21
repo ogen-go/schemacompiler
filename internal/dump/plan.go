@@ -297,6 +297,10 @@ func writePredicateExpr(t *tw, e plan.PredicateExpr) {
 		var g struct{ Schema plan.CompilationPlan } = e
 		t.line("PropertyNames")
 		t.enter(func() { writePlan(t, g.Schema, map[plan.SchemaID]bool{}) })
+	case plan.ShapePredicate:
+		var g struct{ Schema plan.CompilationPlan } = e
+		t.line("Shape")
+		t.enter(func() { writePlan(t, g.Schema, map[plan.SchemaID]bool{}) })
 	default:
 		t.line("<unknown PredicateExpr %T>", e)
 	}

@@ -25,7 +25,7 @@ KindGeneric, KindSum, KindAny, KindStream`.
 | `AnyRepresentation` | `KindAny` | Backend's "unknown JSON value" (`json.RawMessage`-like). |
 | `NeverRepresentation` | — | No instance is ever valid; ogen has no direct analog. The generator should refuse (emit a diagnostic) rather than invent an uninhabited type, unless the containing context (e.g. an unreachable union branch) can simply omit it. |
 | `PrimitiveRepresentation{Kind, Numeric, Format}` | `KindPrimitive` | `Numeric == IntegerOnly` selects an integer Go type (`int64`/`int32`); `NonIntegerOnly`/`AnyNumber` select `float64`. `Format` is the raw `format` name the backend may refine that choice with: see §1.1. |
-| `ObjectRepresentation{Fields, Additional, PatternRules}` | `KindStruct` (+ `KindMap` when `Additional`/`PatternRules` dominate and there are no named `Fields`) | Each of the three slots carries a whole `CompilationPlan`, not a bare `Representation`: lower it by recursing through §1-§4 on that plan, so the sub-schema's own validation and dispatch land on the value stored there. `Fields` is an ordered `[]FieldRepresentation` carrying its own `Name` — see §2.2 for what the order means. `Additional` is a `*CompilationPlan`: nil means additional properties are not representable as a field, which is a statement about storage and never a rejection. `PatternRules` has no first-class ogen construct today; the generator would need a custom map-with-pattern-validation field, or fall back to `KindMap` plus a residual `PatternPredicate` in `ValidationPlan` (soundness-preserving over-approximation, design §24). |
+| `ObjectRepresentation{Fields, Additional, PatternRules}` | `KindStruct` (+ `KindMap` when `Additional`/`PatternRules` dominate and there are no named `Fields`) | Each of the three slots carries a whole `CompilationPlan`, not a bare `Representation`: lower it by recursing through §1-§4 on that plan, so the sub-schema's own validation and dispatch land on the value stored there. `Fields` is an ordered `[]FieldRepresentation` carrying its own `Name` — see §2.2 for what the order means. `Additional` is a `*CompilationPlan`: nil means additional properties are not representable as a field, which is a statement about storage and never a rejection. `PatternRules` covers only the property names no `Fields` entry declares: a matching pattern's schema is already intersected into the declared field's own plan (design §12.3), so a field is lowered from its plan alone and never re-checked against `PatternRules`. `PatternRules` itself has no first-class ogen construct today; the generator would need a custom map-with-pattern-validation field, or fall back to `KindMap` plus a residual `PatternPredicate` in `ValidationPlan` (soundness-preserving over-approximation, design §24). |
 | `ArrayRepresentation{Prefix, Rest}` | `KindArray` when `Prefix` is empty; a tuple-as-struct (`KindStruct` with positional fields) when `Prefix` is non-empty, following ogen's existing `prefixItems` tuple lowering | Every `ItemRepresentation` carries a whole `CompilationPlan` for the values at that position, lowered by recursing through §1-§4. A nil `Rest.Plan.Representation` (no additional items) has no first-class ogen fixed-length-array kind; treat as a tuple struct with a validated length instead of relying on a fixed-size Go array. |
 | `UnionRepresentation{Alternatives}` | `KindSum` | Paired with a `plan.DispatchPlan` (see §3) to fill `SumSpec`. |
 | `RecursiveRepresentation{Name, Body}` | `KindPointer` wrapping the named type, or `KindStruct` with a named self-reference resolved through ogen's existing "generate the type once, reference it" pass | Corresponds to design §19's guarded recursion; ogen already generates self-referential structs for JSON Schema `$ref` cycles through object/array descent, so this is compatible in spirit, but the compile-time proof of guardedness now comes from schemacompiler (`internal/frontend`'s SCC classification) rather than ogen's own ref-graph walk. |
@@ -278,7 +278,42 @@ carry `plan.SetString`-applicable predicates. `plan.PredicateExpr` variant → t
 | `MinItemsPredicate`, `MaxItemsPredicate`, `UniqueItemsPredicate` | `Validators.Array` |
 | `ContainsCountPredicate` | No direct `Validators.Array` field for match-counting; needs custom generated code (or `Validators.Ogen` custom-param escape hatch) per the **PredicateDispatch lowering contract** in §3. This predicate always also forces `CapabilityLevel.PredicateDispatch` (design's v1 scope), so it arrives already flagged. |
 | `NegationPredicate` | No `validate.*` field: generate a call to the nested plan's own validator and invert it, per the **PredicateDispatch lowering contract** in §3. Always also forces `CapabilityLevel.PredicateDispatch`. |
+| `ShapePredicate` | No `validate.*` field: generate a call to the nested plan's own decoder+validator and take its verdict, gated on `Applicability` as every guarded predicate is. See §4.1. Unlike `NegationPredicate` it does **not** force `PredicateDispatch`; it costs whatever `Schema.Capability` says. |
 | `RequiredPredicate`, `MinPropertiesPredicate`, `MaxPropertiesPredicate`, `DependentRequiredPredicate`, `PropertyNamesPredicate` | `Validators.Object` (or, for `PropertyNamesPredicate`, a per-key loop calling the nested plan's own validator — no existing single `validate.Object` field covers it, likely another `Ogen` custom-param case) |
+
+### 4.1. `ShapePredicate` — a shape keyword written without a sibling `type`
+
+`properties`, `patternProperties`, `additionalProperties`, `prefixItems` and `items` do not
+assert their own type (design §3). `{"properties": {"a": {"type": "string"}}}` accepts
+every string, number, boolean, null and array, and only constrains an *object* instance.
+
+So the plan keeps the representation broad — `AnyRepresentation`, per design §12.1: this
+must not become a Go struct — and carries the shape as
+
+```text
+GuardedPredicate{
+    Applicability: plan.SetObject,          // or SetArray
+    Expression:    plan.ShapePredicate{Schema: <the object/array plan>},
+}
+```
+
+`Schema` is exactly the plan the same keywords produce **with** the sibling `type`, so the
+two spellings differ only in the enclosing representation and never in the constraint. A
+backend that lowers `AnyRepresentation` to a `jx.Raw`/`any` slot lowers this predicate to
+"if the value's JSON kind is in `Applicability`, run `Schema`'s own validator over it".
+
+Two things a backend must not do with it:
+
+- **Do not narrow the enclosing representation to `Schema`'s.** That is exactly the
+  under-approximation design §24 forbids: a plain string is a valid instance and must still
+  decode.
+- **Do not drop the guard.** Applying an object shape to a non-object instance rejects a
+  value the schema accepts, which is the same forbidden direction.
+
+Sibling predicates are *not* repeated inside `Schema`. `{"properties": …, "required": ["a"]}`
+carries the `RequiredPredicate` next to the `ShapePredicate`, under the same `SetObject`
+guard, not inside it — so the nested `ObjectRepresentation`'s fields read
+`PresenceOptional` and the presence requirement is the sibling predicate's. Enforce both.
 
 `Validators.Decimal` has no `plan.PredicateExpr` counterpart: it is selected from
 `PrimitiveRepresentation.Format` instead (the `decimal` format name, §1.1), not from a

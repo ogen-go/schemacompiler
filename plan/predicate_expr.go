@@ -73,6 +73,27 @@ type ContainsCountPredicate struct {
 // this predicate narrows, which is what keeps the plan sound (design §24).
 type NegationPredicate struct{ Schema CompilationPlan }
 
+// ShapePredicate is a whole sub-plan the instance must satisfy, and is the positive
+// counterpart of [NegationPredicate]: where that one inverts its sub-plan's verdict, this
+// one takes it as it stands.
+//
+// The planner emits it for the type-specific shape keywords — `properties`,
+// `patternProperties`, `additionalProperties`, `prefixItems`, `items` — written without a
+// sibling `type` (design §3, §12.1). Such a keyword does not assert its own type, so the
+// enclosing representation must stay broad enough to hold a non-object (non-array)
+// instance; the shape survives here instead, under the enclosing
+// [GuardedPredicate.Applicability] guard that design §3's `compileTypeConditionalKeyword`
+// prescribes. Schema is built for exactly that one kind, so its representation is the
+// [ObjectRepresentation] or [ArrayRepresentation] a sibling `type` would have produced.
+//
+// Lowering contract. A backend runs Schema against the whole instance whenever the
+// instance's kind is in the guard, and takes its verdict. Nothing about the stored shape
+// changes: the enclosing representation stays the over-approximation, and only this
+// predicate narrows it, which is what keeps the plan sound (design §24). Unlike
+// [NegationPredicate] this does not force PredicateDispatch — checking a value against a
+// shape is ordinary validation, so Schema's own capability is all it costs.
+type ShapePredicate struct{ Schema CompilationPlan }
+
 // RequiredPredicate is `required`: every listed property must be present.
 type RequiredPredicate struct{ Properties []string }
 
@@ -113,3 +134,4 @@ func (MinPropertiesPredicate) isPredicateExpr()     {}
 func (MaxPropertiesPredicate) isPredicateExpr()     {}
 func (DependentRequiredPredicate) isPredicateExpr() {}
 func (PropertyNamesPredicate) isPredicateExpr()     {}
+func (ShapePredicate) isPredicateExpr()             {}

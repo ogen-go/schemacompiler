@@ -52,6 +52,7 @@ func AllPredicateExprs() []plan.PredicateExpr {
 		plan.MaxPropertiesPredicate{},
 		plan.DependentRequiredPredicate{},
 		plan.PropertyNamesPredicate{},
+		plan.ShapePredicate{},
 	}
 }
 

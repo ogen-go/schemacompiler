@@ -361,6 +361,11 @@ func predicateChildren(e plan.PredicateExpr, yield func(Node) bool) {
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePropertyNamesSchema}, Plan: t.Schema}) {
 			return
 		}
+	case plan.ShapePredicate:
+		var t struct{ Schema plan.CompilationPlan } = e
+		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeShapeSchema}, Plan: t.Schema}) {
+			return
+		}
 	default:
 		panic(fmt.Sprintf("planwalk: unhandled plan.PredicateExpr variant %T", e))
 	}

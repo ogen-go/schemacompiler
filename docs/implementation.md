@@ -93,6 +93,7 @@ schemacompiler            root: Compile / CompileSchema (*Result, error),       
     ir/                   semantic Expr + KindSet + NumericDomain + semantic compile
     norm/                 normalization loop over ir.Expr
     planner/              ir.Expr → plan.CompilationPlan + classify
+    planwalk/             shared, completeness-guarded traversal of the plan types
   conformance/            JSON-Schema-Test-Suite harness (test-only)
 ```
 

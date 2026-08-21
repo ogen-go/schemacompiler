@@ -11,38 +11,57 @@ import (
 // writeMetadata renders m as indented lines, omitting every unset annotation. Extension
 // keys are sorted so the dump stays deterministic.
 func writeMetadata(t *tw, m plan.Metadata) {
-	if m.Title != "" {
-		t.line("title=%q", m.Title)
+	var g struct {
+		Title       string
+		Description string
+		Deprecated  bool
+		ReadOnly    bool
+		WriteOnly   bool
+		Default     []byte
+		Examples    [][]byte
+		XML         *plan.XMLMetadata
+		Extensions  map[string]any
+	} = m
+
+	if g.Title != "" {
+		t.line("title=%q", g.Title)
 	}
-	if m.Description != "" {
-		t.line("description=%q", m.Description)
+	if g.Description != "" {
+		t.line("description=%q", g.Description)
 	}
-	if m.Deprecated {
+	if g.Deprecated {
 		t.line("deprecated=true")
 	}
-	if m.ReadOnly {
+	if g.ReadOnly {
 		t.line("readOnly=true")
 	}
-	if m.WriteOnly {
+	if g.WriteOnly {
 		t.line("writeOnly=true")
 	}
-	if len(m.Default) > 0 {
-		t.line("default=%s", m.Default)
+	if len(g.Default) > 0 {
+		t.line("default=%s", g.Default)
 	}
-	for i, e := range m.Examples {
+	for i, e := range g.Examples {
 		t.line("example[%d]=%s", i, e)
 	}
-	if x := m.XML; x != nil {
+	if x := g.XML; x != nil {
+		var xg struct {
+			Name      string
+			Namespace string
+			Prefix    string
+			Attribute bool
+			Wrapped   bool
+		} = *x
 		t.line("xml name=%q namespace=%q prefix=%q attribute=%v wrapped=%v",
-			x.Name, x.Namespace, x.Prefix, x.Attribute, x.Wrapped)
+			xg.Name, xg.Namespace, xg.Prefix, xg.Attribute, xg.Wrapped)
 	}
-	names := make([]string, 0, len(m.Extensions))
-	for name := range m.Extensions {
+	names := make([]string, 0, len(g.Extensions))
+	for name := range g.Extensions {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		t.line("extension %q=%s", name, extensionValue(m.Extensions[name]))
+		t.line("extension %q=%s", name, extensionValue(g.Extensions[name]))
 	}
 }
 

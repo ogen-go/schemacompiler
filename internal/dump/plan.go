@@ -16,21 +16,30 @@ func Plan(w io.Writer, p plan.CompilationPlan) {
 }
 
 func writePlan(t *tw, p plan.CompilationPlan, visiting map[plan.SchemaID]bool) {
-	t.line("Plan capability=%s", capabilityString(p.Capability))
+	var g struct {
+		Representation plan.Representation
+		Validation     plan.ValidationPlan
+		Dispatch       plan.DispatchPlan
+		Resolution     plan.ResolutionPlan
+		Capability     plan.CapabilityLevel
+		Metadata       plan.Metadata
+	} = p
+
+	t.line("Plan capability=%s", capabilityString(g.Capability))
 	t.enter(func() {
-		writeMetadata(t, p.Metadata)
+		writeMetadata(t, g.Metadata)
 
 		t.line("Representation")
-		t.enter(func() { writeRepresentation(t, p.Representation) })
+		t.enter(func() { writeRepresentation(t, g.Representation) })
 
 		t.line("Validation")
-		t.enter(func() { writeValidation(t, p.Validation) })
+		t.enter(func() { writeValidation(t, g.Validation) })
 
 		t.line("Dispatch")
-		t.enter(func() { writeDispatch(t, p.Dispatch, visiting) })
+		t.enter(func() { writeDispatch(t, g.Dispatch, visiting) })
 
 		t.line("Resolution")
-		t.enter(func() { writeResolution(t, p.Resolution, visiting) })
+		t.enter(func() { writeResolution(t, g.Resolution, visiting) })
 	})
 }
 
@@ -60,80 +69,129 @@ func writeRepresentation(t *tw, r plan.Representation) {
 	case nil:
 		t.line("<nil>")
 	case plan.AnyRepresentation:
+		var g struct{} = r
+		_ = g
 		t.line("Any")
 	case plan.NeverRepresentation:
+		var g struct{} = r
+		_ = g
 		t.line("Never")
 	case plan.PrimitiveRepresentation:
-		line := "Primitive " + jsonKindString(r.Kind)
-		if dom := numericDomainString(r.Numeric); dom != "" {
+		var g struct {
+			Kind    plan.JSONKind
+			Numeric plan.NumericDomain
+			Format  string
+		} = r
+		line := "Primitive " + jsonKindString(g.Kind)
+		if dom := numericDomainString(g.Numeric); dom != "" {
 			line += " numeric=" + dom
 		}
-		if r.Format != "" {
-			line += fmt.Sprintf(" format=%q", r.Format)
+		if g.Format != "" {
+			line += fmt.Sprintf(" format=%q", g.Format)
 		}
 		t.line("%s", line)
 	case plan.ObjectRepresentation:
+		var g struct {
+			Fields       map[string]plan.FieldRepresentation
+			Additional   plan.Representation
+			PatternRules []plan.PatternFieldRepresentation
+		} = r
 		t.line("Object")
 		t.enter(func() {
-			names := make([]string, 0, len(r.Fields))
-			for name := range r.Fields {
+			names := make([]string, 0, len(g.Fields))
+			for name := range g.Fields {
 				names = append(names, name)
 			}
 			sort.Strings(names)
 			for _, name := range names {
-				f := r.Fields[name]
-				t.line("field %q presence=%s nullable=%v", name, presenceString(f.Presence), f.Nullable)
-				t.enter(func() {
-					writeMetadata(t, f.Metadata)
-					writeRepresentation(t, f.Representation)
-				})
+				writeField(t, name, g.Fields[name])
 			}
-			if r.Additional != nil {
+			if g.Additional != nil {
 				t.line("additional")
-				t.enter(func() { writeRepresentation(t, r.Additional) })
+				t.enter(func() { writeRepresentation(t, g.Additional) })
 			}
-			for _, pr := range r.PatternRules {
-				t.line("patternRule %q", pr.Pattern)
-				t.enter(func() {
-					writeMetadata(t, pr.Metadata)
-					writeRepresentation(t, pr.Representation)
-				})
+			for _, pr := range g.PatternRules {
+				writePatternField(t, pr)
 			}
 		})
 	case plan.ArrayRepresentation:
+		var g struct {
+			Prefix []plan.ItemRepresentation
+			Rest   plan.ItemRepresentation
+		} = r
 		t.line("Array")
 		t.enter(func() {
-			for i, p := range r.Prefix {
+			for i, p := range g.Prefix {
 				t.line("prefix[%d]", i)
-				t.enter(func() {
-					writeMetadata(t, p.Metadata)
-					writeRepresentation(t, p.Representation)
-				})
+				t.enter(func() { writeItem(t, p) })
 			}
-			if r.Rest.Representation != nil {
+			if g.Rest.Representation != nil {
 				t.line("rest")
-				t.enter(func() {
-					writeMetadata(t, r.Rest.Metadata)
-					writeRepresentation(t, r.Rest.Representation)
-				})
+				t.enter(func() { writeItem(t, g.Rest) })
 			}
 		})
 	case plan.UnionRepresentation:
+		var g struct {
+			Alternatives []plan.Representation
+		} = r
 		t.line("Union")
 		t.enter(func() {
-			for i, alt := range r.Alternatives {
+			for i, alt := range g.Alternatives {
 				t.line("alternative[%d]", i)
 				t.enter(func() { writeRepresentation(t, alt) })
 			}
 		})
 	case plan.RecursiveRepresentation:
-		t.line("Recursive %q", r.Name)
-		t.enter(func() { writeRepresentation(t, r.Body) })
+		var g struct {
+			Name string
+			Body plan.Representation
+		} = r
+		t.line("Recursive %q", g.Name)
+		t.enter(func() { writeRepresentation(t, g.Body) })
 	case plan.ReferenceRepresentation:
-		t.line("Reference %q", r.Name)
+		var g struct {
+			Name string
+		} = r
+		t.line("Reference %q", g.Name)
 	default:
 		t.line("<unknown Representation %T>", r)
 	}
+}
+
+func writeField(t *tw, name string, f plan.FieldRepresentation) {
+	var g struct {
+		Representation plan.Representation
+		Presence       plan.PresenceMode
+		Nullable       bool
+		Metadata       plan.Metadata
+	} = f
+	t.line("field %q presence=%s nullable=%v", name, presenceString(g.Presence), g.Nullable)
+	t.enter(func() {
+		writeMetadata(t, g.Metadata)
+		writeRepresentation(t, g.Representation)
+	})
+}
+
+func writePatternField(t *tw, p plan.PatternFieldRepresentation) {
+	var g struct {
+		Pattern        string
+		Representation plan.Representation
+		Metadata       plan.Metadata
+	} = p
+	t.line("patternRule %q", g.Pattern)
+	t.enter(func() {
+		writeMetadata(t, g.Metadata)
+		writeRepresentation(t, g.Representation)
+	})
+}
+
+func writeItem(t *tw, i plan.ItemRepresentation) {
+	var g struct {
+		Representation plan.Representation
+		Metadata       plan.Metadata
+	} = i
+	writeMetadata(t, g.Metadata)
+	writeRepresentation(t, g.Representation)
 }
 
 func presenceString(p plan.PresenceMode) string {
@@ -148,57 +206,95 @@ func presenceString(p plan.PresenceMode) string {
 }
 
 func writeValidation(t *tw, v plan.ValidationPlan) {
-	if v.Empty() {
+	var g struct {
+		Predicates []plan.GuardedPredicate
+	} = v
+	if len(g.Predicates) == 0 {
 		t.line("(empty)")
 		return
 	}
-	for _, gp := range v.Predicates {
-		t.line("guard=%s", kindSetString(gp.Applicability))
-		t.enter(func() { writePredicateExpr(t, gp.Expression) })
+	for _, gp := range g.Predicates {
+		var p struct {
+			Applicability plan.KindSet
+			Expression    plan.PredicateExpr
+		} = gp
+		t.line("guard=%s", kindSetString(p.Applicability))
+		t.enter(func() { writePredicateExpr(t, p.Expression) })
 	}
 }
 
 func writePredicateExpr(t *tw, e plan.PredicateExpr) {
 	switch e := e.(type) {
 	case plan.MinLengthPredicate:
-		t.line("MinLength %d", e.Value)
+		var g struct{ Value uint64 } = e
+		t.line("MinLength %d", g.Value)
 	case plan.MaxLengthPredicate:
-		t.line("MaxLength %d", e.Value)
+		var g struct{ Value uint64 } = e
+		t.line("MaxLength %d", g.Value)
 	case plan.PatternPredicate:
-		t.line("Pattern %q", e.Regex)
+		var g struct{ Regex string } = e
+		t.line("Pattern %q", g.Regex)
 	case plan.FormatPredicate:
-		t.line("Format %q", e.Format)
+		var g struct{ Format string } = e
+		t.line("Format %q", g.Format)
 	case plan.MinimumPredicate:
-		t.line("Minimum %v exclusive=%v", e.Value, e.Exclusive)
+		var g struct {
+			Value     float64
+			Exclusive bool
+		} = e
+		t.line("Minimum %v exclusive=%v", g.Value, g.Exclusive)
 	case plan.MaximumPredicate:
-		t.line("Maximum %v exclusive=%v", e.Value, e.Exclusive)
+		var g struct {
+			Value     float64
+			Exclusive bool
+		} = e
+		t.line("Maximum %v exclusive=%v", g.Value, g.Exclusive)
 	case plan.MultipleOfPredicate:
-		t.line("MultipleOf %v", e.Value)
+		var g struct{ Value float64 } = e
+		t.line("MultipleOf %v", g.Value)
 	case plan.MinItemsPredicate:
-		t.line("MinItems %d", e.Value)
+		var g struct{ Value uint64 } = e
+		t.line("MinItems %d", g.Value)
 	case plan.MaxItemsPredicate:
-		t.line("MaxItems %d", e.Value)
+		var g struct{ Value uint64 } = e
+		t.line("MaxItems %d", g.Value)
 	case plan.UniqueItemsPredicate:
+		var g struct{} = e
+		_ = g
 		t.line("UniqueItems")
 	case plan.ContainsCountPredicate:
-		t.line("ContainsCount min=%d max=%s", e.Min, uintPtrString(e.Max))
-		t.enter(func() { writePlan(t, e.Schema, map[plan.SchemaID]bool{}) })
+		var g struct {
+			Schema plan.CompilationPlan
+			Min    uint64
+			Max    *uint64
+		} = e
+		t.line("ContainsCount min=%d max=%s", g.Min, uintPtrString(g.Max))
+		t.enter(func() { writePlan(t, g.Schema, map[plan.SchemaID]bool{}) })
 	case plan.RequiredPredicate:
-		t.line("Required %v", e.Properties)
+		var g struct{ Properties []string } = e
+		t.line("Required %v", g.Properties)
 	case plan.MinPropertiesPredicate:
-		t.line("MinProperties %d", e.Value)
+		var g struct{ Value uint64 } = e
+		t.line("MinProperties %d", g.Value)
 	case plan.MaxPropertiesPredicate:
-		t.line("MaxProperties %d", e.Value)
+		var g struct{ Value uint64 } = e
+		t.line("MaxProperties %d", g.Value)
 	case plan.DependentRequiredPredicate:
+		var g struct{ Entries []plan.DependentRequiredEntry } = e
 		t.line("DependentRequired")
 		t.enter(func() {
-			for _, entry := range e.Entries {
-				t.line("%q requires %v", entry.Property, entry.Requires)
+			for _, entry := range g.Entries {
+				var d struct {
+					Property string
+					Requires []string
+				} = entry
+				t.line("%q requires %v", d.Property, d.Requires)
 			}
 		})
 	case plan.PropertyNamesPredicate:
+		var g struct{ Schema plan.CompilationPlan } = e
 		t.line("PropertyNames")
-		t.enter(func() { writePlan(t, e.Schema, map[plan.SchemaID]bool{}) })
+		t.enter(func() { writePlan(t, g.Schema, map[plan.SchemaID]bool{}) })
 	default:
 		t.line("<unknown PredicateExpr %T>", e)
 	}
@@ -209,42 +305,65 @@ func writeDispatch(t *tw, d plan.DispatchPlan, visiting map[plan.SchemaID]bool) 
 	case nil:
 		t.line("<nil>")
 	case plan.NoDispatch:
+		var g struct{} = d
+		_ = g
 		t.line("NoDispatch")
 	case plan.KindDispatch:
+		var g struct {
+			Cases map[plan.JSONKind]plan.CompilationPlan
+		} = d
 		t.line("KindDispatch")
 		t.enter(func() {
-			kinds := make([]plan.JSONKind, 0, len(d.Cases))
-			for k := range d.Cases {
+			kinds := make([]plan.JSONKind, 0, len(g.Cases))
+			for k := range g.Cases {
 				kinds = append(kinds, k)
 			}
 			sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
 			for _, k := range kinds {
 				t.line("case %s", jsonKindString(k))
-				t.enter(func() { writePlan(t, d.Cases[k], visiting) })
+				t.enter(func() { writePlan(t, g.Cases[k], visiting) })
 			}
 		})
 	case plan.LiteralDispatch:
+		var g struct {
+			Cases []plan.LiteralCase
+		} = d
 		t.line("LiteralDispatch")
-		t.enter(func() { writeLiteralCases(t, d.Cases, visiting) })
+		t.enter(func() { writeLiteralCases(t, g.Cases, visiting) })
 	case plan.PropertyDispatch:
-		if d.Tag == plan.TagDeclared {
-			t.line("PropertyDispatch property=%q declared", d.Property)
+		var g struct {
+			Property string
+			Cases    []plan.LiteralCase
+			Tag      plan.TagSource
+		} = d
+		if g.Tag == plan.TagDeclared {
+			t.line("PropertyDispatch property=%q declared", g.Property)
 		} else {
-			t.line("PropertyDispatch property=%q", d.Property)
+			t.line("PropertyDispatch property=%q", g.Property)
 		}
-		t.enter(func() { writeLiteralCases(t, d.Cases, visiting) })
+		t.enter(func() { writeLiteralCases(t, g.Cases, visiting) })
 	case plan.PresenceDispatch:
-		t.line("PresenceDispatch property=%q", d.Property)
+		var g struct {
+			Property string
+			Present  plan.CompilationPlan
+			Absent   plan.CompilationPlan
+		} = d
+		t.line("PresenceDispatch property=%q", g.Property)
 		t.enter(func() {
 			t.line("present")
-			t.enter(func() { writePlan(t, d.Present, visiting) })
+			t.enter(func() { writePlan(t, g.Present, visiting) })
 			t.line("absent")
-			t.enter(func() { writePlan(t, d.Absent, visiting) })
+			t.enter(func() { writePlan(t, g.Absent, visiting) })
 		})
 	case plan.PredicateCountDispatch:
-		t.line("PredicateCountDispatch min=%d max=%d", d.Minimum, d.Maximum)
+		var g struct {
+			Branches []plan.CompilationPlan
+			Minimum  int
+			Maximum  int
+		} = d
+		t.line("PredicateCountDispatch min=%d max=%d", g.Minimum, g.Maximum)
 		t.enter(func() {
-			for i, br := range d.Branches {
+			for i, br := range g.Branches {
 				t.line("branch[%d]", i)
 				t.enter(func() { writePlan(t, br, visiting) })
 			}
@@ -256,8 +375,13 @@ func writeDispatch(t *tw, d plan.DispatchPlan, visiting map[plan.SchemaID]bool) 
 
 func writeLiteralCases(t *tw, cases []plan.LiteralCase, visiting map[plan.SchemaID]bool) {
 	for _, c := range cases {
-		t.line("case %#v", c.Value)
-		t.enter(func() { writePlan(t, c.Plan, visiting) })
+		var g struct {
+			Value any
+			Raw   []byte
+			Plan  plan.CompilationPlan
+		} = c
+		t.line("case %#v", g.Value)
+		t.enter(func() { writePlan(t, g.Plan, visiting) })
 	}
 }
 
@@ -266,23 +390,32 @@ func writeResolution(t *tw, r plan.ResolutionPlan, visiting map[plan.SchemaID]bo
 	case nil:
 		t.line("<nil>")
 	case plan.FullyResolved:
+		var g struct{} = r
+		_ = g
 		t.line("FullyResolved")
 	case plan.StaticReferenceGraph:
+		var g struct {
+			Definitions map[plan.SchemaID]plan.CompilationPlan
+		} = r
 		t.line("StaticReferenceGraph")
-		t.enter(func() { writeDefinitions(t, r.Definitions, visiting) })
+		t.enter(func() { writeDefinitions(t, g.Definitions, visiting) })
 	case plan.DynamicReferenceGraph:
+		var g struct {
+			StaticDefinitions map[plan.SchemaID]plan.CompilationPlan
+			DynamicAnchors    map[string][]plan.SchemaID
+		} = r
 		t.line("DynamicReferenceGraph")
 		t.enter(func() {
 			t.line("static definitions")
-			t.enter(func() { writeDefinitions(t, r.StaticDefinitions, visiting) })
+			t.enter(func() { writeDefinitions(t, g.StaticDefinitions, visiting) })
 
-			anchors := make([]string, 0, len(r.DynamicAnchors))
-			for a := range r.DynamicAnchors {
+			anchors := make([]string, 0, len(g.DynamicAnchors))
+			for a := range g.DynamicAnchors {
 				anchors = append(anchors, a)
 			}
 			sort.Strings(anchors)
 			for _, a := range anchors {
-				t.line("dynamicAnchor %q -> %v", a, r.DynamicAnchors[a])
+				t.line("dynamicAnchor %q -> %v", a, g.DynamicAnchors[a])
 			}
 		})
 	default:

@@ -47,6 +47,7 @@ type FieldRepresentation struct {
 	Representation Representation
 	Presence       PresenceMode
 	Nullable       bool
+	Metadata       Metadata
 }
 
 // ArrayRepresentation is a tuple prefix plus a homogeneous rest (design §13).

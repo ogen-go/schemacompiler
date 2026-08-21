@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "title": "Account",
+  "description": "A billing account.",
+  "x-ogen-name": "Acct",
+  "x-vendor-config": {"retries": 3, "modes": ["fast", "slow"], "enabled": true},
+  "properties": {
+    "id": {
+      "type": "string",
+      "title": "Identifier",
+      "description": "Opaque account id.",
+      "x-ogen-type": "uuid.UUID",
+      "xml": {"name": "AccountId", "namespace": "urn:acct", "prefix": "a", "attribute": true}
+    },
+    "legacy": {
+      "type": "string",
+      "deprecated": true,
+      "readOnly": true,
+      "default": "none",
+      "examples": ["old", 42]
+    }
+  },
+  "required": ["id"]
+}

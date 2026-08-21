@@ -357,6 +357,12 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 			n.Examples = append(n.Examples, *v)
 		}
 	}
+	n.XML = xmlFromSchema(hs.XML)
+	ext, err := extensionsFromMap(hs.Extensions)
+	if err != nil {
+		return nil, errors.Wrapf(err, "extensions at %q", sc.docPointer)
+	}
+	n.Extensions = ext
 
 	st.register(n, sc, effectiveBaseURI)
 

@@ -9,9 +9,12 @@ import (
 )
 
 // buildPlan runs the analysis pipeline for a single schema node:
-// ir.Compile → norm.Normalize → planner.Build.
+// ir.Compile → norm.Normalize → planner.Build, then re-attaches the metadata that
+// ir.Compile drops.
 func buildPlan(n *frontend.Node, reg *frontend.Registry, budget int) planner.Result {
-	return planner.Build(norm.Normalize(ir.Compile(n), budget), reg)
+	res := planner.Build(norm.Normalize(ir.Compile(n), budget), reg)
+	annotateMetadata(&res.Plan, n)
+	return res
 }
 
 // definitions is the assembled set of named $ref-target plans for a document, plus the

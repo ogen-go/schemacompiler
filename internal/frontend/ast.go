@@ -104,6 +104,17 @@ type Node struct {
 	ReadOnly    bool
 	WriteOnly   bool
 	Examples    []Value
+	XML         *XML
+	Extensions  map[string]any
+}
+
+// XML is the OpenAPI `xml` object of a schema.
+type XML struct {
+	Name      string
+	Namespace string
+	Prefix    string
+	Attribute bool
+	Wrapped   bool
 }
 
 // NamedSchema is one entry of an order-preserving schema map ($defs, properties,

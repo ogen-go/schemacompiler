@@ -190,6 +190,27 @@ past `PredicateDispatch`:
 | `DynamicSchemaResolution` | **No — refuse** | Same: no dynamic-scope resolution engine exists or is planned for v1. |
 | `Unsupported` | **No — refuse** | No sound conversion exists at all (e.g. an unguarded reference cycle, design §19); always carries a `SeverityError` diagnostic explaining why. |
 
+## 7. Metadata → godoc, defaults, and extensions
+
+`plan.Metadata` carries the non-semantic annotations of a schema; `plan.FieldRepresentation.Metadata`
+carries the same for one property, so a property's own `title`/`description`/`deprecated`
+survives into the generated field (ogen's `jsonschema.Property.Description` → field godoc).
+
+| `plan.Metadata` | ogen |
+|---|---|
+| `Title`, `Description` | Type/field godoc (`jsonschema.Schema.Description`, `jsonschema.Property.Description`). |
+| `Deprecated`, `ReadOnly`, `WriteOnly` | Deprecation note in godoc; read/write-only field filtering. |
+| `Default`, `Examples` | Raw JSON exactly as written in the source document (no re-encoding), for `jsonschema.Schema.Default` and example generation. |
+| `XML` | `jsonschema.Schema.XML` equivalent (name, namespace, prefix, attribute, wrapped). |
+| `Extensions` | Every `x-*` keyword, decoded to Go-native values (`map[string]any`, `[]any`, scalars). |
+
+`Extensions` is a deliberately generic passthrough: schemacompiler assigns no meaning to
+any key and knows nothing about `x-ogen-*`. Interpreting `x-ogen-name`, `x-ogen-type`,
+`x-ogen-properties`, `x-ogen-validate`, `x-ogen-time-format`, or `x-oapi-codegen-extra-tags`
+is the generator's job — it reads them off `Metadata.Extensions` (per-property ones off the
+field's `Metadata.Extensions`) and applies its own semantics, so new vendor keys need no
+change here.
+
 ## Known v1 limitation: whole-document `$ref` assembly is not wired in the root pipeline
 
 `schemacompiler.Compile` (`schemacompiler.go:52-72`) calls `planner.Build(expr,

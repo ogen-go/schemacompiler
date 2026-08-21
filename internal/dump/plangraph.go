@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -14,11 +15,18 @@ import (
 // ReferenceRepresentation lookups into defs) as Graphviz DOT source, for visualizing the
 // dispatch/reference structure of a whole-document plan.
 //
+// A reference is followed wherever [planwalk] reaches one, not only at the top of a plan's
+// representation: a `$ref` nested in an object field, an array item, a union alternative or
+// a recursive body draws an edge from the plan that contains it, as does one inside the
+// plan a `contains`/`propertyNames` predicate carries. A plan with several references to
+// the same definition draws one edge, so the graph stays a reachability picture rather than
+// a syntax tree.
+//
 // defs is the whole-document definition set (a [plan.StaticReferenceGraph.Definitions] or
 // [plan.DynamicReferenceGraph.StaticDefinitions]); a ReferenceRepresentation whose name is
-// absent from defs is drawn as a stub node. Output is deterministic: dispatch cases and
-// defs are visited in a stable sorted order, and a def is rendered at most once even when
-// reachable from multiple places (recursive or shared definitions).
+// absent from defs is drawn as a stub node. Output is deterministic: dispatch cases,
+// reference targets and defs are visited in a stable sorted order, and a def is rendered at
+// most once even when reachable from multiple places (recursive or shared definitions).
 func PlanDOT(w io.Writer, p plan.CompilationPlan, defs map[plan.SchemaID]plan.CompilationPlan) {
 	g := &planGraph{defs: defs, defNode: make(map[plan.SchemaID]string)}
 	rootID := g.newID()
@@ -69,7 +77,7 @@ func (g *planGraph) newID() string {
 }
 
 // visitPlan renders p under the already-allocated node id, then recurses into its
-// dispatch branches and any reference target.
+// dispatch branches and into every reference target reachable from it.
 func (g *planGraph) visitPlan(id string, p plan.CompilationPlan) {
 	if g.nodeLabel == nil {
 		g.nodeLabel = make(map[string]string)
@@ -79,9 +87,43 @@ func (g *planGraph) visitPlan(id string, p plan.CompilationPlan) {
 
 	g.visitDispatch(id, p.Dispatch)
 
-	if ref, ok := p.Representation.(plan.ReferenceRepresentation); ok {
-		g.visitReference(id, plan.SchemaID(ref.Name))
+	for _, target := range localReferenceTargets(p) {
+		g.visitReference(id, target)
 	}
+}
+
+// localReferenceTargets returns the sorted, deduplicated names of every
+// [plan.ReferenceRepresentation] p reaches other than through its dispatch branches: the
+// whole representation tree (object fields, additional and pattern values, array prefix
+// and rest items, union alternatives, recursive bodies) plus the plans a residual
+// predicate carries. Dispatch branches are excluded because [planGraph.visitDispatch]
+// renders each of them as its own node, which draws their reference edges from there.
+//
+// Sorting is what keeps [PlanDOT] deterministic: the walk crosses maps
+// ([plan.ObjectRepresentation.Fields]) whose iteration order is not stable.
+func localReferenceTargets(p plan.CompilationPlan) []plan.SchemaID {
+	seen := make(map[plan.SchemaID]struct{})
+	var targets []plan.SchemaID
+	collect := func(r plan.Representation) {
+		ref, ok := r.(plan.ReferenceRepresentation)
+		if !ok {
+			return
+		}
+		name := plan.SchemaID(ref.Name)
+		if _, dup := seen[name]; dup {
+			return
+		}
+		seen[name] = struct{}{}
+		targets = append(targets, name)
+	}
+
+	planwalk.Representation(p.Representation, collect)
+	planwalk.Validation(p.Validation, func(child plan.CompilationPlan) {
+		planwalk.Plan(child, collect)
+	})
+
+	sort.Slice(targets, func(i, j int) bool { return targets[i] < targets[j] })
+	return targets
 }
 
 // visitReference draws a dashed "ref" edge from id to the node for target, rendering

@@ -1,0 +1,43 @@
+Node pointer=""
+  type=00100000 integer=false
+  properties["scalar"]:
+    Node pointer="/properties/scalar"
+      type=00001001 integer=false
+  properties["union"]:
+    Node pointer="/properties/union"
+      oneOf[0]:
+        Node pointer="/properties/union/oneOf/0"
+          type=00001000 integer=false
+      oneOf[1]:
+        Node pointer="/properties/union/oneOf/1"
+          type=00000100 integer=true
+  properties["any"]:
+    Node pointer="/properties/any"
+      anyOf[0]:
+        Node pointer="/properties/any/anyOf/0"
+          type=00001000 integer=false
+      anyOf[1]:
+        Node pointer="/properties/any/anyOf/1"
+          type=00000100 integer=true
+  properties["all"]:
+    Node pointer="/properties/all"
+      allOf[0]:
+        Node pointer="/properties/all/allOf/0"
+          type=00001000 integer=false
+  properties["ref"]:
+    Node pointer="/properties/ref"
+      ref="#/$defs/Named" resolved=true
+  properties["bare"]:
+    Node pointer="/properties/bare"
+  properties["choice"]:
+    Node pointer="/properties/choice"
+      type=00001001 integer=false
+  properties["declared"]:
+    Node pointer="/properties/declared"
+      type=00001001 integer=false
+  $defs["Named"]:
+    Node pointer="/$defs/Named"
+      type=00100001 integer=false
+      properties["k"]:
+        Node pointer="/$defs/Named/properties/k"
+          type=00001000 integer=false

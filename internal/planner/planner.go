@@ -49,7 +49,7 @@ func BuildAt(e ir.Expr, reg *frontend.Registry, origin Origin) Result {
 	return Result{
 		Plan:        p,
 		Diagnostics: b.diags,
-		Exactness:   exactnessOf(p),
+		Exactness:   exactnessOf(p, b.asserted),
 	}
 }
 
@@ -61,6 +61,11 @@ type builder struct {
 	recur    map[plan.SchemaID]frontend.RecursionClass
 	refCache map[string]*frontend.Node
 	diags    []plan.Diagnostic
+	// asserted records that some dispatch anywhere in the plan trusts a declared
+	// discriminator instead of proving disjointness, which costs the whole plan its
+	// exactness (design §24). Capability rolls up on its own; Exactness has no
+	// per-plan field to roll up through, so it is tracked here.
+	asserted bool
 }
 
 // refTargets returns the registry's static-$ref target index, built once per Build call.

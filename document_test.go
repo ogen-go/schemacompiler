@@ -112,4 +112,34 @@ func TestCompileDeclaredDiscriminatorSurvivesPipeline(t *testing.T) {
 	require.Equal(t, "petType", disp.Property)
 	require.Equal(t, plan.TagDeclared, disp.Tag)
 	require.Len(t, disp.Cases, 2)
+	require.Equal(t, plan.ExactWithValidation, res.Exactness)
+}
+
+func TestCompileAssertedDiscriminatorSurvivesPipeline(t *testing.T) {
+	const schema = `{
+		"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Dog"}],
+		"discriminator": {"propertyName": "petType", "mapping": {"cat": "#/$defs/Cat", "dog": "#/$defs/Dog"}},
+		"$defs": {
+			"Cat": {
+				"type": "object",
+				"properties": {"petType": {"type": "string"}, "name": {"type": "string"}},
+				"required": ["petType", "name"]
+			},
+			"Dog": {
+				"type": "object",
+				"properties": {"petType": {"type": "string"}, "bark": {"type": "boolean"}},
+				"required": ["petType", "bark"]
+			}
+		}
+	}`
+
+	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
+	require.NoError(t, err)
+
+	disp, ok := res.Plan.Dispatch.(plan.PropertyDispatch)
+	require.True(t, ok, "expected PropertyDispatch, got %T", res.Plan.Dispatch)
+	require.Equal(t, "petType", disp.Property)
+	require.Equal(t, plan.TagAsserted, disp.Tag)
+	require.Len(t, disp.Cases, 2)
+	require.Equal(t, plan.SoundOverApproximation, res.Exactness)
 }

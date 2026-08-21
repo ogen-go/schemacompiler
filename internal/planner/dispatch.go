@@ -74,11 +74,17 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 
 	// A declared discriminator wins over structural inference (design §18.2, issue #17).
 	if disc != nil {
-		cases, reason := b.declaredDispatchCases(disc, branchExprs)
-		if reason == "" {
-			return b.buildPropertyDispatch(disc.PropertyName, cases, plan.TagDeclared, path)
+		cases, tag, reason := b.declaredDispatchCases(disc, branchExprs)
+		switch {
+		case reason != "":
+			b.diag(path, plan.SeverityWarning, reason+"; falling back to structural analysis")
+		case tag == plan.TagAsserted:
+			b.diag(path, plan.SeverityInfo,
+				"discriminator dispatch relies on the declared mapping; branches are not provably disjoint")
+			return b.buildPropertyDispatch(disc.PropertyName, cases, tag, path)
+		default:
+			return b.buildPropertyDispatch(disc.PropertyName, cases, tag, path)
 		}
-		b.diag(path, plan.SeverityWarning, reason+"; falling back to structural analysis")
 	}
 
 	// Static discriminator analysis, in preference order (design §18).
@@ -297,6 +303,9 @@ func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCa
 }
 
 func (b *builder) buildPropertyDispatch(name string, cases []discCase, tag plan.TagSource, path string) plan.CompilationPlan {
+	if tag == plan.TagAsserted {
+		b.asserted = true
+	}
 	lcases := make([]plan.LiteralCase, len(cases))
 	alts := make([]plan.Representation, len(cases))
 	capLevel := plan.StaticDispatch

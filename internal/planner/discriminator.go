@@ -10,18 +10,27 @@ import (
 )
 
 // declaredDispatchCases builds the cases of a union carrying an explicit OpenAPI
-// `discriminator` (issue #17). A declaration is not a disjointness proof: static property
-// dispatch is only sound when every branch is selected by a finite structural observation
-// of the instance (design §18, §15.3), so the declared path must discharge the same
-// obligation as the inferred one — the property is required on every branch, constrained
-// there to a const/enum, and the branch's case values cover every value it accepts, with
-// all case values pairwise distinct. The returned reason is empty on success; otherwise it
-// explains why the declaration cannot drive dispatch and the caller warns and falls back
-// to structural inference and, ultimately, to predicate-count dispatch (design §20.6,
-// §22).
-func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Expr) (cases []discCase, reason string) {
+// `discriminator` (issue #17), together with the tag source recording how much of the
+// dispatch is proven (issue #31).
+//
+// A declaration is not by itself a disjointness proof (design §18, §15.3), but OAS 3.0.3
+// line 2717 explicitly permits a discriminator to "act as a 'hint' to shortcut validation
+// and selection of the matching schema", so the declaration is trusted where the spec
+// allows it and the plan records that it was trusted rather than proven:
+//
+//   - [plan.TagDeclared] when every branch requires the property, pins it to a const/enum
+//     and its cases cover every value it accepts — the same obligation the inferred path
+//     discharges, so the branches are provably disjoint.
+//   - [plan.TagAsserted] when every branch requires the property but the values come only
+//     from `mapping`. Dispatch is the declared hint; disjointness is assumed.
+//
+// A non-empty reason means the declaration cannot drive dispatch at all — the property is
+// not required (OAS 3.0.3 line 2354 makes that mandatory), no value selects a branch, or
+// one value selects several — and the caller warns and falls back to structural inference
+// and, ultimately, to predicate-count dispatch (design §20.6, §22).
+func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Expr) (cases []discCase, tag plan.TagSource, reason string) {
 	if d.PropertyName == "" {
-		return nil, "discriminator has no propertyName"
+		return nil, 0, "discriminator has no propertyName"
 	}
 
 	targets := make([][]plan.SchemaID, len(branchExprs))
@@ -39,42 +48,50 @@ func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Ex
 			}
 		}
 		if !matched {
-			return nil, fmt.Sprintf("discriminator mapping %q => %q resolves to no branch of this union", m.Value, m.Ref)
+			return nil, 0, fmt.Sprintf("discriminator mapping %q => %q resolves to no branch of this union", m.Value, m.Ref)
 		}
 	}
 
+	tag = plan.TagDeclared
 	seen := newValueSet(len(branchExprs))
 	for i, be := range branchExprs {
 		c := b.flattenThroughRefs(be, nil)
 		if c.never {
-			return nil, "discriminator union has an uninhabited branch"
+			return nil, 0, "discriminator union has an uninhabited branch"
 		}
-		accepted, ok := requiredLiteralValues(c, d.PropertyName)
-		if !ok {
-			return nil, fmt.Sprintf(
-				"discriminator property %q is not required and constrained to a const/enum on every branch, so the branches are not provably disjoint",
+		if !requiredProperty(c, d.PropertyName) {
+			return nil, 0, fmt.Sprintf(
+				"discriminator property %q is not required by every branch, which OAS 3.0.3 line 2354 mandates",
 				d.PropertyName)
 		}
+		accepted, proven := requiredLiteralValues(c, d.PropertyName)
 		values := mapped[i]
-		if len(values) == 0 {
+		switch {
+		case len(values) == 0 && !proven:
 			// The implicit mapping (OpenAPI 3.1 §4.8.25.1) names the component, which
 			// constrains nothing in the instance and so cannot select a branch (design
-			// §18). Dispatch on what the branch itself accepts, which coincides with the
-			// component name exactly when the branch constrains the property to it.
+			// §18); without a mapping entry or a branch const there is no value to
+			// switch on.
+			return nil, 0, fmt.Sprintf("discriminator property %q has no value selecting every branch", d.PropertyName)
+		case len(values) == 0:
+			// The branch's own const/enum: the component name coincides with it exactly
+			// when the branch constrains the property to that literal.
 			values = accepted
-		} else if missing, ok := coversAll(values, accepted); !ok {
-			return nil, fmt.Sprintf(
-				"discriminator mapping does not cover value %s, which branch %d accepts on property %q",
-				literalString(missing), i, d.PropertyName)
+		case !proven:
+			tag = plan.TagAsserted
+		default:
+			if _, covered := coversAll(values, accepted); !covered {
+				tag = plan.TagAsserted
+			}
 		}
 		for _, lit := range values {
 			if !seen.add(lit) {
-				return nil, fmt.Sprintf("discriminator value %s selects more than one branch", literalString(lit))
+				return nil, 0, fmt.Sprintf("discriminator value %s selects more than one branch", literalString(lit))
 			}
 			cases = append(cases, discCase{Value: lit.Value, Raw: lit.Raw, Expr: be})
 		}
 	}
-	return cases, ""
+	return cases, tag, ""
 }
 
 // requiredLiteralValues returns the values a branch accepts on a required property,

@@ -330,7 +330,13 @@ func TestOverlapDiagnosticVocabulary(t *testing.T) {
 			schema: `{"if":{"minimum":0},"then":{"maximum":5},"else":{"maximum":100}}`, overlap: true,
 		},
 		{name: "json-equal enum no longer overlaps", schema: `{"enum":[1,1.0]}`},
-		{name: "dependentSchemas", schema: `{"dependentSchemas":{"a":{"required":["b"]}}}`},
+		{name: "one dependentSchemas entry", schema: `{"dependentSchemas":{"a":{"required":["b"]}}}`},
+		{
+			// Two entries do overlap, where one does not: both messages fire here.
+			name:    "two dependentSchemas entries",
+			schema:  `{"dependentSchemas":{"a":{"required":["b"]},"c":{"required":["d"]}}}`,
+			overlap: true,
+		},
 		{name: "type array", schema: `{"type":["string","number"]}`},
 		{name: "not", schema: `{"not":{"minimum":0}}`},
 	}

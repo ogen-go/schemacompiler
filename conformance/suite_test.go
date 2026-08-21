@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,31 +43,7 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping JSON-Schema-Test-Suite walk in -short mode")
 	}
-	info, err := os.Stat(suiteRoot)
-	if err != nil || !info.IsDir() {
-		t.Skipf("JSON-Schema-Test-Suite submodule not present at %s; "+
-			"run `git submodule update --init testdata/JSON-Schema-Test-Suite` to opt in", suiteRoot)
-	}
-
-	var files []string
-	walkErr := filepath.Walk(suiteRoot, func(p string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if fi.IsDir() {
-			return nil
-		}
-		if strings.HasSuffix(p, ".json") {
-			files = append(files, p)
-		}
-		return nil
-	})
-	if walkErr != nil {
-		t.Fatal(walkErr)
-	}
-	if len(files) == 0 {
-		t.Skip("JSON-Schema-Test-Suite submodule present but empty; nothing to walk")
-	}
+	files := suiteFiles(t)
 
 	dist := make(map[distKey]int)
 	var attempted, errored, panicked int

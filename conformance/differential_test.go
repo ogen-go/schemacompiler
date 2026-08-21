@@ -315,33 +315,6 @@ func compileQuietly(schema json.RawMessage) (res *schemacompiler.Result, err err
 	return schemacompiler.Compile(context.Background(), schema, schemacompiler.Options{})
 }
 
-func suiteFiles(t *testing.T) []string {
-	t.Helper()
-
-	info, err := os.Stat(suiteRoot)
-	if err != nil || !info.IsDir() {
-		t.Skipf("JSON-Schema-Test-Suite submodule not present at %s; "+
-			"run `git submodule update --init testdata/JSON-Schema-Test-Suite` to opt in", suiteRoot)
-	}
-
-	var files []string
-	walkErr := filepath.Walk(suiteRoot, func(p string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !fi.IsDir() && strings.HasSuffix(p, ".json") {
-			files = append(files, p)
-		}
-		return nil
-	})
-	require.NoError(t, walkErr)
-	if len(files) == 0 {
-		t.Skip("JSON-Schema-Test-Suite submodule present but empty; nothing to walk")
-	}
-	sort.Strings(files)
-	return files
-}
-
 // reportedKinds is the order the tally prints its lines in.
 var reportedKinds = []verdictKind{
 	verdictRejectedValid,

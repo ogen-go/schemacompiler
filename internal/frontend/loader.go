@@ -69,15 +69,16 @@ func stripRefs(root *yaml.Node, refs map[*yaml.Node]string) {
 }
 
 // buildHighSchema parses data (JSON or YAML) into a high-level libopenapi schema plus the
-// map of `$ref` strings stripped from it (see [stripRefs]). A boolean root schema (`true`/
-// `false`) is reported via the returned bool pointer, in which case hs/refs are nil.
-func buildHighSchema(ctx context.Context, data []byte) (hs *base.Schema, refs map[*yaml.Node]string, boolValue *bool, err error) {
-	root, err := loadDocument(data)
+// map of `$ref` strings stripped from it (see [stripRefs]) and the document's root yaml
+// node. A boolean root schema (`true`/`false`) is reported via the returned bool pointer,
+// in which case hs/refs are nil.
+func buildHighSchema(ctx context.Context, data []byte) (hs *base.Schema, refs map[*yaml.Node]string, root *yaml.Node, boolValue *bool, err error) {
+	root, err = loadDocument(data)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if b, ok := boolSchemaValue(root); ok {
-		return nil, nil, &b, nil
+		return nil, nil, root, &b, nil
 	}
 
 	refs = make(map[*yaml.Node]string)
@@ -85,9 +86,9 @@ func buildHighSchema(ctx context.Context, data []byte) (hs *base.Schema, refs ma
 
 	low := new(lowbase.Schema)
 	if err := low.Build(ctx, root, nil); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "build schema")
+		return nil, nil, nil, nil, errors.Wrap(err, "build schema")
 	}
-	return base.NewSchema(low), refs, nil, nil
+	return base.NewSchema(low), refs, root, nil, nil
 }
 
 // Load parses a standalone Draft 2020-12 schema document (JSON or YAML) into the internal
@@ -105,14 +106,14 @@ func LoadWithLoader(ctx context.Context, data []byte, baseURI string, loader Loa
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	hs, refs, boolValue, err := buildHighSchema(ctx, data)
+	hs, refs, root, boolValue, err := buildHighSchema(ctx, data)
 	if err != nil {
 		return nil, err
 	}
 
 	if boolValue != nil {
 		reg := newRegistry()
-		n := &Node{Always: boolValue}
+		n := &Node{Always: boolValue, Position: nodePosition(baseURI, root)}
 		reg.resources[baseURI] = n
 		reg.nodes = append(reg.nodes, n)
 		reg.analyzeSCCs()
@@ -173,12 +174,12 @@ func (st *convState) tryLoad(ctx context.Context, baseURI string) bool {
 // loadInto parses data as a schema document rooted at base URI base and converts it into
 // the shared conversion state, registering base as a resource so refs targeting it resolve.
 func (st *convState) loadInto(ctx context.Context, data []byte, baseURI string) error {
-	hs, refs, boolValue, err := buildHighSchema(ctx, data)
+	hs, refs, docRoot, boolValue, err := buildHighSchema(ctx, data)
 	if err != nil {
 		return err
 	}
 	if boolValue != nil {
-		n := &Node{Always: boolValue}
+		n := &Node{Always: boolValue, Position: nodePosition(baseURI, docRoot)}
 		st.reg.resources[baseURI] = n
 		st.reg.pointers[baseURI+"\x00"] = n
 		st.reg.nodes = append(st.reg.nodes, n)

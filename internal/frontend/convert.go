@@ -111,7 +111,7 @@ func (st *convState) convertProxy(ctx context.Context, sp *base.SchemaProxy, sc 
 	}
 	if vn := sp.GetValueNode(); vn != nil {
 		if b, ok := boolSchemaValue(vn); ok {
-			n := &Node{Always: &b, Pointer: sc.docPointer}
+			n := &Node{Always: &b, Pointer: sc.docPointer, Position: nodePosition(sc.file(), vn)}
 			st.register(n, sc, sc.baseURI())
 			return n, nil
 		}
@@ -144,7 +144,7 @@ func (st *convState) referenceNode(ctx context.Context, sp *base.SchemaProxy, sc
 		return nil, errors.Wrapf(err, "build keywords alongside $ref at %q", sc.docPointer)
 	}
 	if siblings == nil {
-		n := &Node{Ref: ref, Pointer: sc.docPointer}
+		n := &Node{Ref: ref, Pointer: sc.docPointer, Position: nodePosition(sc.file(), sp.GetReferenceNode())}
 		st.register(n, sc, sc.baseURI())
 		st.refBaseURI[n] = sc.baseURI()
 		return n, nil
@@ -241,7 +241,7 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 	}
 	low := hs.GoLow()
 
-	n := &Node{Pointer: sc.docPointer}
+	n := &Node{Pointer: sc.docPointer, Position: schemaPosition(sc.file(), hs)}
 
 	// $id: establishes a new base URI for this node and everything beneath it.
 	effectiveBaseURI := sc.baseURI()
@@ -376,7 +376,7 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 		st.addEdge(n, child, true)
 	}
 	if hs.Items != nil {
-		child, err := st.convertDynamicSchema(ctx, hs.Items, childScope.child("items"))
+		child, err := st.convertDynamicSchema(ctx, hs.Items, childScope.child("items"), schemaKeywordNode(hs, "items"))
 		if err != nil {
 			return nil, err
 		}
@@ -406,7 +406,7 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 		return nil, err
 	}
 	if hs.AdditionalProperties != nil {
-		child, err := st.convertDynamicSchema(ctx, hs.AdditionalProperties, childScope.child("additionalProperties"))
+		child, err := st.convertDynamicSchema(ctx, hs.AdditionalProperties, childScope.child("additionalProperties"), schemaKeywordNode(hs, "additionalProperties"))
 		if err != nil {
 			return nil, err
 		}
@@ -422,7 +422,7 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 		st.addEdge(n, child, false)
 	}
 	if hs.UnevaluatedProperties != nil {
-		child, err := st.convertDynamicSchema(ctx, hs.UnevaluatedProperties, childScope.child("unevaluatedProperties"))
+		child, err := st.convertDynamicSchema(ctx, hs.UnevaluatedProperties, childScope.child("unevaluatedProperties"), schemaKeywordNode(hs, "unevaluatedProperties"))
 		if err != nil {
 			return nil, err
 		}
@@ -506,13 +506,15 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 
 // convertDynamicSchema converts a bool-or-schema keyword (additionalProperties, items,
 // unevaluatedProperties) into a Node, representing the boolean arm via Node.Always.
-func (st *convState) convertDynamicSchema(ctx context.Context, dv *base.DynamicValue[*base.SchemaProxy, bool], sc scope) (*Node, error) {
+// valueNode is the keyword's source yaml node, used to position the boolean arm (the
+// high-level DynamicValue keeps none).
+func (st *convState) convertDynamicSchema(ctx context.Context, dv *base.DynamicValue[*base.SchemaProxy, bool], sc scope, valueNode *yaml.Node) (*Node, error) {
 	if dv == nil {
 		return nil, nil
 	}
 	if dv.IsB() {
 		b := dv.B
-		n := &Node{Always: &b, Pointer: sc.docPointer}
+		n := &Node{Always: &b, Pointer: sc.docPointer, Position: nodePosition(sc.file(), valueNode)}
 		st.register(n, sc, sc.baseURI())
 		return n, nil
 	}
@@ -556,6 +558,9 @@ func (st *convState) addEdge(from, to *Node, descent bool) {
 // $dynamicAnchor within the nearest enclosing resource.
 func (st *convState) register(n *Node, sc scope, nearestBaseURI string) {
 	st.reg.nodes = append(st.reg.nodes, n)
+	if _, ok := st.reg.positions[n.Pointer]; !ok {
+		st.reg.positions[n.Pointer] = n.Position
+	}
 	for _, f := range sc.frames {
 		rel := sc.docPointer[len(f.root):]
 		st.reg.pointers[f.baseURI+"\x00"+rel] = n
@@ -580,25 +585,15 @@ func readExclusiveBounds(low *lowbase.Schema) (exMin, exMax *float64) {
 // used by the standalone loader), libopenapi only recognizes integer-tagged scalars for
 // these two keywords and silently drops float values (a libopenapi API surprise).
 func readFloatKeyword(root *yaml.Node, key string) *float64 {
-	root = resolveAlias(root)
-	if root == nil || root.Kind != yaml.MappingNode {
+	v := resolveAlias(keywordNode(root, key))
+	if v == nil || v.Kind != yaml.ScalarNode {
 		return nil
 	}
-	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value != key {
-			continue
-		}
-		v := resolveAlias(root.Content[i+1])
-		if v == nil || v.Kind != yaml.ScalarNode {
-			return nil
-		}
-		f, err := strconv.ParseFloat(v.Value, 64)
-		if err != nil {
-			return nil
-		}
-		return &f
+	f, err := strconv.ParseFloat(v.Value, 64)
+	if err != nil {
+		return nil
 	}
-	return nil
+	return &f
 }
 
 func int64PtrToUint64Ptr(p *int64) *uint64 {

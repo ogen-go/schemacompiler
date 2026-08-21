@@ -135,9 +135,10 @@ func (st *convState) finalizeUnresolved() {
 			}
 		}
 		st.unresolved = append(st.unresolved, UnresolvedRef{
-			Pointer: n.Pointer,
-			Ref:     n.Ref,
-			Reason:  reason,
+			Pointer:  n.Pointer,
+			Position: n.Position,
+			Ref:      n.Ref,
+			Reason:   reason,
 		})
 	}
 }

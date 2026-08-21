@@ -44,8 +44,9 @@ func (r *Registry) analyzeInhabitation() {
 		}
 		if _, recursive := r.sccIndex[n]; recursive && len(n.Required) > 0 {
 			r.uninhabited = append(r.uninhabited, UninhabitedNode{
-				Pointer: n.Pointer,
-				Reason:  "object requires a property whose schema recursively requires itself; no finite instance exists",
+				Pointer:  n.Pointer,
+				Position: n.Position,
+				Reason:   "object requires a property whose schema recursively requires itself; no finite instance exists",
 			})
 		}
 	}

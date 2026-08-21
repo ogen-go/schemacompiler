@@ -1,6 +1,10 @@
 package frontend
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/ogen-go/schemacompiler/plan"
+)
 
 // This file defines the presence-normalized internal AST (Node) that ir compiles from.
 // It mirrors JSON Schema Draft 2020-12 but with a uniform presence model: a keyword is
@@ -40,6 +44,9 @@ type Node struct {
 
 	// Pointer is the JSON Pointer to this node from its document root (for diagnostics).
 	Pointer string
+
+	// Position is the source location this node was parsed from (for diagnostics).
+	Position plan.Position
 
 	// type. HasType reports whether the `type` keyword was present; Types is the kind set
 	// it asserted. Integer is recorded via IntegerType.
@@ -130,8 +137,8 @@ type DependentRequired struct {
 	Requires []string
 }
 
-// KindSet duplicates plan.KindSet's bit layout for the frontend's type keyword so the
-// AST does not depend on plan. Phase 1 converts between them.
+// KindSet duplicates plan.KindSet's bit layout for the frontend's type keyword. Phase 1
+// converts between them.
 type KindSet uint8
 
 // JSON kind bits for [KindSet]. The layout matches plan.KindSet.

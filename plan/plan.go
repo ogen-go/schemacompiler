@@ -45,7 +45,9 @@ type XMLMetadata struct {
 // Diagnostic explains why a stronger conversion was not possible (design §25).
 type Diagnostic struct {
 	// Pointer is the JSON Pointer to the offending schema location, when known.
-	Pointer  string
+	Pointer string
+	// Position is the source location of that schema, when the parser retained one.
+	Position Position
 	Severity Severity
 	Message  string
 }

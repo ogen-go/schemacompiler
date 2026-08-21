@@ -24,12 +24,27 @@ type Result struct {
 	Exactness   plan.Exactness
 }
 
+// Origin locates the schema a Build call analyzes within its source document: the JSON
+// Pointer diagnostics are reported relative to, and the position to fall back on when a
+// diagnostic names a location the registry cannot place.
+type Origin struct {
+	Pointer  string
+	Position plan.Position
+}
+
 // Build converts a normalized ir.Expr into a plan.CompilationPlan (design §21). reg may
 // be nil when the expression carries no references (e.g. hand-built test fixtures);
 // Build only consults it for recursion classification (design §19) and dynamic-ref
 // presence (design §10.2).
 func Build(e ir.Expr, reg *frontend.Registry) Result {
+	return BuildAt(e, reg, Origin{})
+}
+
+// BuildAt is [Build] for a schema that is not the document root, so its diagnostics carry
+// document-absolute pointers and source positions.
+func BuildAt(e ir.Expr, reg *frontend.Registry, origin Origin) Result {
 	b := newBuilder(reg)
+	b.origin = origin
 	p := b.build(e, "")
 	return Result{
 		Plan:        p,
@@ -42,6 +57,7 @@ func Build(e ir.Expr, reg *frontend.Registry) Result {
 // across one Build call (including into nested dispatch/resolution branches).
 type builder struct {
 	reg      *frontend.Registry
+	origin   Origin
 	recur    map[plan.SchemaID]frontend.RecursionClass
 	refCache map[string]*frontend.Node
 	diags    []plan.Diagnostic
@@ -72,9 +88,26 @@ func newBuilder(reg *frontend.Registry) *builder {
 	return b
 }
 
-// diag records a diagnostic (design §25).
-func (b *builder) diag(pointer string, sev plan.Severity, msg string) {
-	b.diags = append(b.diags, plan.Diagnostic{Pointer: pointer, Severity: sev, Message: msg})
+// diag records a diagnostic (design §25). path is relative to the origin schema.
+func (b *builder) diag(path string, sev plan.Severity, msg string) {
+	pointer := b.origin.Pointer + path
+	b.diags = append(b.diags, plan.Diagnostic{
+		Pointer:  pointer,
+		Position: b.positionOf(pointer),
+		Severity: sev,
+		Message:  msg,
+	})
+}
+
+// positionOf locates pointer in the source, falling back to the origin schema's position
+// when the pointer names a synthesized location (an ir.Expr keeps no pointer of its own).
+func (b *builder) positionOf(pointer string) plan.Position {
+	if b.reg != nil {
+		if pos, ok := b.reg.PositionOf(pointer); ok {
+			return pos
+		}
+	}
+	return b.origin.Position
 }
 
 // build is the main recursive entry point (design §21): it dispatches on the concrete

@@ -37,6 +37,26 @@ type Schema struct {
 	IgnoredNullable []IgnoredNullable
 	// UnusedDiscriminator lists every `discriminator` that names no union to dispatch on.
 	UnusedDiscriminator []UnusedDiscriminator
+	// InvalidKeyword lists every keyword whose declared value the spec does not admit.
+	InvalidKeyword []InvalidKeyword
+}
+
+// InvalidKeyword records a keyword the spec gives a value type the declared value does not
+// have — `{"maxLength": 2.5}` where a non-negative integer is required (issue #74). The
+// schema is invalid, but loading does not fail on it: the keyword is left absent, which can
+// only widen what the compiled plan accepts, and the fact is reported here so a caller can
+// surface it instead of silently enforcing something the author did not write.
+type InvalidKeyword struct {
+	// Pointer is the JSON Pointer to the keyword itself.
+	Pointer string
+	// Position is the source location of the offending value.
+	Position plan.Position
+	// Keyword is the keyword name.
+	Keyword string
+	// Value is the source text of the offending scalar, empty when it was not one.
+	Value string
+	// Reason describes what the keyword required.
+	Reason string
 }
 
 // IgnoredNullable records an OpenAPI 3.0 `nullable: true` that had no effect: OAS 3.0.3

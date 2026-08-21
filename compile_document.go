@@ -81,12 +81,13 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 		}
 		res.Capability = maxCapability(res.Capability, p.Capability)
 	}
-	res.Exactness = exactnessFor(res.Capability, res.Exactness)
+	res.Exactness = exactnessFor(res.Capability, exactnessWithInvalidKeywords(res.Exactness, d.InvalidKeyword))
 
 	diags = append(diags, unresolvedDiagnostics(d.Unresolved)...)
 	diags = append(diags, uninhabitedDiagnostics(d.Uninhabited)...)
 	diags = append(diags, ignoredNullableDiagnostics(d.IgnoredNullable)...)
 	diags = append(diags, unusedDiscriminatorDiagnostics(d.UnusedDiscriminator)...)
+	diags = append(diags, invalidKeywordDiagnostics(d.InvalidKeyword)...)
 	res.Diagnostics = dedupeDiagnostics(diags)
 	return res, nil
 }

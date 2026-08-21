@@ -133,6 +133,30 @@ func unusedDiscriminatorDiagnostics(nodes []frontend.UnusedDiscriminator) []plan
 	return diags
 }
 
+// invalidKeywordDiagnostics reports every keyword whose declared value the spec does not
+// admit as a SeverityError: `{"maxLength": 2.5}` is not a valid schema, and the compiler
+// leaves the keyword absent rather than guess a bound, so the author has to be told what
+// stopped being enforced (design §25, issue #74).
+func invalidKeywordDiagnostics(nodes []frontend.InvalidKeyword) []plan.Diagnostic {
+	if len(nodes) == 0 {
+		return nil
+	}
+	diags := make([]plan.Diagnostic, len(nodes))
+	for i, u := range nodes {
+		msg := "`" + u.Keyword + "`"
+		if u.Value != "" {
+			msg += " value " + strconv.Quote(u.Value)
+		}
+		diags[i] = plan.Diagnostic{
+			Pointer:  u.Pointer,
+			Position: u.Position,
+			Severity: plan.SeverityError,
+			Message:  msg + ": " + u.Reason + "; the keyword is ignored",
+		}
+	}
+	return diags
+}
+
 // uninhabitedDiagnostics reports every recursive schema proven to have no finite instance
 // (required self-recursion) as a SeverityWarning: the schema is well-formed and its Go type
 // is representable, but no value inhabits it, so a generator should not emit a dead type
@@ -162,6 +186,17 @@ func maxCapability(a, b plan.CapabilityLevel) plan.CapabilityLevel {
 }
 
 // maxExactness returns the worse (less exact) of two exactness levels (design §24).
+// exactnessWithInvalidKeywords lowers an exactness claim to [plan.SoundOverApproximation]
+// when a keyword was dropped for an invalid value (issue #74): the compiler no longer
+// models what the source text says, and nothing residual rejects the instances the dropped
+// keyword would have, so claiming exactness would be claiming more than is known (§24).
+func exactnessWithInvalidKeywords(observed plan.Exactness, invalid []frontend.InvalidKeyword) plan.Exactness {
+	if len(invalid) == 0 {
+		return observed
+	}
+	return maxExactness(observed, plan.SoundOverApproximation)
+}
+
 func maxExactness(a, b plan.Exactness) plan.Exactness {
 	if b > a {
 		return b

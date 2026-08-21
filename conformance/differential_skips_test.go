@@ -26,6 +26,12 @@ package conformance
 // holds instance data — a `properties`/`patternProperties`/`$defs`/`dependentSchemas` key,
 // or anywhere inside a `const`/`enum` value — stays data.
 //
+// #74 had eight entries and now has none: the eight keywords 2020-12 defines as
+// non-negative integers are read from the source yaml node, so a decimal-spelled integer
+// (`maxLength: 2.0`) reads as its integer value, and a value that is no non-negative
+// integer at all leaves the keyword absent with a diagnostic instead of synthesizing a
+// bound of 0.
+//
 // #95 added four entries: a plan whose representation is `any` and a plan classified
 // PredicateDispatch both used to report SoundOverApproximation, which the oracle exempts,
 // so nothing held them to anything. They report ExactWithValidation now, which made the
@@ -34,21 +40,8 @@ package conformance
 //
 // Counts at the time of writing:
 //
-//	#74    8 instances
 //	#92    1 instances
 var diffSkips = map[string]string{
-	// #74 an integer keyword spelled as a decimal becomes 0. A `max*` bound of 0 rejects
-	// valid instances; the `min*` spelling of the same bug accepts invalid ones, and only
-	// became visible once #95 stopped exempting these plans.
-	"maxContains.json :: maxContains with contains, value with a decimal :: one element matches, valid maxContains":    "#74",
-	"maxItems.json :: maxItems validation with a decimal :: shorter is valid":                                          "#74",
-	"maxLength.json :: maxLength validation with a decimal :: shorter is valid":                                        "#74",
-	"maxProperties.json :: maxProperties validation with a decimal :: shorter is valid":                                "#74",
-	"minContains.json :: minContains=2 with contains with a decimal value :: one element matches, invalid minContains": "#74",
-	"minItems.json :: minItems validation with a decimal :: too short is invalid":                                      "#74",
-	"minLength.json :: minLength validation with a decimal :: too short is invalid":                                    "#74",
-	"minProperties.json :: minProperties validation with a decimal :: too short is invalid":                            "#74",
-
 	// #92 `$vocabulary` is ignored, so a keyword a custom metaschema removes is still
 	// enforced. Uncovered by the #72 fix: the schema's `properties` used to be dropped
 	// whole, so the `minimum` inside it never ran.

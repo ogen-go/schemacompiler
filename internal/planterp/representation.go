@@ -147,8 +147,9 @@ func objectShapeOf(r plan.ObjectRepresentation, f frame) (objectShape, error) {
 
 // object checks an ObjectRepresentation (design §7, §12). Declared fields own their
 // property name; pattern rules and Additional cover the rest. A property covered by a
-// field is not also run through a matching pattern rule: the plan states one storage
-// slot per property, and it is the field.
+// field is not also run through a matching pattern rule: the plan states one storage slot
+// per property, it is the field, and the planner has already intersected every matching
+// pattern schema into that field's own plan (design §12.3).
 func (in *interp) object(r plan.ObjectRepresentation, value any, f frame) (Verdict, error) {
 	shape, err := objectShapeOf(r, f)
 	if err != nil {

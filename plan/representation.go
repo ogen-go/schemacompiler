@@ -31,7 +31,11 @@ type ObjectRepresentation struct {
 	Fields []FieldRepresentation
 	// Additional is the plan for every property no field and no pattern rule covers.
 	// nil means additional properties are not representable as a field.
-	Additional   *CompilationPlan
+	Additional *CompilationPlan
+	// PatternRules cover the property names no Fields entry declares. A declared field
+	// owns its name outright: every `patternProperties` schema whose pattern matches it
+	// is already intersected into that field's own plan (design §12.3), so a value stored
+	// in a field is never also checked against a rule here.
 	PatternRules []PatternFieldRepresentation
 }
 

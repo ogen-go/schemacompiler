@@ -88,15 +88,17 @@ func exactlyModeled(e plan.Exactness) bool {
 // which is stricter than p's own [plan.Exactness] and is what negating it requires.
 //
 // Exactness is computed from a plan's shape, not from what the plan actually enforces, and
-// two constructs make it optimistic today. An object whose keywords were dropped entirely
-// widens to Any while still reporting DirectGoType (#72). And a reference exactness never
-// consults its target, so a reference claims to be exact whatever its target is. Everywhere
-// else those are harmless over-approximations; under a negation each one rejects valid
-// instances (#82).
+// two constructs make it optimistic today. An object or array shape merged out of an
+// applicator lets `additionalProperties`/`items` cover names and indexes they do not
+// really cover, while the plan still reports DirectGoType (#94). And a reference exactness
+// never consults its target, so a reference claims to be exact whatever its target is.
+// Everywhere else those are harmless over-approximations; under a negation each one
+// rejects valid instances (#82).
 //
 // So only plans built from primitives, literals and kinds are negated for now. Object and
-// array representations no longer drop what is inside a field or an item (#68), so
-// widening this is gated on #72 and on reference exactness alone (#82).
+// array representations no longer drop what is inside a field or an item (#68), nor the
+// shape itself when there is no sibling `type` (#72), so widening this is gated on #94 and
+// on reference exactness alone (#82).
 func negatable(p plan.CompilationPlan, operand ir.Expr) bool {
 	if vacuous(p, operand) {
 		return false
@@ -112,8 +114,8 @@ func negatable(p plan.CompilationPlan, operand ir.Expr) bool {
 }
 
 // vacuous reports whether p accepts every instance while operand does not, which proves
-// the sub-builder dropped operand constraints however exact p claims to be (#72).
-// Negating such a plan would reject every instance.
+// the sub-builder dropped operand constraints however exact p claims to be — an
+// unrecognized keyword (#64), say. Negating such a plan would reject every instance.
 //
 // An operand that really is unconstrained is excluded: `not {}` is legitimately Never, and
 // that is the one case where a plan accepting everything is the honest answer.

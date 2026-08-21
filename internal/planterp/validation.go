@@ -110,6 +110,9 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 	case plan.PropertyNamesPredicate:
 		return in.propertyNames(e.Schema, value, f)
 
+	case plan.ShapePredicate:
+		return in.shape(e.Schema, value, f)
+
 	default:
 		return Verdict{}, internalf("unhandled plan.PredicateExpr variant %T", e)
 	}
@@ -293,6 +296,18 @@ func (in *interp) negation(schema plan.CompilationPlan, value any, f frame) (Ver
 		return rejected(f, "not", "the negated schema accepts this instance"), nil
 	}
 	return accepted(), nil
+}
+
+// shape runs a kind-restricted sub-plan against the whole instance. The enclosing
+// [plan.GuardedPredicate] has already decided the instance's kind is in the guard, so the
+// sub-plan's own representation is the one a sibling `type` would have produced
+// (design §3).
+func (in *interp) shape(schema plan.CompilationPlan, value any, f frame) (Verdict, error) {
+	v, err := in.plan(schema, value, f.here())
+	if err != nil || v.Accepted {
+		return v, err
+	}
+	return rejectedBy(f, "shape", "the instance does not match the kind-guarded shape", v.Reason), nil
 }
 
 func (in *interp) propertyNames(schema plan.CompilationPlan, value any, f frame) (Verdict, error) {

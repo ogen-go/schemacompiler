@@ -69,6 +69,9 @@ const (
 	// EdgePropertyNamesSchema links a property-names predicate to the plan each
 	// property name is checked against.
 	EdgePropertyNamesSchema
+	// EdgeShapeSchema links a shape predicate to the plan the instance must satisfy
+	// while its kind is in the guard.
+	EdgeShapeSchema
 )
 
 var edgeKindNames = [...]string{
@@ -93,6 +96,7 @@ var edgeKindNames = [...]string{
 	EdgeContainsSchema:      "contains-schema",
 	EdgeNegationSchema:      "negation-schema",
 	EdgePropertyNamesSchema: "property-names-schema",
+	EdgeShapeSchema:         "shape-schema",
 }
 
 func (k EdgeKind) String() string {

@@ -78,6 +78,7 @@ func Compile(n *frontend.Node) Expr {
 
 	siblings = append(siblings, compileStringKeywords(n)...)
 	siblings = append(siblings, compileNumericKeywords(n)...)
+	siblings = append(siblings, compileFormat(n)...)
 	siblings = append(siblings, compileArrayKeywords(n)...)
 	siblings = append(siblings, compileObjectKeywords(n)...)
 
@@ -141,10 +142,20 @@ func compileStringKeywords(n *frontend.Node) []Expr {
 	if n.Pattern != nil {
 		guard(PatternDetail{Regex: *n.Pattern})
 	}
-	if n.Format != "" {
-		guard(FormatDetail{Format: n.Format})
-	}
 	return out
+}
+
+// compileFormat guards `format` on strings and numbers alike: OpenAPI's numeric
+// formats (int32, double, ...) share the keyword with the string ones, and both
+// influence the representation (plan.Format).
+func compileFormat(n *frontend.Node) []Expr {
+	if n.Format == "" {
+		return nil
+	}
+	return []Expr{Predicate{
+		Guard:  plan.SetString | plan.SetNumber,
+		Detail: FormatDetail{Format: n.Format},
+	}}
 }
 
 func compileNumericKeywords(n *frontend.Node) []Expr {

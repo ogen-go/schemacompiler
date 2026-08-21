@@ -39,6 +39,9 @@ func dumpNode(n *Node, indent string, out *strings.Builder) {
 	if n.HasType {
 		fmt.Fprintf(out, "%s  type=%08b integer=%v\n", indent, n.Types, n.IntegerType)
 	}
+	if n.Format != "" {
+		fmt.Fprintf(out, "%s  format=%q\n", indent, n.Format)
+	}
 	if n.Title != "" {
 		fmt.Fprintf(out, "%s  title=%q\n", indent, n.Title)
 	}

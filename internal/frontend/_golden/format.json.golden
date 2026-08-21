@@ -1,0 +1,23 @@
+Node pointer=""
+  type=00100000 integer=false
+  required=[id]
+  properties["createdAt"]:
+    Node pointer="/properties/createdAt"
+      type=00001000 integer=false
+      format="date-time"
+  properties["id"]:
+    Node pointer="/properties/id"
+      type=00001000 integer=false
+      format="uuid"
+  properties["owner"]:
+    Node pointer="/properties/owner"
+      type=00001000 integer=false
+      format="email"
+  properties["phone"]:
+    Node pointer="/properties/phone"
+      type=00001000 integer=false
+      format="phone-number"
+  properties["size"]:
+    Node pointer="/properties/size"
+      type=00000100 integer=true
+      format="int32"

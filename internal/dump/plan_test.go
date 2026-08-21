@@ -43,3 +43,15 @@ func TestPlan_Enum(t *testing.T) {
 	require.Contains(t, got, `case "green"`)
 	require.Contains(t, got, `case "blue"`)
 }
+
+func TestPlan_Format(t *testing.T) {
+	got := compilePlan(t, `{"type": "string", "format": "date-time"}`)
+	require.Contains(t, got, `Primitive string format="date-time"/representational`)
+	require.Contains(t, got, `Format "date-time"`)
+
+	got = compilePlan(t, `{"type": "string", "format": "email"}`)
+	require.Contains(t, got, `Primitive string format="email"/validation-only`)
+
+	got = compilePlan(t, `{"type": "string", "format": "phone-number"}`)
+	require.Contains(t, got, `Primitive string format="phone-number"/unrecognized`)
+}

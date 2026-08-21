@@ -81,18 +81,18 @@ func TestPlanReachesEveryNestingSite(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
 			Fields: map[string]plan.FieldRepresentation{
-				"f": {Representation: ref("field")},
+				"f": {Plan: plan.CompilationPlan{Representation: ref("field")}},
 			},
-			Additional: ref("additional"),
+			Additional: &plan.CompilationPlan{Representation: ref("additional")},
 			PatternRules: []plan.PatternFieldRepresentation{
-				{Pattern: "^x", Representation: ref("pattern")},
+				{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("pattern")}},
 			},
 		},
 		Dispatch: plan.KindDispatch{Cases: map[plan.JSONKind]plan.CompilationPlan{
 			plan.KindObject: {
 				Representation: plan.ArrayRepresentation{
-					Prefix: []plan.ItemRepresentation{{Representation: ref("prefix")}},
-					Rest:   plan.ItemRepresentation{Representation: ref("rest")},
+					Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: ref("prefix")}}},
+					Rest:   plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: ref("rest")}},
 				},
 				Dispatch: plan.PresenceDispatch{
 					Present: leaf("present"),

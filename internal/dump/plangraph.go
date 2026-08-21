@@ -265,7 +265,7 @@ func representationSummary(r plan.Representation) string {
 	case plan.ObjectRepresentation:
 		var t struct {
 			Fields       map[string]plan.FieldRepresentation
-			Additional   plan.Representation
+			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
 		} = r
 		names := make([]string, 0, len(t.Fields))

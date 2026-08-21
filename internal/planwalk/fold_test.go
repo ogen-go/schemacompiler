@@ -28,8 +28,14 @@ func label(n planwalk.Node) string {
 			s += fmt.Sprintf(":%T", n.Representation)
 		}
 	case planwalk.NodePlan:
-		if r, ok := n.Plan.Representation.(plan.ReferenceRepresentation); ok {
+		switch r := n.Plan.Representation.(type) {
+		case nil:
+		case plan.ReferenceRepresentation:
 			s += ":" + r.Name
+		default:
+			if n.Edge.Kind != planwalk.EdgeRoot {
+				s += fmt.Sprintf(":%T", r)
+			}
 		}
 	case planwalk.NodeDispatch:
 		s += fmt.Sprintf(":%T", n.Dispatch)
@@ -55,37 +61,47 @@ func TestFoldOrderAndEdges(t *testing.T) {
 		{
 			name: "representation tree",
 			plan: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-				Fields:       map[string]plan.FieldRepresentation{"f": {Representation: ref("field")}},
-				Additional:   ref("additional"),
-				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Representation: ref("pattern")}},
+				Fields:       map[string]plan.FieldRepresentation{"f": {Plan: plan.CompilationPlan{Representation: ref("field")}}},
+				Additional:   &plan.CompilationPlan{Representation: ref("additional")},
+				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("pattern")}}},
 			}},
 			want: []string{
 				"root",
 				"representation:plan.ObjectRepresentation",
 				"field:field",
+				"representation:field",
+				"validation",
 				"additional:additional",
+				"representation:additional",
+				"validation",
 				"pattern-rule:pattern",
+				"representation:pattern",
+				"validation",
 				"validation",
 			},
 		},
 		{
 			name: "array and union",
 			plan: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
-				Prefix: []plan.ItemRepresentation{{Representation: plan.UnionRepresentation{
+				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{
 					Alternatives: []plan.Representation{ref("alt0"), ref("alt1")},
-				}}},
-				Rest: plan.ItemRepresentation{Representation: plan.RecursiveRepresentation{
+				}}}},
+				Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.RecursiveRepresentation{
 					Name: "R", Body: ref("body"),
-				}},
+				}}},
 			}},
 			want: []string{
 				"root",
 				"representation:plan.ArrayRepresentation",
 				"prefix-item:plan.UnionRepresentation",
+				"representation:plan.UnionRepresentation",
 				"alternative:alt0",
 				"alternative:alt1",
+				"validation",
 				"rest-item:plan.RecursiveRepresentation",
+				"representation:plan.RecursiveRepresentation",
 				"recursive-body:body",
+				"validation",
 				"validation",
 			},
 		},
@@ -205,11 +221,11 @@ func TestFoldEdgePayload(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
 			Fields: map[string]plan.FieldRepresentation{
-				"f": {Representation: ref("field"), Presence: plan.PresenceRequired, Nullable: true},
+				"f": {Plan: plan.CompilationPlan{Representation: ref("field")}, Presence: plan.PresenceRequired, Nullable: true},
 			},
 			PatternRules: []plan.PatternFieldRepresentation{
-				{Pattern: "^x", Representation: ref("p0")},
-				{Pattern: "^y", Representation: ref("p1")},
+				{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("p0")}},
+				{Pattern: "^y", Plan: plan.CompilationPlan{Representation: ref("p1")}},
 			},
 		},
 		Dispatch: plan.PropertyDispatch{
@@ -260,9 +276,9 @@ func TestFoldEveryEdgeKindIsReachable(t *testing.T) {
 	plans := []plan.CompilationPlan{
 		{
 			Representation: plan.ObjectRepresentation{
-				Fields:       map[string]plan.FieldRepresentation{"f": {Representation: ref("f")}},
-				Additional:   ref("a"),
-				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Representation: ref("p")}},
+				Fields:       map[string]plan.FieldRepresentation{"f": {Plan: plan.CompilationPlan{Representation: ref("f")}}},
+				Additional:   &plan.CompilationPlan{Representation: ref("a")},
+				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("p")}}},
 			},
 			Dispatch: plan.KindDispatch{Cases: map[plan.JSONKind]plan.CompilationPlan{plan.KindObject: leaf("k")}},
 			Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
@@ -273,10 +289,10 @@ func TestFoldEveryEdgeKindIsReachable(t *testing.T) {
 		},
 		{
 			Representation: plan.ArrayRepresentation{
-				Prefix: []plan.ItemRepresentation{{Representation: plan.UnionRepresentation{
+				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{
 					Alternatives: []plan.Representation{plan.RecursiveRepresentation{Name: "R", Body: ref("b")}},
-				}}},
-				Rest: plan.ItemRepresentation{Representation: ref("rest")},
+				}}}},
+				Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: ref("rest")}},
 			},
 			Dispatch: plan.LiteralDispatch{Cases: []plan.LiteralCase{{Value: 1, Plan: leaf("l")}}},
 		},
@@ -316,7 +332,7 @@ func TestFoldSkipOmitsExactlyTheSubtree(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{
 			plan.ObjectRepresentation{Fields: map[string]plan.FieldRepresentation{
-				"deep": {Representation: ref("deep")},
+				"deep": {Plan: plan.CompilationPlan{Representation: ref("deep")}},
 			}},
 			ref("sibling"),
 		}},
@@ -338,14 +354,14 @@ func TestFoldSkipOmitsExactlyTheSubtree(t *testing.T) {
 	require.NotContains(t, skipped, "field:deep")
 	require.Contains(t, skipped, "alternative:sibling", "skip must continue with the next sibling")
 	require.Contains(t, skipped, "count-branch:branch", "skip must not end the walk")
-	require.Equal(t, len(full)-1, len(skipped), "skip must omit the subtree and nothing else")
+	require.Equal(t, len(full)-3, len(skipped), "skip must omit the subtree and nothing else")
 }
 
 func TestFoldStopEndsTheWalkImmediately(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{
 			plan.ObjectRepresentation{Fields: map[string]plan.FieldRepresentation{
-				"stop": {Representation: ref("stop-here")},
+				"stop": {Plan: plan.CompilationPlan{Representation: ref("stop-here")}},
 			}},
 			ref("never-1"),
 		}},
@@ -370,8 +386,9 @@ func TestFoldStopEndsTheWalkImmediately(t *testing.T) {
 		"representation:plan.UnionRepresentation",
 		"alternative:plan.ObjectRepresentation",
 		"field:stop-here",
+		"representation:stop-here",
 	}, got)
-	require.Equal(t, 4, visits, "no node may be visited after Stop")
+	require.Equal(t, 5, visits, "no node may be visited after Stop")
 }
 
 func TestFoldStopAtRoot(t *testing.T) {
@@ -391,9 +408,9 @@ func TestFoldStopAtRoot(t *testing.T) {
 func TestChildrenIsOneLevel(t *testing.T) {
 	obj := plan.ObjectRepresentation{
 		Fields: map[string]plan.FieldRepresentation{
-			"f": {Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{ref("nested")}}},
+			"f": {Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{ref("nested")}}}},
 		},
-		Additional: ref("additional"),
+		Additional: &plan.CompilationPlan{Representation: ref("additional")},
 	}
 
 	var got []string

@@ -84,7 +84,7 @@ func TestCompile_NestedFieldMetadata(t *testing.T) {
 		}
 	}`))
 
-	nested, ok := fields["nested"].Representation.(plan.ObjectRepresentation)
+	nested, ok := fields["nested"].Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok)
 	require.Equal(t, "Inner", nested.Fields["inner"].Metadata.Title)
 }
@@ -110,8 +110,8 @@ func TestCompile_ArrayItemMetadata(t *testing.T) {
 	}`)
 	arr, ok := p.Representation.(plan.ArrayRepresentation)
 	require.True(t, ok, "got %T", p.Representation)
-	obj, ok := arr.Rest.Representation.(plan.ObjectRepresentation)
-	require.True(t, ok, "got %T", arr.Rest.Representation)
+	obj, ok := arr.Rest.Plan.Representation.(plan.ObjectRepresentation)
+	require.True(t, ok, "got %T", arr.Rest.Plan.Representation)
 	require.Equal(t, map[string]any{"x-tag": "t"}, obj.Fields["a"].Metadata.Extensions)
 }
 

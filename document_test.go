@@ -39,8 +39,8 @@ func TestCompileRefDefinitions(t *testing.T) {
 	require.True(t, ok, "root should be an object, got %T", res.Plan.Representation)
 	child, ok := obj.Fields["child"]
 	require.True(t, ok, "root should have a child field")
-	ref, ok := child.Representation.(plan.ReferenceRepresentation)
-	require.True(t, ok, "child should be a reference, got %T", child.Representation)
+	ref, ok := child.Plan.Representation.(plan.ReferenceRepresentation)
+	require.True(t, ok, "child should be a reference, got %T", child.Plan.Representation)
 	_, inGraph := graph.Definitions[plan.SchemaID(ref.Name)]
 	require.True(t, inGraph, "child ref %q must resolve to a definition", ref.Name)
 }

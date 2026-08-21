@@ -26,16 +26,19 @@ type PrimitiveRepresentation struct {
 
 // ObjectRepresentation is a struct/map-like shape (design §7, §12).
 type ObjectRepresentation struct {
-	Fields       map[string]FieldRepresentation
-	Additional   Representation // nil means additional properties are not representable as a field
+	Fields map[string]FieldRepresentation
+	// Additional is the plan for every property no field and no pattern rule covers.
+	// nil means additional properties are not representable as a field.
+	Additional   *CompilationPlan
 	PatternRules []PatternFieldRepresentation
 }
 
-// PatternFieldRepresentation maps a property-name pattern to a value representation.
+// PatternFieldRepresentation maps a property-name pattern to the plan of the values
+// stored under it.
 type PatternFieldRepresentation struct {
-	Pattern        string
-	Representation Representation
-	Metadata       Metadata
+	Pattern  string
+	Plan     CompilationPlan
+	Metadata Metadata
 }
 
 // PresenceMode captures whether a field must be present (design §7.1, §12.2).
@@ -50,25 +53,29 @@ const (
 
 // FieldRepresentation is one object field. Presence and Nullable are independent
 // (design §7.1): absent, present-null, and present-value are three distinct states.
+//
+// Plan is the field value's whole compilation plan, not just its shape: a sub-schema's
+// validation and dispatch belong to the property they were written on, and a slot that
+// could only hold a [Representation] would drop them (issue #68).
 type FieldRepresentation struct {
-	Representation Representation
-	Presence       PresenceMode
-	Nullable       bool
-	Metadata       Metadata
+	Plan     CompilationPlan
+	Presence PresenceMode
+	Nullable bool
+	Metadata Metadata
 }
 
-// ItemRepresentation is one array position: its value representation plus the
+// ItemRepresentation is one array position: the plan of the values stored there plus the
 // annotations of the sub-schema it came from.
 type ItemRepresentation struct {
-	Representation Representation
-	Metadata       Metadata
+	Plan     CompilationPlan
+	Metadata Metadata
 }
 
 // ArrayRepresentation is a tuple prefix plus a homogeneous rest (design §13).
 type ArrayRepresentation struct {
 	Prefix []ItemRepresentation
-	// Rest describes items beyond the prefix; a nil Rest.Representation means there are
-	// none.
+	// Rest describes items beyond the prefix; a nil Rest.Plan.Representation means
+	// there are none.
 	Rest ItemRepresentation
 }
 

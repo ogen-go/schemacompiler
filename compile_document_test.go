@@ -69,8 +69,8 @@ func TestCompileDocument(t *testing.T) {
 	require.True(t, ok, "Node should be an object, got %T", node.Representation)
 	field, ok := obj.Fields["pet"]
 	require.True(t, ok)
-	ref, ok := field.Representation.(plan.ReferenceRepresentation)
-	require.True(t, ok, "pet should be a reference, got %T", field.Representation)
+	ref, ok := field.Plan.Representation.(plan.ReferenceRepresentation)
+	require.True(t, ok, "pet should be a reference, got %T", field.Plan.Representation)
 	_, inDoc := res.Plans[plan.SchemaID(ref.Name)]
 	require.True(t, inDoc, "reference %q must name a compiled plan", ref.Name)
 }

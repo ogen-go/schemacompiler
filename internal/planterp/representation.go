@@ -74,39 +74,40 @@ func (in *interp) primitive(r plan.PrimitiveRepresentation, value any, f frame) 
 }
 
 // objectShape is an [plan.ObjectRepresentation] as the instance-directed pass needs it:
-// the declared fields by name, the shape covering everything else, and the pattern rules
+// the declared fields by name, the plan covering everything else, and the pattern rules
 // in plan order. It is assembled from the representation's [planwalk.Edge]-labeled
 // children rather than from its fields.
 type objectShape struct {
 	fields     map[string]objectField
-	additional plan.Representation
+	additional *plan.CompilationPlan
 	patterns   []patternRule
 }
 
 type objectField struct {
-	representation plan.Representation
-	presence       plan.PresenceMode
-	nullable       bool
+	plan     plan.CompilationPlan
+	presence plan.PresenceMode
+	nullable bool
 }
 
 type patternRule struct {
-	pattern        string
-	representation plan.Representation
+	pattern string
+	plan    plan.CompilationPlan
 }
 
-// objectShapeOf reads the representation's children, having first checked the slots
-// [planwalk.Children] would silently drop. Only Additional documents a nil
-// Representation as meaningful; a nil anywhere else is malformed plan data, and dropping
-// it would narrow the accepted set, which is the one direction design §24 forbids.
+// objectShapeOf reads the representation's children, having first checked the slots that
+// carry no representation at all. Only Additional documents an absent slot as meaningful;
+// a plan without a representation anywhere else is malformed plan data, and interpreting
+// it would constrain nothing - widening the accepted set silently, where design §24 wants
+// a loud failure.
 func objectShapeOf(r plan.ObjectRepresentation, f frame) (objectShape, error) {
 	for name, field := range r.Fields {
-		if field.Representation == nil {
+		if field.Plan.Representation == nil {
 			return objectShape{}, internalf("field %q at %s has no representation",
 				name, instanceLocation(f))
 		}
 	}
 	for i, rule := range r.PatternRules {
-		if rule.Representation == nil {
+		if rule.Plan.Representation == nil {
 			return objectShape{}, internalf("pattern rule %d (%q) at %s has no representation",
 				i, rule.Pattern, instanceLocation(f))
 		}
@@ -117,16 +118,17 @@ func objectShapeOf(r plan.ObjectRepresentation, f frame) (objectShape, error) {
 		switch c.Edge.Kind {
 		case planwalk.EdgeField:
 			shape.fields[c.Edge.Name] = objectField{
-				representation: c.Representation,
-				presence:       c.Edge.Presence,
-				nullable:       c.Edge.Nullable,
+				plan:     c.Plan,
+				presence: c.Edge.Presence,
+				nullable: c.Edge.Nullable,
 			}
 		case planwalk.EdgeAdditional:
-			shape.additional = c.Representation
+			additional := c.Plan
+			shape.additional = &additional
 		case planwalk.EdgePatternRule:
 			shape.patterns = append(shape.patterns, patternRule{
-				pattern:        c.Edge.Name,
-				representation: c.Representation,
+				pattern: c.Edge.Name,
+				plan:    c.Plan,
 			})
 		default:
 			return objectShape{}, internalf("unhandled object representation child edge %s", c.Edge.Kind)
@@ -178,7 +180,7 @@ func (in *interp) object(r plan.ObjectRepresentation, value any, f frame) (Verdi
 			// storage, not about validity, so it cannot reject on its own.
 			continue
 		}
-		v, err = in.representation(shape.additional, pv, f.descend(name))
+		v, err = in.plan(*shape.additional, pv, f.descend(name))
 		if err != nil {
 			return Verdict{}, err
 		}
@@ -198,15 +200,19 @@ func (in *interp) field(name string, field objectField, obj map[string]any, f fr
 		case plan.PresenceRequired:
 			return rejected(at, "field", "required but absent"), nil
 		case plan.PresenceOptional:
+			// An absent property has no value for the field's plan to check: the plan
+			// constrains what is stored there, not whether anything is.
 			return accepted(), nil
 		default:
 			return Verdict{}, internalf("unhandled plan.PresenceMode %d", field.presence)
 		}
 	}
 	if fv == nil && field.nullable {
+		// Nullability is carried by the field, not by its plan: the planner strips null
+		// out of the field's own expression (design §7.1).
 		return accepted(), nil
 	}
-	v, err := in.representation(field.representation, fv, at)
+	v, err := in.plan(field.plan, fv, at)
 	if err != nil {
 		return Verdict{}, err
 	}
@@ -225,7 +231,7 @@ func (in *interp) patternRules(rules []patternRule, name string, value any, f fr
 			continue
 		}
 		matched = true
-		v, err := in.representation(rule.representation, value, f.descend(name))
+		v, err := in.plan(rule.plan, value, f.descend(name))
 		if err != nil {
 			return false, Verdict{}, err
 		}
@@ -238,7 +244,7 @@ func (in *interp) patternRules(rules []patternRule, name string, value any, f fr
 }
 
 // array stays on the representation's own fields rather than on [planwalk.Children]:
-// the traversal drops a slot whose Representation is nil, which would hide both the
+// the traversal drops a Rest slot carrying no representation, which would hide both the
 // tuple's length and the malformed-prefix check below.
 func (in *interp) array(r plan.ArrayRepresentation, value any, f frame) (Verdict, error) {
 	items, ok := value.([]any)
@@ -256,16 +262,16 @@ func (in *interp) array(r plan.ArrayRepresentation, value any, f frame) (Verdict
 			slot = r.Prefix[i]
 		}
 		at := f.descend(strconv.Itoa(i))
-		if slot.Representation == nil {
+		if slot.Plan.Representation == nil {
 			if i < len(r.Prefix) {
 				return Verdict{}, internalf("prefix item %d at %s has no representation",
 					i, instanceLocation(f))
 			}
-			// A nil Rest.Representation means there are no items past the prefix
+			// A nil Rest.Plan.Representation means there are no items past the prefix
 			// (plan.ArrayRepresentation's contract).
 			return rejected(at, "array", "item is past the tuple prefix"), nil
 		}
-		v, err := in.representation(slot.Representation, item, at)
+		v, err := in.plan(slot.Plan, item, at)
 		if err != nil {
 			return Verdict{}, err
 		}

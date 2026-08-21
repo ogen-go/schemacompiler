@@ -32,7 +32,7 @@ func TestNilRepresentationSlots(t *testing.T) {
 			name: "documented nil Additional cannot reject",
 			rep: plan.ObjectRepresentation{
 				Fields: map[string]plan.FieldRepresentation{
-					"a": {Representation: strRep, Presence: plan.PresenceOptional},
+					"a": {Plan: plan.CompilationPlan{Representation: strRep}, Presence: plan.PresenceOptional},
 				},
 			},
 			value:  map[string]any{"b": 1.0},
@@ -40,7 +40,7 @@ func TestNilRepresentationSlots(t *testing.T) {
 		},
 		{
 			name:   "documented nil Rest rejects items past the prefix",
-			rep:    plan.ArrayRepresentation{Prefix: []plan.ItemRepresentation{{Representation: strRep}}},
+			rep:    plan.ArrayRepresentation{Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: strRep}}}},
 			value:  []any{"a", "b"},
 			accept: false,
 		},
@@ -54,7 +54,7 @@ func TestNilRepresentationSlots(t *testing.T) {
 			name: "nil field representation",
 			rep: plan.ObjectRepresentation{
 				Fields:     map[string]plan.FieldRepresentation{"a": {Presence: plan.PresenceRequired}},
-				Additional: plan.AnyRepresentation{},
+				Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 			},
 			value:    map[string]any{},
 			internal: `planterp: field "a" at the instance root has no representation`,
@@ -63,7 +63,7 @@ func TestNilRepresentationSlots(t *testing.T) {
 			name: "nil pattern rule representation",
 			rep: plan.ObjectRepresentation{
 				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^a"}},
-				Additional:   plan.AnyRepresentation{},
+				Additional:   &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 			},
 			value:    map[string]any{"ab": 1.0},
 			internal: `planterp: pattern rule 0 ("^a") at the instance root has no representation`,
@@ -101,9 +101,9 @@ func TestNilRepresentationSlots(t *testing.T) {
 // plan node is reached once per sub-value, so the path is what makes it findable.
 func TestNilSlotLocationIsReported(t *testing.T) {
 	p := plan.CompilationPlan{Representation: plan.ArrayRepresentation{
-		Rest: plan.ItemRepresentation{Representation: plan.UnionRepresentation{
+		Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{
 			Alternatives: []plan.Representation{nil},
-		}},
+		}}},
 	}}
 	_, err := planterp.Interpret(p, []any{"a", "b"})
 

@@ -51,16 +51,16 @@ func runCases(t *testing.T, cases []interpCase) {
 func TestRepresentation(t *testing.T) {
 	object := plan.ObjectRepresentation{
 		Fields: map[string]plan.FieldRepresentation{
-			"req":  {Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}, Presence: plan.PresenceRequired},
-			"opt":  {Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}, Presence: plan.PresenceOptional},
-			"null": {Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}, Nullable: true, Presence: plan.PresenceOptional},
+			"req":  {Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}, Presence: plan.PresenceRequired},
+			"opt":  {Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}, Presence: plan.PresenceOptional},
+			"null": {Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}, Nullable: true, Presence: plan.PresenceOptional},
 		},
-		Additional:   plan.NeverRepresentation{},
-		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x-", Representation: plan.PrimitiveRepresentation{Kind: plan.KindNumber}}},
+		Additional:   &plan.CompilationPlan{Representation: plan.NeverRepresentation{}},
+		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x-", Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindNumber}}}},
 	}
 	array := plan.ArrayRepresentation{
-		Prefix: []plan.ItemRepresentation{{Representation: plan.PrimitiveRepresentation{Kind: plan.KindBoolean}}},
-		Rest:   plan.ItemRepresentation{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
+		Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindBoolean}}}},
+		Rest:   plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}},
 	}
 
 	runCases(t, []interpCase{
@@ -99,7 +99,7 @@ func TestRepresentation(t *testing.T) {
 		{
 			name: "array with no rest rejects items past the prefix",
 			plan: leaf(plan.ArrayRepresentation{
-				Prefix: []plan.ItemRepresentation{{Representation: plan.AnyRepresentation{}}},
+				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.AnyRepresentation{}}}},
 			}),
 			value: `[1,2]`,
 		},
@@ -124,7 +124,7 @@ func TestRepresentation(t *testing.T) {
 			plan: leaf(plan.RecursiveRepresentation{
 				Name: "node",
 				Body: plan.ArrayRepresentation{
-					Rest: plan.ItemRepresentation{Representation: plan.ReferenceRepresentation{Name: "node"}},
+					Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "node"}}},
 				},
 			}),
 			value:  `[[[]]]`,
@@ -178,7 +178,7 @@ func TestReference(t *testing.T) {
 			Representation: plan.ReferenceRepresentation{Name: "#/$defs/list"},
 			Resolution: plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
 				"#/$defs/list": leaf(plan.ArrayRepresentation{
-					Rest: plan.ItemRepresentation{Representation: plan.ReferenceRepresentation{Name: "#/$defs/list"}},
+					Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "#/$defs/list"}}},
 				}),
 			}},
 		}
@@ -208,14 +208,14 @@ func TestDispatch(t *testing.T) {
 		Cases: []plan.LiteralCase{{
 			Value: "cat",
 			Plan: leaf(plan.ObjectRepresentation{
-				Fields:     map[string]plan.FieldRepresentation{"purrs": {Representation: plan.PrimitiveRepresentation{Kind: plan.KindBoolean}}},
-				Additional: plan.AnyRepresentation{},
+				Fields:     map[string]plan.FieldRepresentation{"purrs": {Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindBoolean}}}},
+				Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 			}),
 		}},
 	})
 	presenceDispatch := withDispatch(plan.PresenceDispatch{
 		Property: "a",
-		Present:  leaf(plan.ObjectRepresentation{Fields: map[string]plan.FieldRepresentation{"b": {Presence: plan.PresenceRequired, Representation: plan.AnyRepresentation{}}}, Additional: plan.AnyRepresentation{}}),
+		Present:  leaf(plan.ObjectRepresentation{Fields: map[string]plan.FieldRepresentation{"b": {Presence: plan.PresenceRequired, Plan: plan.CompilationPlan{Representation: plan.AnyRepresentation{}}}}, Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}}}),
 		Absent:   leaf(plan.AnyRepresentation{}),
 	})
 	countDispatch := func(minimum, maximum int) plan.CompilationPlan {

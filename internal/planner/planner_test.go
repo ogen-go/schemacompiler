@@ -241,12 +241,12 @@ func TestBuild_ThreeStatePresenceAndNullable(t *testing.T) {
 	a := obj.Fields["a"]
 	require.Equal(t, plan.PresenceRequired, a.Presence)
 	require.True(t, a.Nullable)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, a.Representation)
+	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, a.Plan.Representation)
 
 	b := obj.Fields["b"]
 	require.Equal(t, plan.PresenceOptional, b.Presence)
 	require.False(t, b.Nullable)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, b.Representation)
+	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, b.Plan.Representation)
 }
 
 func TestBuild_TaggedUnionPropertyDispatch(t *testing.T) {
@@ -519,7 +519,8 @@ func TestBuild_ObjectRepresentation_AdditionalPropertiesFalse(t *testing.T) {
 
 	obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok)
-	require.Equal(t, plan.NeverRepresentation{}, obj.Additional)
+	require.NotNil(t, obj.Additional)
+	require.Equal(t, plan.NeverRepresentation{}, obj.Additional.Representation)
 }
 
 func TestBuild_ArrayRepresentation_PrefixAndRest(t *testing.T) {
@@ -537,8 +538,8 @@ func TestBuild_ArrayRepresentation_PrefixAndRest(t *testing.T) {
 	arr, ok := got.Plan.Representation.(plan.ArrayRepresentation)
 	require.True(t, ok)
 	require.Len(t, arr.Prefix, 1)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, arr.Prefix[0].Representation)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindNumber}, arr.Rest.Representation)
+	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, arr.Prefix[0].Plan.Representation)
+	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindNumber}, arr.Rest.Plan.Representation)
 }
 
 func TestBuild_Never(t *testing.T) {

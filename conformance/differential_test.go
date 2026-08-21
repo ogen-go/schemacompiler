@@ -99,6 +99,10 @@ type diffTally struct {
 	// outOfDialect counts the schemas skipped per [outOfDialect] reason.
 	outOfDialect map[string]int
 	failures     map[verdictKind]int
+	// bandFailures counts the disagreements inside the skipped
+	// Exactness == UnsupportedConversion band. They are reported, never failed on: the
+	// line exists so the cost of skipping the band cannot silently grow.
+	bandFailures map[verdictKind]int
 	quarantined  int
 	unusedSkips  []string
 }
@@ -119,6 +123,7 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 		files:        len(files),
 		outOfDialect: map[string]int{},
 		failures:     map[verdictKind]int{},
+		bandFailures: map[verdictKind]int{},
 	}
 	seen := map[string]bool{}
 	var findings []string
@@ -156,7 +161,17 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 				tally.unsupportedCapability++
 				continue
 			case res.Exactness == plan.UnsupportedConversion:
+				// These plans convert to nothing at all, so no backend reaches an
+				// instance through them (docs/integration.md §6) and the oracle has
+				// nothing to hold them to. The band is still interpreted, and what it
+				// costs is reported on its own tally line rather than assumed: at the
+				// time of writing it hides 4 rejected-valid instances, all in
+				// unevaluatedProperties.json, all attributable to #5 (unevaluated* is
+				// unimplemented, which is why these plans are UnsupportedConversion in
+				// the first place), and no accepted-invalid-while-exact at all. Keeping
+				// the line means that cost tracks the compiler instead of going stale.
 				tally.unsupportedExactness++
+				bandCost(t, res, c.Tests, tally.bandFailures)
 				continue
 			}
 
@@ -301,6 +316,23 @@ func reportTally(t *testing.T, tally diffTally) {
 		t.Logf("  %-48s %d", kind, tally.failures[kind])
 	}
 	t.Logf("quarantined by diffSkips: %d (entries %d)", tally.quarantined, len(diffSkips))
+	t.Logf("disagreements inside the skipped exactness=UnsupportedConversion band (reported, not failures):")
+	for _, kind := range []verdictKind{verdictRejectedValid, verdictAcceptedInvalid, verdictInterpError} {
+		t.Logf("  %-48s %d", kind, tally.bandFailures[kind])
+	}
+}
+
+// bandCost interprets the instances of a plan the oracle skips, tallying the verdicts
+// without failing on them, so the price of the skip is a number in the report rather
+// than an assumption in a comment.
+func bandCost(t *testing.T, res *schemacompiler.Result, instances []diffInstance, into map[verdictKind]int) {
+	t.Helper()
+
+	for _, inst := range instances {
+		if kind, _ := judge(t, res, inst); kind != verdictOK && kind != verdictApproximated {
+			into[kind]++
+		}
+	}
 }
 
 func outOfDialectTotal(tally diffTally) int {

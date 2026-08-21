@@ -28,6 +28,9 @@ type Document struct {
 	Unresolved []UnresolvedRef
 	// IgnoredNullable lists every inert `nullable: true` (see [Schema.IgnoredNullable]).
 	IgnoredNullable []IgnoredNullable
+	// UnusedDiscriminator lists every `discriminator` that names no union to dispatch on
+	// (see [Schema.UnusedDiscriminator]).
+	UnusedDiscriminator []UnusedDiscriminator
 	// Uninhabited lists recursive schemas proven to have no finite JSON instance.
 	Uninhabited []UninhabitedNode
 }
@@ -69,6 +72,7 @@ func FromLibOpenAPIDocument(ctx context.Context, schemas *orderedmap.Map[string,
 	out.Unresolved = st.unresolved
 	out.Uninhabited = st.reg.uninhabited
 	out.IgnoredNullable = st.ignoredNullable
+	out.UnusedDiscriminator = st.unusedDiscriminator
 	return out, nil
 }
 
@@ -105,6 +109,7 @@ func FromLibOpenAPIProxy(ctx context.Context, sp *base.SchemaProxy, baseURI stri
 		Unresolved:  st.unresolved,
 		Uninhabited: st.reg.uninhabited,
 
-		IgnoredNullable: st.ignoredNullable,
+		IgnoredNullable:     st.ignoredNullable,
+		UnusedDiscriminator: st.unusedDiscriminator,
 	}, nil
 }

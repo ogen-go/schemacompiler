@@ -35,6 +35,8 @@ type Schema struct {
 	// IgnoredNullable lists every `nullable: true` OAS 3.0.3 leaves inert for want of a
 	// sibling `type`.
 	IgnoredNullable []IgnoredNullable
+	// UnusedDiscriminator lists every `discriminator` that names no union to dispatch on.
+	UnusedDiscriminator []UnusedDiscriminator
 }
 
 // IgnoredNullable records an OpenAPI 3.0 `nullable: true` that had no effect: OAS 3.0.3
@@ -45,6 +47,21 @@ type IgnoredNullable struct {
 	Pointer string
 	// Position is the source location of that schema.
 	Position plan.Position
+}
+
+// UnusedDiscriminator records an OpenAPI `discriminator` declared where the compiler has
+// no union to dispatch on (issue #46). OAS 3.0.3 line 2705 makes the keyword legal only
+// alongside `oneOf`, `anyOf` or `allOf`; only the first two name the alternatives, so an
+// `allOf` declaration (the parent-schema idiom of line 2761, whose alternatives are the
+// schemas elsewhere in the document that include the parent) and a declaration with no
+// composite keyword at all are both recorded here rather than dropped silently.
+type UnusedDiscriminator struct {
+	// Pointer is the JSON Pointer to the schema that declared `discriminator`.
+	Pointer string
+	// Position is the source location of that schema.
+	Position plan.Position
+	// PropertyName is the declared `propertyName`.
+	PropertyName string
 }
 
 // UninhabitedNode records a recursive schema with no finite instance (issue #8).

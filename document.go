@@ -1,6 +1,8 @@
 package schemacompiler
 
 import (
+	"strconv"
+
 	"github.com/ogen-go/schemacompiler/internal/frontend"
 	"github.com/ogen-go/schemacompiler/internal/ir"
 	"github.com/ogen-go/schemacompiler/internal/norm"
@@ -101,6 +103,31 @@ func ignoredNullableDiagnostics(nodes []frontend.IgnoredNullable) []plan.Diagnos
 			Severity: plan.SeverityWarning,
 			Message: "ignoring `nullable: true`: OAS 3.0.3 adds null to the `type` keyword " +
 				"only if `type` is declared in the same Schema Object; spell it `type: [T, \"null\"]`",
+		}
+	}
+	return diags
+}
+
+// unusedDiscriminatorDiagnostics reports every `discriminator` that named no union to
+// dispatch on as a SeverityWarning (issue #46). Both spellings compile — the schema is
+// well-formed either way — but the author asked for a tagged union and did not get one, so
+// silence would leave them guessing.
+func unusedDiscriminatorDiagnostics(nodes []frontend.UnusedDiscriminator) []plan.Diagnostic {
+	if len(nodes) == 0 {
+		return nil
+	}
+	diags := make([]plan.Diagnostic, len(nodes))
+	for i, u := range nodes {
+		diags[i] = plan.Diagnostic{
+			Pointer:  u.Pointer,
+			Position: u.Position,
+			Severity: plan.SeverityWarning,
+			Message: "`discriminator` does not produce a tagged union here: only a sibling " +
+				"`oneOf` or `anyOf` lists the alternatives in place. OAS 3.0.3 line 2761 also " +
+				"lets a parent schema carry it and draws the alternatives from every schema " +
+				"that includes the parent via `allOf`, which needs a document-wide reverse " +
+				"lookup this version does not perform; spell the union as a sibling `oneOf` " +
+				"to dispatch on " + strconv.Quote(u.PropertyName),
 		}
 	}
 	return diags

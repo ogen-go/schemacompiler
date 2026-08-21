@@ -145,19 +145,6 @@ func compileStringKeywords(n *frontend.Node) []Expr {
 	return out
 }
 
-// compileFormat guards `format` on strings and numbers alike: OpenAPI's numeric
-// formats (int32, double, ...) share the keyword with the string ones, and both
-// influence the representation (plan.Format).
-func compileFormat(n *frontend.Node) []Expr {
-	if n.Format == "" {
-		return nil
-	}
-	return []Expr{Predicate{
-		Guard:  plan.SetString | plan.SetNumber,
-		Detail: FormatDetail{Format: n.Format},
-	}}
-}
-
 func compileNumericKeywords(n *frontend.Node) []Expr {
 	var out []Expr
 	guard := func(detail PredicateDetail) {

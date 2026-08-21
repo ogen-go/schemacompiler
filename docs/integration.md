@@ -24,7 +24,7 @@ KindGeneric, KindSum, KindAny, KindStream`.
 |---|---|---|
 | `AnyRepresentation` | `KindAny` | Backend's "unknown JSON value" (`json.RawMessage`-like). |
 | `NeverRepresentation` | — | No instance is ever valid; ogen has no direct analog. The generator should refuse (emit a diagnostic) rather than invent an uninhabited type, unless the containing context (e.g. an unreachable union branch) can simply omit it. |
-| `PrimitiveRepresentation{Kind, Numeric, Format}` | `KindPrimitive` | `Numeric == IntegerOnly` selects an integer Go type (`int64`/`int32`); `NonIntegerOnly`/`AnyNumber` select `float64`. `Format` refines that choice: see §1.1. |
+| `PrimitiveRepresentation{Kind, Numeric, Format}` | `KindPrimitive` | `Numeric == IntegerOnly` selects an integer Go type (`int64`/`int32`); `NonIntegerOnly`/`AnyNumber` select `float64`. `Format` is the raw `format` name the backend may refine that choice with: see §1.1. |
 | `ObjectRepresentation{Fields, Additional, PatternRules}` | `KindStruct` (+ `KindMap` when `Additional`/`PatternRules` dominate and there are no named `Fields`) | See §2 for `FieldRepresentation` → field generics. `PatternRules` has no first-class ogen construct today; the generator would need a custom map-with-pattern-validation field, or fall back to `KindMap` plus a residual `PatternPredicate` in `ValidationPlan` (soundness-preserving over-approximation, design §24). |
 | `ArrayRepresentation{Prefix, Rest}` | `KindArray` when `Prefix` is empty; a tuple-as-struct (`KindStruct` with positional fields) when `Prefix` is non-empty, following ogen's existing `prefixItems` tuple lowering | `Rest == nil` (no additional items) has no first-class ogen fixed-length-array kind; treat as a tuple struct with a validated length instead of relying on a fixed-size Go array. |
 | `UnionRepresentation{Alternatives}` | `KindSum` | Paired with a `plan.DispatchPlan` (see §3) to fill `SumSpec`. |
@@ -34,31 +34,44 @@ KindGeneric, KindSum, KindAny, KindStream`.
 
 ### 1.1. `format` → Go type
 
-`plan.Format{Name, Class}` carries the `format` keyword onto the representation, so a
-backend can pick a Go type without re-reading the validation plan. The compiler
-classifies the name and stops there — it does not name Go types:
+`PrimitiveRepresentation.Format` carries the `format` keyword onto the representation as
+a plain name, exactly as written. The compiler assigns it no meaning: in JSON Schema
+2020-12 `format` is an annotation (the standard dialect includes `format-annotation`;
+assertion behavior requires opting into `format-assertion`), and design §3 lists it only
+as a kind-guarded validation keyword, with no representation role anywhere in the
+document. Choosing a Go type for a name is therefore a backend decision.
 
-| `FormatClass` | Meaning | ogen |
-|---|---|---|
-| `FormatNone` | No `format`. | Type from `Kind`/`Numeric` alone. |
-| `FormatValidationOnly` | The format restricts which instances are accepted, but the value is still the primitive itself (`email`, `hostname`, `uri`, `uri-reference`, `uri-template`, `iri`, `iri-reference`, `idn-email`, `idn-hostname`, `json-pointer`, `relative-json-pointer`, `regex`, `password`). | Keep `string`, emit the residual validator. |
-| `FormatRepresentational` | The format names a value domain outside the JSON lexical space, with a canonical in-memory form (`date-time`, `date`, `time`, `duration`, `uuid`, `ipv4`, `ipv6`, `byte`, `binary`, `int32`, `int64`, `float`, `double`, `decimal`). | `time.Time`, `uuid.UUID`, `netip.Addr`, `[]byte`, `int32`/`int64`/`float32`/`float64`, `Validators.Decimal`. |
-| `FormatUnrecognized` | The compiler assigns no meaning to the name. | Backend's own mapping (e.g. `x-ogen-type`), else the base primitive plus the residual validator. |
+What a backend *may* do with the name — these are ogen's own mappings, not claims the
+plan makes:
 
-The dividing line is whether decoding the instance yields a value the primitive cannot
-hold losslessly. A `uri` is still a string once parsed; a `date-time` is not.
+| Format name | ogen may generate |
+|---|---|
+| `date-time`, `date`, `time` | `time.Time` (or a bespoke bare-date/time type). |
+| `uuid` | `uuid.UUID`. |
+| `ipv4`, `ipv6` | `netip.Addr`. |
+| `byte`, `binary` | `[]byte`. |
+| `int32`, `int64`, `float`, `double` | `int32`/`int64`/`float32`/`float64`. |
+| `email`, `hostname`, `uri`, `regex`, `password`, ... | `string` plus the residual validator. |
+| anything else | The backend's own mapping (e.g. `x-ogen-type`), else the base primitive. |
 
-`Format` is a hint about the representation, never a replacement for validation: the
-matching `FormatPredicate` stays in `ValidationPlan` in every case, so a backend that
-ignores `Format` still rejects the same instances (design §24 invariant 4). A backend
-that *does* materialize the representational type may drop the residual predicate as
-subsumed — the parse into `time.Time`/`uuid.UUID`/`netip.Addr` is the same check.
+`Format` never replaces validation: the matching `FormatPredicate` stays in
+`ValidationPlan` in every case, so a backend that ignores `Format` rejects the same
+instances (design §24 invariant 4). Deciding that a parse into `time.Time` subsumes that
+predicate is an optimization, and optimization belongs to normalization, not the backend
+(design §23) — a backend that keeps both is always correct.
+
+Applicability is per name and follows the kind the format applies to (design §3): string
+formats guard `{string}`, the OpenAPI numeric formats (`int32`, `int64`, `float`,
+`double`, `decimal`) guard `{number}`. So `{"type": "number", "format": "uuid"}` carries
+no format at all — the guard never fires — and `{"format": "uuid"}` constrains strings
+only, leaving every non-string instance accepted.
 
 Two limits: `Format` only lands on `PrimitiveRepresentation`, so a schema without a
 `type` (which widens to `AnyRepresentation`) keeps its format in the validation plan
-only; and when `allOf` composition contributes several distinct formats, the first
-declared one shapes the representation, the rest stay validation-only and the plan
-carries a `SeverityInfo` diagnostic.
+only; and `allOf` is an unordered intersection (design §11.5), so when composition
+contributes two distinct format names neither can canonically shape the representation:
+`Format` is left empty, every name stays in the validation plan, and the plan carries a
+`SeverityInfo` diagnostic.
 
 ## 2. Field presence/nullability → `GenericVariant`/`NilSemantic`
 
@@ -191,8 +204,8 @@ carry `plan.SetString`-applicable predicates. `plan.PredicateExpr` variant → t
 | `RequiredPredicate`, `MinPropertiesPredicate`, `MaxPropertiesPredicate`, `DependentRequiredPredicate`, `PropertyNamesPredicate` | `Validators.Object` (or, for `PropertyNamesPredicate`, a per-key loop calling the nested plan's own validator — no existing single `validate.Object` field covers it, likely another `Ogen` custom-param case) |
 
 `Validators.Decimal` has no `plan.PredicateExpr` counterpart: it is selected from
-`PrimitiveRepresentation.Format` instead (`decimal`, `FormatRepresentational`, §1.1),
-not from a numeric domain — `plan.NumericDomain` still only distinguishes
+`PrimitiveRepresentation.Format` instead (the `decimal` format name, §1.1), not from a
+numeric domain — `plan.NumericDomain` still only distinguishes
 `AnyNumber`/`IntegerOnly`/`NonIntegerOnly`.
 
 ## 5. Resolution → generator behavior

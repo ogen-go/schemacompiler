@@ -70,17 +70,3 @@ func numericDomainString(d plan.NumericDomain) string {
 		return ""
 	}
 }
-
-// formatClassString renders a [plan.FormatClass].
-func formatClassString(c plan.FormatClass) string {
-	switch c {
-	case plan.FormatValidationOnly:
-		return "validation-only"
-	case plan.FormatRepresentational:
-		return "representational"
-	case plan.FormatUnrecognized:
-		return "unrecognized"
-	default:
-		return "none"
-	}
-}

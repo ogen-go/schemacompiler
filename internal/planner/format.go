@@ -1,28 +1,35 @@
 package planner
 
-import "github.com/ogen-go/schemacompiler/plan"
+import (
+	"sort"
+	"strings"
 
-// pickFormat chooses the `format` that shapes the representation. allOf-composed
-// siblings may declare several: they all stay in the validation plan, but only one can
-// pick a Go type, so the first declared wins and the rest are reported.
-func (b *builder) pickFormat(formats []string, path string) plan.Format {
-	var chosen string
+	"github.com/ogen-go/schemacompiler/plan"
+)
+
+// pickFormat chooses the `format` annotation carried by the representation. allOf
+// composition is an intersection (design §11.5) and therefore unordered, so distinct
+// names have no canonical winner: the representation carries none of them and every
+// one stays in the validation plan (design §24 sound over-approximation).
+func (b *builder) pickFormat(formats []string, path string) string {
 	seen := make(map[string]bool, len(formats))
-	var extra []string
+	var names []string
 	for _, f := range formats {
 		if f == "" || seen[f] {
 			continue
 		}
 		seen[f] = true
-		if chosen == "" {
-			chosen = f
-			continue
-		}
-		extra = append(extra, f)
+		names = append(names, f)
 	}
-	if len(extra) > 0 {
-		b.diag(path, plan.SeverityInfo,
-			"multiple formats declared; representation uses "+chosen+", others remain validation-only")
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
 	}
-	return plan.NewFormat(chosen)
+	sort.Strings(names)
+	b.diag(path+"/format", plan.SeverityInfo,
+		"conflicting formats ("+strings.Join(names, ", ")+") composed by an unordered intersection; "+
+			"the representation carries none, all remain validation-only")
+	return ""
 }

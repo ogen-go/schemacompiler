@@ -79,6 +79,7 @@ func Compile(n *frontend.Node) Expr {
 		siblings = append(siblings, compileIfThenElse(n))
 	}
 
+	siblings = append(siblings, compileDroppedKeywords(n)...)
 	siblings = append(siblings, compileStringKeywords(n)...)
 	siblings = append(siblings, compileNumericKeywords(n)...)
 	siblings = append(siblings, compileFormat(n)...)
@@ -138,6 +139,17 @@ func refTarget(n *frontend.Node) plan.SchemaID {
 		return plan.SchemaID(n.Resolved.Pointer)
 	}
 	return plan.SchemaID(n.Ref)
+}
+
+// compileDroppedKeywords carries every keyword the frontend could not read into the
+// semantic tree. The marker is guarded on every kind so no kind restriction can prune it
+// away before the planner sees it.
+func compileDroppedKeywords(n *frontend.Node) []Expr {
+	out := make([]Expr, 0, len(n.DroppedKeywords))
+	for _, kw := range n.DroppedKeywords {
+		out = append(out, Predicate{Guard: plan.SetAny, Detail: DroppedKeywordDetail{Keyword: kw}})
+	}
+	return out
 }
 
 func compileStringKeywords(n *frontend.Node) []Expr {

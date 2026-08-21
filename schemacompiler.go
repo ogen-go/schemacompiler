@@ -125,10 +125,9 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	diags = append(diags, invalidKeywordDiagnostics(schema.InvalidKeyword)...)
 
 	return &Result{
-		Plan:       root.Plan,
-		Capability: capLevel,
-		Exactness: exactnessFor(capLevel, exactnessWithInvalidKeywords(
-			maxExactness(root.Exactness, defs.exactness), schema.InvalidKeyword)),
+		Plan:        root.Plan,
+		Capability:  capLevel,
+		Exactness:   exactnessFor(capLevel, maxExactness(root.Exactness, defs.exactness)),
 		Diagnostics: dedupeDiagnostics(diags),
 	}
 }

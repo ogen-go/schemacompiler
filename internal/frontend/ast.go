@@ -96,6 +96,12 @@ type Node struct {
 	UnevaluatedProperties *Node
 	UnevaluatedItems      *Node
 
+	// DroppedKeywords names every keyword this schema declared with a value the spec does
+	// not admit, which the frontend therefore left absent (see [Schema.InvalidKeyword]).
+	// Nothing enforces them and nothing residual closes the gap, so the compiled plan
+	// declares itself incomplete rather than exact (design §24, issue #74).
+	DroppedKeywords []string
+
 	// Applicators.
 	AllOf []*Node
 	AnyOf []*Node

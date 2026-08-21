@@ -72,6 +72,7 @@ func TestLoad_CountKeywordsInvalid(t *testing.T) {
 				require.Equal(t, "/"+keyword, got.Pointer)
 				require.Equal(t, "expected a non-negative integer", got.Reason)
 				require.NotZero(t, got.Position.Line)
+				require.Equal(t, []string{keyword}, s.Root.DroppedKeywords)
 			})
 		}
 	}
@@ -80,6 +81,7 @@ func TestLoad_CountKeywordsInvalid(t *testing.T) {
 func TestLoad_CountKeywordsAbsent(t *testing.T) {
 	s := mustLoad(t, `{"type": "string"}`)
 	require.Empty(t, s.InvalidKeyword)
+	require.Empty(t, s.Root.DroppedKeywords)
 	for keyword, field := range countKeywordFields {
 		require.Nil(t, field(s.Root), keyword)
 	}
@@ -96,6 +98,8 @@ func TestLoad_CountKeywordsNested(t *testing.T) {
 
 	require.Len(t, s.InvalidKeyword, 1)
 	require.Equal(t, "/properties/b/maxLength", s.InvalidKeyword[0].Pointer)
+	require.Empty(t, a.DroppedKeywords)
+	require.Equal(t, []string{"maxLength"}, s.Root.Properties[1].Schema.DroppedKeywords)
 }
 
 // TestLoad_CountKeywordsAlongsideRef covers the second conversion path: keywords declared

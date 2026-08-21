@@ -186,17 +186,6 @@ func maxCapability(a, b plan.CapabilityLevel) plan.CapabilityLevel {
 }
 
 // maxExactness returns the worse (less exact) of two exactness levels (design §24).
-// exactnessWithInvalidKeywords lowers an exactness claim to [plan.SoundOverApproximation]
-// when a keyword was dropped for an invalid value (issue #74): the compiler no longer
-// models what the source text says, and nothing residual rejects the instances the dropped
-// keyword would have, so claiming exactness would be claiming more than is known (§24).
-func exactnessWithInvalidKeywords(observed plan.Exactness, invalid []frontend.InvalidKeyword) plan.Exactness {
-	if len(invalid) == 0 {
-		return observed
-	}
-	return maxExactness(observed, plan.SoundOverApproximation)
-}
-
 func maxExactness(a, b plan.Exactness) plan.Exactness {
 	if b > a {
 		return b

@@ -43,15 +43,16 @@ func TestCompileDecimalCountKeyword(t *testing.T) {
 
 // TestCompileInvalidCountKeyword pins the other half: a value that is no non-negative
 // integer makes the schema invalid, and the compiler drops the keyword rather than guess a
-// bound. Dropping only widens what is accepted, so the result declares the
-// over-approximation and reports why.
+// bound. Dropping only widens what is accepted, and nothing residual closes the gap, so the
+// result is DeclaredIncomplete — not SoundOverApproximation, whose excess is bounded by the
+// plan's own machinery — and reports why.
 func TestCompileInvalidCountKeyword(t *testing.T) {
 	for _, spelling := range []string{"2.5", "-1", `"2"`} {
 		t.Run(spelling, func(t *testing.T) {
 			res, err := schemacompiler.Compile(context.Background(),
 				[]byte(`{"type": "string", "maxLength": `+spelling+`}`), schemacompiler.Options{})
 			require.NoError(t, err)
-			require.Equal(t, plan.SoundOverApproximation, res.Exactness)
+			require.Equal(t, plan.DeclaredIncomplete, res.Exactness)
 
 			require.Len(t, res.Diagnostics, 1)
 			d := res.Diagnostics[0]

@@ -351,19 +351,19 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 	n.MultipleOf = hs.MultipleOf
 	n.ExclusiveMinimum, n.ExclusiveMaximum = readExclusiveBounds(low)
 
-	n.MinLength = st.countKeyword(sc, low, "minLength", hs.MinLength)
-	n.MaxLength = st.countKeyword(sc, low, "maxLength", hs.MaxLength)
+	n.MinLength = st.countKeyword(n, sc, low, "minLength", hs.MinLength)
+	n.MaxLength = st.countKeyword(n, sc, low, "maxLength", hs.MaxLength)
 	n.Pattern = optionalPattern(low, hs.Pattern)
 	n.Format = hs.Format
 
-	n.MinItems = st.countKeyword(sc, low, "minItems", hs.MinItems)
-	n.MaxItems = st.countKeyword(sc, low, "maxItems", hs.MaxItems)
-	n.MinContains = st.countKeyword(sc, low, "minContains", hs.MinContains)
-	n.MaxContains = st.countKeyword(sc, low, "maxContains", hs.MaxContains)
+	n.MinItems = st.countKeyword(n, sc, low, "minItems", hs.MinItems)
+	n.MaxItems = st.countKeyword(n, sc, low, "maxItems", hs.MaxItems)
+	n.MinContains = st.countKeyword(n, sc, low, "minContains", hs.MinContains)
+	n.MaxContains = st.countKeyword(n, sc, low, "maxContains", hs.MaxContains)
 	n.UniqueItems = hs.UniqueItems != nil && *hs.UniqueItems
 
-	n.MinProperties = st.countKeyword(sc, low, "minProperties", hs.MinProperties)
-	n.MaxProperties = st.countKeyword(sc, low, "maxProperties", hs.MaxProperties)
+	n.MinProperties = st.countKeyword(n, sc, low, "minProperties", hs.MinProperties)
+	n.MaxProperties = st.countKeyword(n, sc, low, "maxProperties", hs.MaxProperties)
 	n.Required = hs.Required
 
 	n.Discriminator = convertDiscriminator(hs.Discriminator)

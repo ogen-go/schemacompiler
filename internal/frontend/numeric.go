@@ -46,7 +46,7 @@ func readFloatKeyword(root *yaml.Node, key string) *float64 {
 // A value that is no non-negative integer at all makes the schema invalid; the keyword is
 // left absent, which only widens what the plan accepts, and reported through
 // [Schema.InvalidKeyword] so the author is not left guessing (design §25).
-func (st *convState) countKeyword(sc scope, low *lowbase.Schema, key string, parsed *int64) *uint64 {
+func (st *convState) countKeyword(n *Node, sc scope, low *lowbase.Schema, key string, parsed *int64) *uint64 {
 	var root *yaml.Node
 	if low != nil {
 		root = low.RootNode
@@ -58,6 +58,7 @@ func (st *convState) countKeyword(sc scope, low *lowbase.Schema, key string, par
 	if v, ok := nonNegativeInteger(vn); ok {
 		return &v
 	}
+	n.DroppedKeywords = append(n.DroppedKeywords, key)
 	st.invalidKeyword = append(st.invalidKeyword, InvalidKeyword{
 		Pointer:  jsonPointerAppend(sc.docPointer, key),
 		Position: nodePosition(sc.file(), vn),

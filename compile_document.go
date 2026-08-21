@@ -81,7 +81,7 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 		}
 		res.Capability = maxCapability(res.Capability, p.Capability)
 	}
-	res.Exactness = exactnessFor(res.Capability, exactnessWithInvalidKeywords(res.Exactness, d.InvalidKeyword))
+	res.Exactness = exactnessFor(res.Capability, res.Exactness)
 
 	diags = append(diags, unresolvedDiagnostics(d.Unresolved)...)
 	diags = append(diags, uninhabitedDiagnostics(d.Uninhabited)...)

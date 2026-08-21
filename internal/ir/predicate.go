@@ -6,6 +6,12 @@ package ir
 // without re-parsing.
 
 // MinLengthDetail is `minLength` (string-guarded).
+// DroppedKeywordDetail marks a keyword the frontend left absent because its declared value
+// was not one the spec admits (issue #74). It asserts nothing — it carries the fact that
+// something the author wrote is not enforced, so the planner can lower the plan's exactness
+// to [plan.DeclaredIncomplete] instead of claiming a fidelity it does not have (design §24).
+type DroppedKeywordDetail struct{ Keyword string }
+
 type MinLengthDetail struct{ Value uint64 }
 
 // MaxLengthDetail is `maxLength` (string-guarded).
@@ -77,6 +83,7 @@ type DependentRequiredDetail struct{ Entries []DependentRequiredEntry }
 // every own property name, interpreted as a JSON string.
 type PropertyNamesDetail struct{ Schema Expr }
 
+func (DroppedKeywordDetail) isPredicateDetail()    {}
 func (MinLengthDetail) isPredicateDetail()         {}
 func (MaxLengthDetail) isPredicateDetail()         {}
 func (PatternDetail) isPredicateDetail()           {}

@@ -55,19 +55,26 @@ type Result struct {
 // Compile parses, resolves, normalizes, and analyzes a single JSON Schema document.
 //
 // data is a standalone Draft 2020-12 schema (JSON or YAML). Callers that already hold a
-// parsed libopenapi schema (e.g. ogen) should use the frontend adapter directly rather
-// than re-serializing.
+// parsed libopenapi schema (e.g. ogen) should use [CompileSchema] or [CompileDocument]
+// rather than re-serializing.
 func Compile(ctx context.Context, data []byte, opts Options) (*Result, error) {
 	schema, err := frontend.LoadWithLoader(ctx, data, opts.BaseURI, frontend.Loader(opts.Loader))
 	if err != nil {
 		return nil, errors.Wrap(err, "load")
 	}
 
-	budget := opts.ExpansionBudget
-	if budget <= 0 {
-		budget = defaultExpansionBudget
-	}
+	return compileSchema(schema, expansionBudget(opts)), nil
+}
 
+func expansionBudget(opts Options) int {
+	if opts.ExpansionBudget <= 0 {
+		return defaultExpansionBudget
+	}
+	return opts.ExpansionBudget
+}
+
+// compileSchema assembles the [Result] of an already-loaded schema document.
+func compileSchema(schema *frontend.Schema, budget int) *Result {
 	root := buildPlan(schema.Root, schema.Registry, budget)
 
 	// Whole-document assembly: compile every $ref target into a named definition and
@@ -92,13 +99,13 @@ func Compile(ctx context.Context, data []byte, opts Options) (*Result, error) {
 	diags := make([]plan.Diagnostic, 0, len(root.Diagnostics)+len(defs.diags)+len(schema.Unresolved)+len(schema.Uninhabited))
 	diags = append(diags, root.Diagnostics...)
 	diags = append(diags, defs.diags...)
-	diags = append(diags, unresolvedDiagnostics(schema)...)
-	diags = append(diags, uninhabitedDiagnostics(schema)...)
+	diags = append(diags, unresolvedDiagnostics(schema.Unresolved)...)
+	diags = append(diags, uninhabitedDiagnostics(schema.Uninhabited)...)
 
 	return &Result{
 		Plan:        root.Plan,
 		Capability:  capLevel,
 		Exactness:   maxExactness(root.Exactness, defs.exactness),
 		Diagnostics: dedupeDiagnostics(diags),
-	}, nil
+	}
 }

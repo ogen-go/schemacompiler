@@ -1,0 +1,13 @@
+Node pointer=""
+  type=00100000 integer=false
+  properties["name"]:
+    Node pointer="/properties/name"
+      type=00001000 integer=false
+      minLength=1
+      maxLength=8
+  properties["tags"]:
+    Node pointer="/properties/tags"
+      type=00010000 integer=false
+  properties["invalid"]:
+    Node pointer="/properties/invalid"
+      type=00001000 integer=false

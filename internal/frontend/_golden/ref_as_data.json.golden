@@ -1,0 +1,15 @@
+Node pointer=""
+  extension["x-vendor"]={"$ref":"#/$defs/IsString"}
+  const={"$ref":"#/$defs/IsString"}
+  properties["$ref"]:
+    Node pointer="/properties/$ref"
+      ref="#/$defs/IsString" resolved=true
+  properties["plain"]:
+    Node pointer="/properties/plain"
+      ref="#/$defs/$ref" resolved=true
+  $defs["IsString"]:
+    Node pointer="/$defs/IsString"
+      type=00001000 integer=false
+  $defs["$ref"]:
+    Node pointer="/$defs/$ref"
+      type=00000100 integer=false

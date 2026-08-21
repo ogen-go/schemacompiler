@@ -66,11 +66,11 @@ func (b *builder) buildKindRestricted(k plan.KindSet, c components, path string)
 // buildUnrestricted builds the plan for an expression with no `type` restriction at
 // all (design §3, §20.3): the representation must widen to Any since every kind is
 // still possible, while guarded predicates remain exact (each fires only for its own
-// kind at runtime). Object/array shape keywords without a guaranteed object/array
-// context still contribute their v1-unsupported flags (unevaluatedProperties/Items),
-// since those apply whenever the instance happens to be that kind, but do not
-// contribute an ObjectRepresentation/ArrayRepresentation (design §12.1: `properties`
-// alone must not become a struct).
+// kind at runtime). Object/array shape keywords do not contribute an
+// ObjectRepresentation/ArrayRepresentation either (design §12.1: `properties` alone must
+// not become a struct); they survive as [plan.ShapePredicate]s guarded on their own kind,
+// so the constraint is enforced for an object or array instance and vacuous for every
+// other kind (see [builder.guardedShapes]).
 func (b *builder) buildUnrestricted(c components, path string) plan.CompilationPlan {
 	var val plan.ValidationPlan
 	capLevel := plan.DirectGoType
@@ -86,15 +86,13 @@ func (b *builder) buildUnrestricted(c components, path string) plan.CompilationP
 		}
 	}
 
-	merged := mergeObjectShapes(c.shapes)
-	if merged.unevaluated {
-		b.diag(path, plan.SeverityError, "unevaluatedProperties requires evaluated-property tracking")
-		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
-	}
-	if _, _, unevaluatedItems := mergeArrayShapes(c.shapes); unevaluatedItems {
-		b.diag(path, plan.SeverityError, "unevaluatedItems requires evaluated-item tracking")
-		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
-	}
+	// The shape sub-plans go through buildObject/buildArray, so the v1-unsupported
+	// unevaluatedProperties/unevaluatedItems flags are raised there, not here.
+	shaped, shapeCap, shapeRes := b.guardedShapes(c, path)
+	val.Predicates = append(val.Predicates, shaped...)
+	capLevel = maxCapability(capLevel, shapeCap)
+	resParts = append(resParts, shapeRes...)
+
 	rep := plan.Representation(plan.AnyRepresentation{})
 	var disp plan.DispatchPlan = plan.NoDispatch{}
 	res := mergeResolution(resParts...)
@@ -275,7 +273,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 
 	fields := make([]plan.FieldRepresentation, 0, len(merged.order))
 	for _, name := range merged.order {
-		subExpr := merged.properties[name]
+		subExpr := b.fieldConstraint(name, merged.properties[name], merged.patternProperties, path)
 		presence := plan.PresenceOptional
 		if required[name] {
 			presence = plan.PresenceRequired

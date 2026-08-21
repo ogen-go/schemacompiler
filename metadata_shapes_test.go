@@ -17,14 +17,8 @@ import (
 func collectMetadata(r plan.Representation, prefix string, out map[string]plan.Metadata) {
 	switch r := r.(type) {
 	case plan.ObjectRepresentation:
-		names := make([]string, 0, len(r.Fields))
-		for name := range r.Fields {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			f := r.Fields[name]
-			key := prefix + "field:" + name
+		for _, f := range r.Fields {
+			key := prefix + "field:" + f.Name
 			out[key] = f.Metadata
 			collectMetadata(f.Plan.Representation, key+"/", out)
 		}
@@ -242,7 +236,7 @@ func TestCompile_MetadataIsNotSharedBetweenPlans(t *testing.T) {
 	require.True(t, ok)
 	aObj, ok := aPlan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", aPlan.Representation)
-	field := aObj.Fields["x"]
+	field := mustField(t, aObj, "x")
 	require.Equal(t, "X", field.Metadata.Title)
 
 	own.Metadata.Extensions["mutated"] = true
@@ -258,8 +252,9 @@ func TestCompile_MetadataKeysAreDeterministic(t *testing.T) {
 	p := compile(t, `{"type":"object","properties":{"a":{"type":"string","x-b":1,"x-a":2,"x-c":3}}}`)
 	obj, ok := p.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok)
-	keys := make([]string, 0, len(obj.Fields["a"].Metadata.Extensions))
-	for k := range obj.Fields["a"].Metadata.Extensions {
+	ext := mustField(t, obj, "a").Metadata.Extensions
+	keys := make([]string, 0, len(ext))
+	for k := range ext {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)

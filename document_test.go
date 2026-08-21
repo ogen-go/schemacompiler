@@ -37,7 +37,7 @@ func TestCompileRefDefinitions(t *testing.T) {
 	// The referencing field must point at the definition by name, not inline it.
 	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "root should be an object, got %T", res.Plan.Representation)
-	child, ok := obj.Fields["child"]
+	child, ok := fieldByName(t, obj, "child")
 	require.True(t, ok, "root should have a child field")
 	ref, ok := child.Plan.Representation.(plan.ReferenceRepresentation)
 	require.True(t, ok, "child should be a reference, got %T", child.Plan.Representation)

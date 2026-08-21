@@ -273,7 +273,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 		}
 	}
 
-	fields := make(map[string]plan.FieldRepresentation, len(merged.order))
+	fields := make([]plan.FieldRepresentation, 0, len(merged.order))
 	for _, name := range merged.order {
 		subExpr := merged.properties[name]
 		presence := plan.PresenceOptional
@@ -294,12 +294,13 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 			}
 		}
 		sub := b.build(buildExpr, pointerAppend(path+"/properties", name))
-		fields[name] = plan.FieldRepresentation{
+		fields = append(fields, plan.FieldRepresentation{
+			Name:     name,
 			Plan:     sub,
 			Presence: presence,
 			Nullable: nullable,
 			Metadata: merged.metadata[name],
-		}
+		})
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	}

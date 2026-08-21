@@ -31,8 +31,8 @@ func TestNilRepresentationSlots(t *testing.T) {
 		{
 			name: "documented nil Additional cannot reject",
 			rep: plan.ObjectRepresentation{
-				Fields: map[string]plan.FieldRepresentation{
-					"a": {Plan: plan.CompilationPlan{Representation: strRep}, Presence: plan.PresenceOptional},
+				Fields: []plan.FieldRepresentation{
+					{Name: "a", Plan: plan.CompilationPlan{Representation: strRep}, Presence: plan.PresenceOptional},
 				},
 			},
 			value:  map[string]any{"b": 1.0},
@@ -53,7 +53,7 @@ func TestNilRepresentationSlots(t *testing.T) {
 		{
 			name: "nil field representation",
 			rep: plan.ObjectRepresentation{
-				Fields:     map[string]plan.FieldRepresentation{"a": {Presence: plan.PresenceRequired}},
+				Fields:     []plan.FieldRepresentation{{Name: "a", Presence: plan.PresenceRequired}},
 				Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 			},
 			value:    map[string]any{},

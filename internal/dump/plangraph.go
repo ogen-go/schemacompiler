@@ -264,15 +264,14 @@ func representationSummary(r plan.Representation) string {
 		return jsonKindString(t.Kind)
 	case plan.ObjectRepresentation:
 		var t struct {
-			Fields       map[string]plan.FieldRepresentation
+			Fields       []plan.FieldRepresentation
 			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
 		} = r
 		names := make([]string, 0, len(t.Fields))
-		for name := range t.Fields {
-			names = append(names, name)
+		for _, f := range t.Fields {
+			names = append(names, f.Name)
 		}
-		sort.Strings(names)
 		return "object{" + strings.Join(names, ",") + "}"
 	case plan.ArrayRepresentation:
 		var t struct {

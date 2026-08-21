@@ -15,8 +15,9 @@ import (
 // an array element inside a dispatch branch.
 func nestedRejectionPlan() plan.CompilationPlan {
 	element := plan.ObjectRepresentation{
-		Fields: map[string]plan.FieldRepresentation{
-			"name": {
+		Fields: []plan.FieldRepresentation{
+			{
+				Name:     "name",
 				Plan:     plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
 				Presence: plan.PresenceRequired,
 			},
@@ -25,8 +26,9 @@ func nestedRejectionPlan() plan.CompilationPlan {
 	}
 	branch := plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
-			Fields: map[string]plan.FieldRepresentation{
-				"items": {
+			Fields: []plan.FieldRepresentation{
+				{
+					Name: "items",
 					Plan: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
 						Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: element}},
 					}},
@@ -144,8 +146,9 @@ func TestInvalidValueErrorCarriesLocation(t *testing.T) {
 
 func TestPointerTokensAreEscaped(t *testing.T) {
 	p := plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-		Fields: map[string]plan.FieldRepresentation{
-			"a/b~c": {
+		Fields: []plan.FieldRepresentation{
+			{
+				Name:     "a/b~c",
 				Plan:     plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
 				Presence: plan.PresenceRequired,
 			},

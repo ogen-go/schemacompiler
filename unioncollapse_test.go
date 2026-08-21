@@ -25,9 +25,7 @@ func fieldOf(t *testing.T, r plan.Representation, name string) plan.FieldReprese
 	t.Helper()
 	obj, ok := r.(plan.ObjectRepresentation)
 	require.True(t, ok, "expected an ObjectRepresentation, got %s", repShape(r))
-	f, ok := obj.Fields[name]
-	require.True(t, ok, "no field %q", name)
-	return f
+	return mustField(t, obj, name)
 }
 
 // TestNullableUnionField pins that stripping null out of a property's representation

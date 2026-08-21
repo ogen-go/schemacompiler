@@ -20,7 +20,8 @@ const (
 	// EdgeValidation links a plan to its residual validation.
 	EdgeValidation
 	// EdgeField links an object representation to the plan of a declared field's
-	// values. Name is the property name; Presence and Nullable are the field's own.
+	// values. Name is the property name, Index its position in Fields, and Presence
+	// and Nullable are the field's own.
 	EdgeField
 	// EdgeAdditional links an object representation to the plan of its Additional
 	// values, which cover every property no field and no pattern rule covers.
@@ -115,7 +116,7 @@ type Edge struct {
 	// Name is the property name (EdgeField, EdgePropertyCase, EdgePresent, EdgeAbsent),
 	// the pattern (EdgePatternRule) or the recursion binder (EdgeRecursiveBody).
 	Name string
-	// Index is the position within the parent's slice: EdgePatternRule,
+	// Index is the position within the parent's slice: EdgeField, EdgePatternRule,
 	// EdgePrefixItem, EdgeAlternative, EdgeLiteralCase, EdgePropertyCase,
 	// EdgeCountBranch, EdgeGuardedPredicate.
 	Index int

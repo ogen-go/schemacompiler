@@ -11,8 +11,8 @@ import (
 func refPlan(target string, level plan.CapabilityLevel) plan.CompilationPlan {
 	return plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
-			Fields: map[string]plan.FieldRepresentation{
-				"f": {Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: target}}},
+			Fields: []plan.FieldRepresentation{
+				{Name: "f", Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: target}}},
 			},
 		},
 		Capability: level,

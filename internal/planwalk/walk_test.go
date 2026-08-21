@@ -80,8 +80,8 @@ func TestPlanReachesEveryNestingSite(t *testing.T) {
 
 	p := plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
-			Fields: map[string]plan.FieldRepresentation{
-				"f": {Plan: plan.CompilationPlan{Representation: ref("field")}},
+			Fields: []plan.FieldRepresentation{
+				{Name: "f", Plan: plan.CompilationPlan{Representation: ref("field")}},
 			},
 			Additional: &plan.CompilationPlan{Representation: ref("additional")},
 			PatternRules: []plan.PatternFieldRepresentation{

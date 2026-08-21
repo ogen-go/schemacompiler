@@ -42,9 +42,28 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 }
 
 // exactnessOf derives the top-level Exactness from a finished plan's capability and
-// whether it carries residual validation (design §24, §25). g reports the gaps its own
-// structure does not show, which make the plan an over-approximation however exact its
-// parts are.
+// whether it carries residual validation (design §24, §25).
+//
+// Exactness is a property of the accepted set of the whole plan — representation ∧
+// dispatch ∧ validation — never of the representation alone. §24's contract is the
+// biconditional x ⊨ S ⟺ x ∈ ⟦G(S)⟧ ∧ V(S,x), so a representation wider than the schema
+// is exact whenever the residual validator closes the gap. That is what
+// [plan.ExactWithValidation] means, and it is the only thing distinguishing it from
+// [plan.ExactPureRepresentation]: `string` admits "ab" for `{"type":"string","minLength":3}`
+// exactly as `any` does for the bare `{"minLength":3}`, and the kind-guarded MinLength
+// rejects it in both (design §3, issue #95).
+//
+// [plan.SoundOverApproximation] is therefore reserved for a plan whose accepted set is a
+// strict superset of the schema's *after* validation runs, with the plan's own machinery
+// bounding the excess — today only an asserted discriminator, which trusts a declared tag
+// instead of proving the branches disjoint while every branch still validates. When
+// nothing bounds the excess the rung is [plan.DeclaredIncomplete] (issue #84).
+//
+// g reports the gaps the plan's own structure does not show. A cost-only classification
+// never demotes exactness: [plan.PredicateDispatch] means match-counting or a residual
+// negation is expensive to run, not that it is approximate — the lowering contract on
+// [plan.PredicateCountDispatch] is exact, and [withResidualNegation] only emits a
+// negation over an exactly modeled operand.
 func exactnessOf(p plan.CompilationPlan, g gaps) plan.Exactness {
 	if p.Capability >= plan.EvaluationStateValidation {
 		return plan.UnsupportedConversion
@@ -58,16 +77,8 @@ func exactnessOf(p plan.CompilationPlan, g gaps) plan.Exactness {
 	if g.asserted {
 		return plan.SoundOverApproximation
 	}
-	if _, isAny := p.Representation.(plan.AnyRepresentation); isAny && !p.Validation.Empty() {
-		// A schema with no representable type restriction plus residual predicates:
-		// the Any representation is a strict over-approximation of the accepted set.
-		return plan.SoundOverApproximation
-	}
 	if p.Validation.Empty() && p.Capability == plan.DirectGoType {
 		return plan.ExactPureRepresentation
-	}
-	if p.Capability == plan.PredicateDispatch {
-		return plan.SoundOverApproximation
 	}
 	return plan.ExactWithValidation
 }

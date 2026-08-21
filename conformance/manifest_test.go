@@ -61,8 +61,9 @@ var manifest = map[string]caseExpectation{
 	"validation/format_string.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
 	"validation/format_number.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
 	// {"format": "uuid"} accepts every non-string value, so the representation widens to
-	// any and the guarded assertion is all that remains.
-	"validation/format_no_type.json": exact(plan.GoTypeWithValidation, plan.SoundOverApproximation),
+	// any and the guarded assertion is all that remains — which is exactly what the
+	// schema accepts, so the wider representation costs no exactness (issue #95).
+	"validation/format_no_type.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
 	// Two distinct formats intersected by allOf (unordered, design §11.5): neither shapes
 	// the representation, both stay in the validation plan, and the loss is reported.
 	"validation/format_allof_conflict.json": withDiag(exact(plan.GoTypeWithValidation, plan.ExactWithValidation)),

@@ -553,7 +553,7 @@ func TestBuild_UnrequiredDiscriminatorFallsBackToPredicateCount(t *testing.T) {
 	require.Equal(t, 1, disp.Minimum)
 	require.Equal(t, 1, disp.Maximum)
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
-	require.Equal(t, plan.SoundOverApproximation, got.Exactness)
+	require.Equal(t, plan.ExactWithValidation, got.Exactness)
 	require.True(t, hasWarning(got.Diagnostics))
 }
 

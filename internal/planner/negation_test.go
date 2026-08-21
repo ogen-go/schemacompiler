@@ -113,7 +113,7 @@ func TestBuild_SubsumedOneOfBranchAmongThree(t *testing.T) {
 		`+subsetPetDefs+`}`)
 
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
-	require.Equal(t, plan.SoundOverApproximation, got.Exactness)
+	require.Equal(t, plan.ExactWithValidation, got.Exactness)
 	require.IsType(t, plan.PredicateCountDispatch{}, got.Plan.Dispatch)
 }
 
@@ -214,7 +214,7 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 			if tt.emit {
 				require.Equal(t, 1, countNegations(t, got.Plan), tt.reason)
 				require.Equal(t, plan.PredicateDispatch, got.Plan.Capability, tt.reason)
-				require.Equal(t, plan.SoundOverApproximation, got.Exactness, tt.reason)
+				require.Equal(t, plan.ExactWithValidation, got.Exactness, tt.reason)
 			} else {
 				require.Zero(t, countNegations(t, got.Plan), tt.reason)
 				require.Less(t, got.Plan.Capability, plan.PredicateDispatch,

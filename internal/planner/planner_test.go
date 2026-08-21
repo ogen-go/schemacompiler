@@ -68,7 +68,8 @@ func TestBuild_BarePredicateWidensToAny(t *testing.T) {
 
 	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.GoTypeWithValidation, got.Plan.Capability)
-	require.Equal(t, plan.SoundOverApproximation, got.Exactness)
+	require.Equal(t, plan.ExactWithValidation, got.Exactness,
+		"the kind-guarded MinLength closes the gap the wider representation opens (#95)")
 }
 
 func TestBuild_StaticDispatch_KindDisjointOneOf(t *testing.T) {

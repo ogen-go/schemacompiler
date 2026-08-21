@@ -94,6 +94,9 @@ func dumpNode(n *Node, indent string, out *strings.Builder) {
 		fmt.Fprintf(out, "%s  $defs[%q]:\n", indent, d.Name)
 		dumpNode(d.Schema, indent+"    ", out)
 	}
+	if d := n.Discriminator; d != nil {
+		fmt.Fprintf(out, "%s  discriminator=%q mapping=%v\n", indent, d.PropertyName, d.Mapping)
+	}
 	for i, c := range n.OneOf {
 		fmt.Fprintf(out, "%s  oneOf[%d]:\n", indent, i)
 		dumpNode(c, indent+"    ", out)

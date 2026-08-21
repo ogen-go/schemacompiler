@@ -96,6 +96,9 @@ type Node struct {
 	Then  *Node
 	Else  *Node
 
+	// discriminator (OpenAPI): declares the tagging property for a sibling oneOf/anyOf.
+	Discriminator *Discriminator
+
 	// Metadata (non-semantic, propagated to plan.Metadata).
 	Title       string
 	Description string
@@ -122,6 +125,21 @@ type XML struct {
 type NamedSchema struct {
 	Name   string
 	Schema *Node
+}
+
+// Discriminator is the OpenAPI `discriminator` object: PropertyName names the tagging
+// property of the sibling oneOf/anyOf, Mapping keeps the declared value → schema
+// reference entries in declaration order.
+type Discriminator struct {
+	PropertyName string
+	Mapping      []DiscriminatorMapping
+}
+
+// DiscriminatorMapping is one `mapping` entry: Value on the tagging property selects the
+// schema Ref denotes (a JSON Pointer reference or a bare component name).
+type DiscriminatorMapping struct {
+	Value string
+	Ref   string
 }
 
 // DependentRequired is one `dependentRequired` entry: presence of Property requires Requires.

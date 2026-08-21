@@ -336,6 +336,8 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 	n.MaxProperties = int64PtrToUint64Ptr(hs.MaxProperties)
 	n.Required = hs.Required
 
+	n.Discriminator = convertDiscriminator(hs.Discriminator)
+
 	n.Title = hs.Title
 	n.Description = hs.Description
 	n.Deprecated = hs.Deprecated != nil && *hs.Deprecated
@@ -517,6 +519,17 @@ func (st *convState) convertDynamicSchema(ctx context.Context, dv *base.DynamicV
 		return n, nil
 	}
 	return st.convertProxy(ctx, dv.A, sc)
+}
+
+func convertDiscriminator(d *base.Discriminator) *Discriminator {
+	if d == nil || d.PropertyName == "" {
+		return nil
+	}
+	out := &Discriminator{PropertyName: d.PropertyName}
+	for value, ref := range d.Mapping.FromOldest() {
+		out.Mapping = append(out.Mapping, DiscriminatorMapping{Value: value, Ref: ref})
+	}
+	return out
 }
 
 func (st *convState) convertNamedSchemas(

@@ -215,7 +215,11 @@ func writeDispatch(t *tw, d plan.DispatchPlan, visiting map[plan.SchemaID]bool) 
 		t.line("LiteralDispatch")
 		t.enter(func() { writeLiteralCases(t, d.Cases, visiting) })
 	case plan.PropertyDispatch:
-		t.line("PropertyDispatch property=%q", d.Property)
+		if d.Tag == plan.TagDeclared {
+			t.line("PropertyDispatch property=%q declared", d.Property)
+		} else {
+			t.line("PropertyDispatch property=%q", d.Property)
+		}
 		t.enter(func() { writeLiteralCases(t, d.Cases, visiting) })
 	case plan.PresenceDispatch:
 		t.line("PresenceDispatch property=%q", d.Property)

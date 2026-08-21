@@ -37,7 +37,21 @@ type LiteralCase struct {
 type PropertyDispatch struct {
 	Property string
 	Cases    []LiteralCase
+	// Tag records whether Property was declared by an OpenAPI `discriminator` or
+	// recovered structurally.
+	Tag TagSource
 }
+
+// TagSource says where a [PropertyDispatch]'s tagging property came from.
+type TagSource uint8
+
+const (
+	// TagInferred means the property was recovered from per-branch const values.
+	TagInferred TagSource = iota
+	// TagDeclared means an OpenAPI `discriminator` named the property; its `mapping`
+	// entries, where present, supplied the case values.
+	TagDeclared
+)
 
 // PresenceDispatch selects a branch by whether a property is present (design §12.7).
 type PresenceDispatch struct {

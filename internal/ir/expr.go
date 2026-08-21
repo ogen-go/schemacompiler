@@ -69,10 +69,32 @@ type ShapeDetail interface {
 type All struct{ Operands []Expr }
 
 // AnyOf is union (anyOf, enum). Empty AnyOf == Never.
-type AnyOf struct{ Operands []Expr }
+type AnyOf struct {
+	Operands []Expr
+	// Discriminator is the OpenAPI `discriminator` declared alongside the combinator,
+	// nil when absent.
+	Discriminator *Discriminator
+}
 
 // ExactlyOne is oneOf: exactly one operand matches. Not a union until proven disjoint.
-type ExactlyOne struct{ Operands []Expr }
+type ExactlyOne struct {
+	Operands      []Expr
+	Discriminator *Discriminator
+}
+
+// Discriminator is a declared tagging property for a union's branches (OpenAPI
+// `discriminator`), with the value → schema reference entries in declaration order.
+type Discriminator struct {
+	PropertyName string
+	Mapping      []DiscriminatorMapping
+}
+
+// DiscriminatorMapping is one mapping entry: Value on the tagging property selects the
+// schema Ref denotes (a JSON Pointer reference or a bare component name).
+type DiscriminatorMapping struct {
+	Value string
+	Ref   string
+}
 
 // Not is complement.
 type Not struct{ Operand Expr }

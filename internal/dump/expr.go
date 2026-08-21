@@ -151,11 +151,11 @@ func writeShapeDetail(t *tw, d ir.ShapeDetail) {
 		t.enter(func() {
 			for i, p := range d.PrefixItems {
 				t.line("prefixItems[%d]", i)
-				t.enter(func() { writeExpr(t, p) })
+				t.enter(func() { writeExpr(t, p.Schema) })
 			}
-			if d.Items != nil {
+			if d.Items.Schema != nil {
 				t.line("items")
-				t.enter(func() { writeExpr(t, d.Items) })
+				t.enter(func() { writeExpr(t, d.Items.Schema) })
 			}
 			if d.UnevaluatedItems != nil {
 				t.line("unevaluatedItems")

@@ -191,6 +191,7 @@ func (b *builder) buildLiteral(v ir.Literal, _ string) plan.CompilationPlan {
 // (design §12.3: allOf-composed object constraints intersect).
 type mergedObject struct {
 	properties           map[string]ir.Expr
+	metadata             map[string]plan.Metadata
 	order                []string
 	patternProperties    []ir.PatternPropertyExpr
 	additionalProperties ir.Expr
@@ -198,7 +199,10 @@ type mergedObject struct {
 }
 
 func mergeObjectShapes(shapes []ir.ShapeDetail) mergedObject {
-	m := mergedObject{properties: make(map[string]ir.Expr)}
+	m := mergedObject{
+		properties: make(map[string]ir.Expr),
+		metadata:   make(map[string]plan.Metadata),
+	}
 	for _, sd := range shapes {
 		os, ok := sd.(ir.ObjectShape)
 		if !ok {
@@ -210,6 +214,11 @@ func mergeObjectShapes(shapes []ir.ShapeDetail) mergedObject {
 			} else {
 				m.properties[p.Name] = p.Schema
 				m.order = append(m.order, p.Name)
+			}
+			// The same property may be declared by several conjoined branches; only one
+			// annotation set can survive, so the last branch that carries any wins.
+			if !metadataEmpty(p.Metadata) {
+				m.metadata[p.Name] = p.Metadata
 			}
 		}
 		m.patternProperties = append(m.patternProperties, os.PatternProperties...)
@@ -276,6 +285,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 			Representation: sub.Representation,
 			Presence:       presence,
 			Nullable:       nullable,
+			Metadata:       merged.metadata[name],
 		}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
@@ -303,6 +313,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 		patternRules = append(patternRules, plan.PatternFieldRepresentation{
 			Pattern:        pp.Pattern,
 			Representation: sub.Representation,
+			Metadata:       pp.Metadata,
 		})
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
@@ -323,7 +334,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 
 // mergeArrayShapes intersects every ArrayShape sibling found in an All, position-wise
 // for the prefix and via conjunction for the trailing item schema (design §13).
-func mergeArrayShapes(shapes []ir.ShapeDetail) (prefix []ir.Expr, items ir.Expr, unevaluated bool) {
+func mergeArrayShapes(shapes []ir.ShapeDetail) (prefix []ir.ItemExpr, items ir.ItemExpr, unevaluated bool) {
 	for _, sd := range shapes {
 		as, ok := sd.(ir.ArrayShape)
 		if !ok {
@@ -331,16 +342,16 @@ func mergeArrayShapes(shapes []ir.ShapeDetail) (prefix []ir.Expr, items ir.Expr,
 		}
 		for i, p := range as.PrefixItems {
 			if i < len(prefix) {
-				prefix[i] = ir.All{Operands: []ir.Expr{prefix[i], p}}
+				prefix[i] = mergeItem(prefix[i], p)
 			} else {
 				prefix = append(prefix, p)
 			}
 		}
-		if as.Items != nil {
-			if items == nil {
+		if as.Items.Schema != nil {
+			if items.Schema == nil {
 				items = as.Items
 			} else {
-				items = ir.All{Operands: []ir.Expr{items, as.Items}}
+				items = mergeItem(items, as.Items)
 			}
 		}
 		if as.UnevaluatedItems != nil {
@@ -348,6 +359,14 @@ func mergeArrayShapes(shapes []ir.ShapeDetail) (prefix []ir.Expr, items ir.Expr,
 		}
 	}
 	return prefix, items, unevaluated
+}
+
+func mergeItem(a, b ir.ItemExpr) ir.ItemExpr {
+	out := ir.ItemExpr{Schema: ir.All{Operands: []ir.Expr{a.Schema, b.Schema}}, Metadata: a.Metadata}
+	if !metadataEmpty(b.Metadata) {
+		out.Metadata = b.Metadata
+	}
+	return out
 }
 
 // buildArray infers an ArrayRepresentation (design §7, §13): a tuple prefix plus a
@@ -373,23 +392,23 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 		}
 	}
 
-	prefix := make([]plan.Representation, len(prefixExprs))
+	prefix := make([]plan.ItemRepresentation, len(prefixExprs))
 	for i, pe := range prefixExprs {
-		sub := b.build(pe, path+"/prefixItems/"+strconv.Itoa(i))
-		prefix[i] = sub.Representation
+		sub := b.build(pe.Schema, path+"/prefixItems/"+strconv.Itoa(i))
+		prefix[i] = plan.ItemRepresentation{Representation: sub.Representation, Metadata: pe.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	}
 
-	var rest plan.Representation
+	var rest plan.ItemRepresentation
 	switch {
-	case itemsExpr != nil:
-		sub := b.build(itemsExpr, path+"/items")
-		rest = sub.Representation
+	case itemsExpr.Schema != nil:
+		sub := b.build(itemsExpr.Schema, path+"/items")
+		rest = plan.ItemRepresentation{Representation: sub.Representation, Metadata: itemsExpr.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	default:
-		rest = plan.AnyRepresentation{}
+		rest = plan.ItemRepresentation{Representation: plan.AnyRepresentation{}}
 	}
 
 	if unevaluated {

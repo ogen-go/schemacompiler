@@ -94,7 +94,10 @@ func writeRepresentation(t *tw, r plan.Representation) {
 			}
 			for _, pr := range r.PatternRules {
 				t.line("patternRule %q", pr.Pattern)
-				t.enter(func() { writeRepresentation(t, pr.Representation) })
+				t.enter(func() {
+					writeMetadata(t, pr.Metadata)
+					writeRepresentation(t, pr.Representation)
+				})
 			}
 		})
 	case plan.ArrayRepresentation:
@@ -102,11 +105,17 @@ func writeRepresentation(t *tw, r plan.Representation) {
 		t.enter(func() {
 			for i, p := range r.Prefix {
 				t.line("prefix[%d]", i)
-				t.enter(func() { writeRepresentation(t, p) })
+				t.enter(func() {
+					writeMetadata(t, p.Metadata)
+					writeRepresentation(t, p.Representation)
+				})
 			}
-			if r.Rest != nil {
+			if r.Rest.Representation != nil {
 				t.line("rest")
-				t.enter(func() { writeRepresentation(t, r.Rest) })
+				t.enter(func() {
+					writeMetadata(t, r.Rest.Metadata)
+					writeRepresentation(t, r.Rest.Representation)
+				})
 			}
 		})
 	case plan.UnionRepresentation:

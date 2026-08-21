@@ -85,6 +85,15 @@ func Compile(n *frontend.Node) Expr {
 	return All{Operands: siblings}
 }
 
+// compileItems compiles each positional sub-schema in order, keeping its annotations.
+func compileItems(nodes []*frontend.Node) []ItemExpr {
+	out := make([]ItemExpr, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, ItemExpr{Schema: Compile(n), Metadata: MetadataOf(n)})
+	}
+	return out
+}
+
 // compileAll compiles each sub-schema in order.
 func compileAll(nodes []*frontend.Node) []Expr {
 	operands := make([]Expr, len(nodes))
@@ -175,9 +184,9 @@ func compileArrayKeywords(n *frontend.Node) []Expr {
 	}
 
 	if len(n.PrefixItems) > 0 || n.Items != nil || n.UnevaluatedItems != nil {
-		shape := ArrayShape{PrefixItems: compileAll(n.PrefixItems)}
+		shape := ArrayShape{PrefixItems: compileItems(n.PrefixItems)}
 		if n.Items != nil {
-			shape.Items = Compile(n.Items)
+			shape.Items = ItemExpr{Schema: Compile(n.Items), Metadata: MetadataOf(n.Items)}
 		}
 		if n.UnevaluatedItems != nil {
 			shape.UnevaluatedItems = Compile(n.UnevaluatedItems)
@@ -215,14 +224,16 @@ func compileObjectKeywords(n *frontend.Node) []Expr {
 		shape := ObjectShape{}
 		for _, p := range n.Properties {
 			shape.Properties = append(shape.Properties, PropertyExpr{
-				Name:   p.Name,
-				Schema: Compile(p.Schema),
+				Name:     p.Name,
+				Schema:   Compile(p.Schema),
+				Metadata: MetadataOf(p.Schema),
 			})
 		}
 		for _, p := range n.PatternProperties {
 			shape.PatternProperties = append(shape.PatternProperties, PatternPropertyExpr{
-				Pattern: p.Name,
-				Schema:  Compile(p.Schema),
+				Pattern:  p.Name,
+				Schema:   Compile(p.Schema),
+				Metadata: MetadataOf(p.Schema),
 			})
 		}
 		if n.AdditionalProperties != nil {

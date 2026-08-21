@@ -60,8 +60,8 @@ func TestExpr(t *testing.T) {
 
 func TestExpr_ArrayShapeAndContains(t *testing.T) {
 	e := ir.Shape{Detail: ir.ArrayShape{
-		PrefixItems:      []ir.Expr{ir.Kinds{Set: plan.SetString}},
-		Items:            ir.Kinds{Set: plan.SetNumber},
+		PrefixItems:      []ir.ItemExpr{{Schema: ir.Kinds{Set: plan.SetString}}},
+		Items:            ir.ItemExpr{Schema: ir.Kinds{Set: plan.SetNumber}},
 		UnevaluatedItems: ir.Never{},
 	}}
 

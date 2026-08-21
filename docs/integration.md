@@ -237,6 +237,16 @@ past `PredicateDispatch`:
 `plan.Metadata` carries the non-semantic annotations of a schema; `plan.FieldRepresentation.Metadata`
 carries the same for one property, so a property's own `title`/`description`/`deprecated`
 survives into the generated field (ogen's `jsonschema.Property.Description` → field godoc).
+`plan.PatternFieldRepresentation.Metadata` does the same per `patternProperties` entry and
+`plan.ItemRepresentation.Metadata` per `prefixItems` position and per `items` schema.
+
+Annotations are attached by `internal/planner` while it builds the representation, not by a
+second walk over the finished plan, so they survive every shape the planner emits — including
+the `UnionRepresentation` produced by `type: ["object","null"]`, `oneOf`/`anyOf`, `if`/`then`
+and `dependentSchemas`.
+
+Every value in a `plan.Metadata` is a deep copy: mutating `Extensions`, `Default` or `Examples`
+on a returned plan affects nothing else.
 
 | `plan.Metadata` | ogen |
 |---|---|

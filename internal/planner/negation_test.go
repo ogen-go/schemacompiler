@@ -43,23 +43,20 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 	return n
 }
 
-// TestBuild_SubsumedOneOfBranchIsNotClaimedExact pins issue #71. `oneOf` is ExactlyOne,
-// so a branch whose accepted set is a *subset* of another branch's is unreachable and the
-// wider branch loses the overlap: normalization rewrites ExactlyOne(A, B) with B ⊆ A into
+// TestBuild_SubsumedOneOfBranchIsExcluded pins issue #71. `oneOf` is ExactlyOne, so a
+// branch whose accepted set is a *subset* of another branch's is unreachable and the wider
+// branch loses the overlap: normalization rewrites ExactlyOne(A, B) with B ⊆ A into
 // All(A, Not(B)) (design §15.2). Dropping that negation is what made the plan accept the
 // subsumed instances while reporting ExactWithValidation.
 //
-// The negation is not emitted here, because its operand is a `$ref` and a reference is
-// planned from its identity alone, so nothing here proves the target exact and negating an
-// over-approximation rejects valid instances (#82). What the plan must not do is keep
-// claiming exactness: it reports DeclaredIncomplete and says which constraint went
-// unenforced. Once a reference's exactness consults its target the predicate is emitted, and
-// these move to PredicateDispatch with a non-zero negation count.
+// The operand is a `$ref`, which used to disqualify the negation outright. The target is
+// resolved and its own plan judged instead (issue #108), so the predicate survives and the
+// plan enforces the exclusion at PredicateDispatch.
 //
 // The subset relation is what distinguishes this from the partially-overlapping shape the
 // union-overlap check already rejects, so both orders and the declared/undeclared
 // discriminator are covered.
-func TestBuild_SubsumedOneOfBranchIsNotClaimedExact(t *testing.T) {
+func TestBuild_SubsumedOneOfBranchIsExcluded(t *testing.T) {
 	const catOrKitten = `{"anyOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Kitten"}]}`
 	const kitten = `{"$ref": "#/$defs/Kitten"}`
 
@@ -90,11 +87,11 @@ func TestBuild_SubsumedOneOfBranchIsNotClaimedExact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := buildNormalized(t, tt.doc)
 
-			require.Equal(t, plan.DeclaredIncomplete, got.Exactness,
-				"the plan accepts the subsumed instances and nothing in it rejects them")
+			require.Equal(t, plan.ExactWithValidation, got.Exactness,
+				"the emitted negation rejects the subsumed instances the wider branch would accept")
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
-			require.Zero(t, countNegations(t, got.Plan),
-				"blocked on a reference exactness that does not consult its target")
+			require.NotZero(t, countNegations(t, got.Plan),
+				"the target is resolved and proven exact, so the exclusion survives")
 		})
 	}
 }
@@ -156,6 +153,7 @@ func TestBuild_DisjointNestedCombinatorBranchesStayStatic(t *testing.T) {
 // The decision is the nested plan's own [plan.Exactness], one rung per row below, plus the
 // one case exactness cannot see: a reference, whose target is planned by a separate
 // [planner.BuildAt] call, so a reference reads as exact whatever its target turns out to be.
+// That half is decided by resolving the target and judging its plan instead (issue #108).
 func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
@@ -201,15 +199,17 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 		},
 		{
 			name: "nested SoundOverApproximation",
-			doc: `{"not": {"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Kitten"}],
-				"discriminator": {"propertyName": "petType"}}, ` + subsetPetDefs + `}`,
+			doc: `{"not": {"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Dog"}],
+				"discriminator": {"propertyName": "petType",
+					"mapping": {"cat": "#/$defs/Dog", "dog": "#/$defs/Cat"}}}, ` +
+				requiredButUnconstrainedPetDefs + `}`,
 			reason: "an asserted discriminator trusts a declared tag, so the nested plan accepts more than the schema",
 			emit:   false,
 		},
 		{
 			name: "nested DeclaredIncomplete",
-			doc: `{"not": {"type": "object", "properties": {"a": {"not": {"$ref": "#/$defs/Cat"}}}}, ` +
-				subsetPetDefs + `}`,
+			doc: `{"not": {"type": "object", "properties": {"a": {"not":
+				{"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}}}}}`,
 			reason: "the field's own negation is dropped, so nothing in the nested plan rejects what it should",
 			emit:   false,
 		},
@@ -220,9 +220,16 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 			emit:   false,
 		},
 		{
-			name:   "nested reference is never proven exact",
+			name:   "nested reference to an exact target",
 			doc:    `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S": {"type": "string"}}}`,
-			reason: "a reference's exactness does not consult its target, so it cannot be trusted here",
+			reason: "the target is resolved and its plan reproduces its schema, so negating the reference is exact",
+			emit:   true,
+		},
+		{
+			name: "nested reference to an unsupported target",
+			doc: `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S":
+				{"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}}}`,
+			reason: "the target is not modeled at all, and the reference no longer hides that",
 			emit:   false,
 		},
 	} {

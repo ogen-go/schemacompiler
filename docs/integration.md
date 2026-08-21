@@ -299,6 +299,11 @@ not enforce. A backend therefore never sees a `NegationPredicate` it must distru
 must not read the absence of one as "the schema had no `not`"; the exactness and the
 diagnostic are what say so.
 
+`Schema` may itself be — or contain — a `ReferenceRepresentation`, which is emitted when the
+target's own plan is exact (issue #108). Lower it exactly like any other reference: resolve
+the name against the reference graph (§5) and invoke that plan's validator. A recursive target
+is never emitted here, so the inversion cannot recurse without bound.
+
 The polarity rule binds the backend too, and one rung lower than the plan. A backend that
 cannot enforce some constraint *inside* `Schema` — an unasserted `format`, a regex its engine
 does not accept — reaches an acceptance that is really an over-acceptance, and inverting it

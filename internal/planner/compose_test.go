@@ -12,7 +12,9 @@ import (
 // TestNegatable covers the half of the [withResidualNegation] gate that [plan.Exactness]
 // cannot decide: a plan that accepts everything while its operand does not proves a keyword
 // was dropped however exact the plan reports, and a reference is planned from its identity
-// alone, so its target's exactness never reaches this call (issue #82).
+// alone, so its target's exactness never reaches this call (issue #82). With no registry
+// there is no target to consult, so every reference stays untrusted; [TestNegatable_RefTarget]
+// covers the resolvable cases.
 func TestNegatable(t *testing.T) {
 	anyPlan := plan.CompilationPlan{
 		Representation: plan.AnyRepresentation{},
@@ -56,13 +58,13 @@ func TestNegatable(t *testing.T) {
 			want:    true,
 		},
 		{
-			name:    "a reference is not",
+			name:    "a reference with no registry to resolve it is not",
 			p:       refPlan,
 			operand: ir.Ref{Target: "#/$defs/S"},
 			want:    false,
 		},
 		{
-			name:    "a reference nested in a field is not",
+			name:    "a reference nested in a field with no registry is not",
 			p:       objectWithRef,
 			operand: ir.Kinds{Set: plan.KindSet(1 << plan.KindObject)},
 			want:    false,
@@ -81,7 +83,7 @@ func TestNegatable(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, negatable(tt.p, tt.operand))
+			require.Equal(t, tt.want, newBuilder(nil).negatable(tt.p, tt.operand))
 		})
 	}
 }

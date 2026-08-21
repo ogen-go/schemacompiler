@@ -2,7 +2,7 @@ package plan
 
 import "strconv"
 
-// Position locates a schema in the source document it was parsed from (design §25).
+// Position locates a schema in the source document it was parsed from (issue #21).
 //
 // Line and Column are 1-based and zero when the parser retained no position, so a
 // position degrades to its File (or to nothing) rather than reporting a bogus 0:0.

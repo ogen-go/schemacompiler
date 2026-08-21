@@ -1,7 +1,5 @@
 package frontend
 
-import "github.com/ogen-go/schemacompiler/plan"
-
 // Registry is the resource + reference graph produced by resolution (design §10, §19):
 // resolved $ref/$anchor/$id targets, and strongly-connected-component analysis
 // classifying guarded vs unguarded recursion. Populated by [Load] / [FromLibOpenAPI].
@@ -20,10 +18,6 @@ type Registry struct {
 	// nodes lists every Node discovered during conversion, in discovery order. Used for
 	// reference-graph construction (scc.go).
 	nodes []*Node
-	// positions maps a Node.Pointer to the source position of the first node registered
-	// under it. Pointers repeat across documents, so the root document (converted first)
-	// wins — enough for diagnostics, which name a pointer they cannot otherwise locate.
-	positions map[string]plan.Position
 	// edges is the reference/applicator graph: outgoing edges per node.
 	edges map[*Node][]edge
 
@@ -55,16 +49,8 @@ func newRegistry() *Registry {
 		anchors:    make(map[string]*Node),
 		dynAnchors: make(map[string]*Node),
 		edges:      make(map[*Node][]edge),
-		positions:  make(map[string]plan.Position),
 		sccIndex:   make(map[*Node]int),
 	}
-}
-
-// PositionOf returns the source position recorded for a schema pointer, and whether one
-// is known.
-func (r *Registry) PositionOf(pointer string) (plan.Position, bool) {
-	p, ok := r.positions[pointer]
-	return p, ok
 }
 
 // Resource returns the resource root Node registered under the given absolute base URI

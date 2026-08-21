@@ -607,3 +607,31 @@ func TestBuildAt_DiagnosticOrigin(t *testing.T) {
 		require.Equal(t, origin.Position, d.Position)
 	}
 }
+
+func TestBuild_DiagnosticWithoutOrigin(t *testing.T) {
+	e := ir.All{Operands: []ir.Expr{ir.DynamicRef{Anchor: "node"}}}
+
+	got := planner.Build(e, nil)
+
+	require.NotEmpty(t, got.Diagnostics)
+	for _, d := range got.Diagnostics {
+		require.True(t, d.Position.IsZero(), "an unlocated schema must report no position")
+	}
+}
+
+func TestBuildAt_DiagnosticPointerEscaping(t *testing.T) {
+	e := ir.All{Operands: []ir.Expr{
+		ir.Kinds{Set: plan.SetObject},
+		ir.Shape{Detail: ir.ObjectShape{
+			Properties: []ir.PropertyExpr{
+				{Name: "a/b", Schema: ir.All{Operands: []ir.Expr{ir.DynamicRef{Anchor: "node"}}}},
+			},
+		}},
+	}}
+	origin := planner.Origin{Pointer: "/$defs/A"}
+
+	got := planner.BuildAt(e, nil, origin)
+
+	require.NotEmpty(t, got.Diagnostics)
+	require.Equal(t, "/$defs/A/properties/a~1b", got.Diagnostics[0].Pointer)
+}

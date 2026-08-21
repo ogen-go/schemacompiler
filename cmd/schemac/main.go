@@ -74,6 +74,9 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return errors.Wrap(err, "read input")
 	}
+	if *baseURI == "" {
+		*baseURI = defaultBaseURI(fs.Args())
+	}
 
 	ctx := context.Background()
 
@@ -134,6 +137,15 @@ func readInput(args []string) ([]byte, error) {
 		return os.ReadFile(args[0])
 	}
 	return io.ReadAll(os.Stdin)
+}
+
+// defaultBaseURI names the document diagnostics are reported against when -base-uri is
+// not given: the input file, or nothing at all when reading stdin.
+func defaultBaseURI(args []string) string {
+	if len(args) == 1 {
+		return args[0]
+	}
+	return ""
 }
 
 // planDefinitions extracts the whole-document definition set from p's Resolution, for

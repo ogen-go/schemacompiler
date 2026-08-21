@@ -271,7 +271,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 				buildExpr = ir.All{Operands: []ir.Expr{subExpr, ir.Kinds{Set: nonNull}}}
 			}
 		}
-		sub := b.build(buildExpr, path+"/properties/"+name)
+		sub := b.build(buildExpr, pointerAppend(path+"/properties", name))
 		fields[name] = plan.FieldRepresentation{
 			Representation: sub.Representation,
 			Presence:       presence,
@@ -299,7 +299,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 
 	var patternRules []plan.PatternFieldRepresentation
 	for _, pp := range merged.patternProperties {
-		sub := b.build(pp.Schema, path+"/patternProperties/"+pp.Pattern)
+		sub := b.build(pp.Schema, pointerAppend(path+"/patternProperties", pp.Pattern))
 		patternRules = append(patternRules, plan.PatternFieldRepresentation{
 			Pattern:        pp.Pattern,
 			Representation: sub.Representation,

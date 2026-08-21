@@ -63,7 +63,8 @@ to refuse to generate for these, which is acceptable:
   **but only when that sub-schema's plan is exact**. Negation inverts approximation
   polarity: negating an over-approximation under-approximates, i.e. rejects valid
   instances, which invariant 4 forbids outright. Otherwise drop the negation (the outer
-  plan then accepts a superset, which is sound), report `SoundOverApproximation` and warn.
+  plan then accepts a superset, which is sound), report `DeclaredIncomplete` — nothing
+  left in the plan rejects the extra values (§24, issue #84) — and warn.
 
 Everything that normalizes to `DirectGoType`, `GoTypeWithValidation`, or `StaticDispatch`
 is fully supported and is the primary target. The point of the capability ladder is to

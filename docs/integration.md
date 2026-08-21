@@ -281,9 +281,27 @@ schema at all (a dangling or unfetchable `$ref`) makes the referring plan `Unsup
 with a `SeverityError` diagnostic, rather than leaving it optimistically generatable — the
 root schema included.
 
-`Result.Exactness` / `DocumentResult.Exactness` never contradict that gate: a capability
-past `PredicateDispatch` always reports `UnsupportedConversion`, so a backend reaches the
-same verdict whichever of the two fields it consults.
+`Result.Exactness` / `DocumentResult.Exactness` never contradict that gate **in the
+refusing direction**: a capability past `PredicateDispatch` always reports
+`UnsupportedConversion`, so a plan the gate refuses is never advertised as convertible.
+
+The converse does not hold, and deliberately so. The two fields answer different questions
+— *can this be lowered at all* and *does the lowering reproduce the accepted set* — and a
+plan the gate passes may still report `DeclaredIncomplete`, at any capability including
+`DirectGoType` (a `not` whose operand is not exactly modeled is dropped rather than
+enforced, which costs the plan nothing at runtime — issues #77, #82, #84). A backend that
+consults only `Capability` therefore sees a fully generatable plan whose generated type
+accepts values the schema rejects, with no residual validation to catch them. **Consult
+both fields**: `Capability` decides whether to generate, `Exactness` decides what the
+generated code is worth.
+
+| `Exactness` | Meaning | Backend action |
+|---|---|---|
+| `ExactPureRepresentation` | The Go type alone reproduces the accepted set. | Generate; no validator needed. |
+| `ExactWithValidation` | The Go type plus the residual `ValidationPlan` reproduces the accepted set. | Generate; emit the validator. |
+| `SoundOverApproximation` | The Go type admits extra values **and residual validation rejects them** (design §24): an `Any` representation with predicates, a match-count dispatch, a `TagAsserted` discriminator whose branches still validate. | Generate; emit the validator, which is what closes the gap. |
+| `DeclaredIncomplete` | The plan admits extra values and **nothing in it closes the gap**: a constraint was dropped and no residual check replaces it. Always accompanied by a `SeverityWarning` diagnostic naming the constraint. | Representable; the choice is the backend's. Generate anyway (ogen's permissive behaviour for keywords it ignores) or refuse — but surface the diagnostic either way. |
+| `UnsupportedConversion` | No sound conversion exists. | Refuse; surface the diagnostic. |
 
 | `CapabilityLevel` | ogen generation | Rationale |
 |---|---|---|

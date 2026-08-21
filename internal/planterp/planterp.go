@@ -7,15 +7,17 @@
 // enforced here, and the instance is accepted. That is the measurement — a plan that
 // claims exactness while accepting an invalid instance has lost a constraint.
 //
-// Every switch over a plan interface ends in a default that returns an error, so a new
-// variant fails loudly instead of being silently accepted. Struct destructuring uses the
-// same binding guards as [github.com/ogen-go/schemacompiler/internal/planwalk]: a plan
-// struct that gains or reorders a field stops this package compiling.
+// Structure comes from [github.com/ogen-go/schemacompiler/internal/planwalk]: child
+// nodes and their [planwalk.Edge] payloads are enumerated there, so the binding guards
+// that stop a plan struct changing shape unnoticed live in that package alone. What
+// stays here is the instance-directed half — which child to visit, how often, and
+// against which sub-value — plus a variant switch per plan interface whose default
+// returns an [InternalError], so a new variant fails loudly instead of being silently
+// accepted.
 package planterp
 
 import (
-	"github.com/go-faster/errors"
-
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -23,8 +25,9 @@ import (
 type Verdict struct {
 	// Accepted reports whether the plan admits the instance.
 	Accepted bool
-	// Reason names the constraint that rejected it; empty when accepted.
-	Reason string
+	// Reason is the rejection: where it happened, which constraint rejected, and the
+	// failure underneath it. Nil when accepted.
+	Reason *ValidateError
 	// Approximated lists constraints the interpreter could not enforce even though the
 	// plan carries them: an ECMA-262 pattern Go's RE2 cannot compile, and `format`,
 	// which the 2020-12 format-annotation dialect does not assert. An acceptance with a
@@ -34,14 +37,26 @@ type Verdict struct {
 
 func accepted() Verdict { return Verdict{Accepted: true} }
 
-func rejected(reason string) Verdict { return Verdict{Reason: reason} }
+func rejected(f frame, constraint, detail string) Verdict {
+	return rejectedBy(f, constraint, detail, nil)
+}
+
+func rejectedBy(f frame, constraint, detail string, cause *ValidateError) Verdict {
+	return Verdict{Reason: &ValidateError{
+		Path:       f.path,
+		Constraint: constraint,
+		Detail:     detail,
+		Cause:      cause,
+	}}
+}
 
 // Interpret reports whether value satisfies p. value is a JSON document decoded by
 // [encoding/json] into `any`; numbers may be float64 or [encoding/json.Number].
 //
-// An error means the interpreter does not understand the plan (an unknown variant, an
-// unresolvable reference, a reference cycle with no instance descent) and is never a
-// verdict: callers must not read it as acceptance.
+// The error slot never carries a [ValidateError]: a rejection is a verdict, not an
+// error. It carries an [InternalError] when the interpreter cannot read the plan, and an
+// [InvalidValueError] when value is not a decoded JSON document. Neither is a verdict:
+// callers must not read either as acceptance.
 func Interpret(p plan.CompilationPlan, value any) (Verdict, error) {
 	in := &interp{}
 	if err := in.loadDefinitions(p.Resolution); err != nil {
@@ -63,6 +78,9 @@ type interp struct {
 	approx []string
 }
 
+// loadDefinitions reads the document's reference graph. planwalk deliberately does not
+// descend Resolution — its definitions are whole-document plans, visited once per
+// reference if it did — so the binding guard on these variants lives here.
 func (in *interp) loadDefinitions(r plan.ResolutionPlan) error {
 	if r == nil {
 		return nil
@@ -88,13 +106,15 @@ func (in *interp) loadDefinitions(r plan.ResolutionPlan) error {
 		// (design §10.2); a reference needing one fails when it is followed.
 		return nil
 	default:
-		return errors.Errorf("planterp: unhandled plan.ResolutionPlan variant %T", r)
+		return internalf("unhandled plan.ResolutionPlan variant %T", r)
 	}
 }
 
-// frame is the interpreter state at one instance node: the recursion binders in scope,
-// and the reference names already being followed without descending into a sub-value.
+// frame is the interpreter state at one instance node: where in the instance it is, the
+// recursion binders in scope, and the reference names already being followed without
+// descending into a sub-value.
 type frame struct {
+	path    string
 	binders map[string]plan.Representation
 	active  map[string]bool
 }
@@ -103,10 +123,18 @@ func newFrame() frame {
 	return frame{binders: map[string]plan.Representation{}, active: map[string]bool{}}
 }
 
-// descend returns the frame for a sub-value: reference following starts over, since
-// following a reference across an instance descent is ordinary recursion, not a cycle.
-func (f frame) descend() frame {
-	return frame{binders: f.binders, active: map[string]bool{}}
+// descend returns the frame for the sub-value at token: the path grows by one JSON
+// Pointer reference token, and reference following starts over, since following a
+// reference across an instance descent is ordinary recursion, not a cycle.
+func (f frame) descend(token string) frame {
+	return frame{path: pointerAppend(f.path, token), binders: f.binders, active: map[string]bool{}}
+}
+
+// here is [frame.descend] for a sub-plan run against the same instance node, as `not`
+// and `propertyNames` are: the location does not move, but reference following starts
+// over just the same.
+func (f frame) here() frame {
+	return frame{path: f.path, binders: f.binders, active: map[string]bool{}}
 }
 
 func (f frame) bind(name string, body plan.Representation) frame {
@@ -115,7 +143,7 @@ func (f frame) bind(name string, body plan.Representation) frame {
 		binders[k] = v
 	}
 	binders[name] = body
-	return frame{binders: binders, active: f.active}
+	return frame{path: f.path, binders: binders, active: f.active}
 }
 
 func (f frame) follow(name string) frame {
@@ -124,7 +152,7 @@ func (f frame) follow(name string) frame {
 		active[k] = true
 	}
 	active[name] = true
-	return frame{binders: f.binders, active: active}
+	return frame{path: f.path, binders: f.binders, active: active}
 }
 
 // plan interprets one CompilationPlan: the representation must be able to hold the
@@ -134,29 +162,33 @@ func (f frame) follow(name string) frame {
 // Resolution is not consulted here: only the root plan carries a populated graph
 // (docs/integration.md §5), and [interp.defs] already holds it.
 func (in *interp) plan(p plan.CompilationPlan, value any, f frame) (Verdict, error) {
-	var t struct {
-		Representation plan.Representation
-		Validation     plan.ValidationPlan
-		Dispatch       plan.DispatchPlan
-		Resolution     plan.ResolutionPlan
-		Capability     plan.CapabilityLevel
-		Metadata       plan.Metadata
-	} = p
+	var (
+		representation plan.Representation
+		validation     plan.ValidationPlan
+		dispatch       plan.DispatchPlan
+	)
+	for c := range planwalk.Children(planwalk.PlanNode(p)) {
+		switch c.Edge.Kind {
+		case planwalk.EdgeRepresentation:
+			representation = c.Representation
+		case planwalk.EdgeValidation:
+			validation = c.Validation
+		case planwalk.EdgeDispatch:
+			dispatch = c.Dispatch
+		default:
+			return Verdict{}, internalf("unhandled plan child edge %s", c.Edge.Kind)
+		}
+	}
 
-	v, err := in.representation(t.Representation, value, f)
+	v, err := in.representation(representation, value, f)
 	if err != nil || !v.Accepted {
 		return v, err
 	}
-	v, err = in.validation(t.Validation, value, f)
+	v, err = in.validation(validation, value, f)
 	if err != nil || !v.Accepted {
 		return v, err
 	}
-	return in.dispatch(t.Dispatch, value, f)
-}
-
-// sub runs a nested plan against a sub-value of the instance.
-func (in *interp) sub(p plan.CompilationPlan, value any, f frame) (Verdict, error) {
-	return in.plan(p, value, f.descend())
+	return in.dispatch(dispatch, value, f)
 }
 
 func (in *interp) approximate(what string) {

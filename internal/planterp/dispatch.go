@@ -3,8 +3,7 @@ package planterp
 import (
 	"strconv"
 
-	"github.com/go-faster/errors"
-
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -17,83 +16,62 @@ func (in *interp) dispatch(d plan.DispatchPlan, value any, f frame) (Verdict, er
 
 	switch d := d.(type) {
 	case plan.NoDispatch:
-		var t struct{} = d
-		_ = t
 		return accepted(), nil
-
 	case plan.KindDispatch:
-		var t struct {
-			Cases map[plan.JSONKind]plan.CompilationPlan
-		} = d
-		return in.kindDispatch(t.Cases, value, f)
-
+		return in.kindDispatch(d, value, f)
 	case plan.LiteralDispatch:
-		var t struct {
-			Cases []plan.LiteralCase
-		} = d
-		return in.literalDispatch(t.Cases, value, value, "literal", f)
-
+		return in.literalDispatch(planwalk.DispatchNode(d), value, value, "literal dispatch", f)
 	case plan.PropertyDispatch:
-		var t struct {
-			Property string
-			Cases    []plan.LiteralCase
-			Tag      plan.TagSource
-		} = d
-		return in.propertyDispatch(t.Property, t.Cases, t.Tag, value, f)
-
+		return in.propertyDispatch(d, value, f)
 	case plan.PresenceDispatch:
-		var t struct {
-			Property string
-			Present  plan.CompilationPlan
-			Absent   plan.CompilationPlan
-		} = d
-		return in.presenceDispatch(t.Property, t.Present, t.Absent, value, f)
-
+		return in.presenceDispatch(d, value, f)
 	case plan.PredicateCountDispatch:
-		var t struct {
-			Branches []plan.CompilationPlan
-			Minimum  int
-			Maximum  int
-		} = d
-		return in.predicateCountDispatch(t.Branches, t.Minimum, t.Maximum, value, f)
-
+		return in.predicateCountDispatch(d, value, f)
 	default:
-		return Verdict{}, errors.Errorf("planterp: unhandled plan.DispatchPlan variant %T", d)
+		return Verdict{}, internalf("unhandled plan.DispatchPlan variant %T", d)
 	}
 }
 
-func (in *interp) kindDispatch(cases map[plan.JSONKind]plan.CompilationPlan, value any, f frame) (Verdict, error) {
+func (in *interp) kindDispatch(d plan.KindDispatch, value any, f frame) (Verdict, error) {
 	k, err := kindOf(value)
 	if err != nil {
-		return Verdict{}, err
+		return Verdict{}, withPath(f.path, err)
 	}
-	branch, ok := cases[k]
-	if !ok {
-		return rejected("kind dispatch: no case for " + kindName(k)), nil
+
+	for c := range planwalk.Children(planwalk.DispatchNode(d)) {
+		if c.Edge.Kind != planwalk.EdgeKindCase {
+			return Verdict{}, internalf("unhandled kind dispatch child edge %s", c.Edge.Kind)
+		}
+		if c.Edge.Case != k {
+			continue
+		}
+		v, err := in.plan(c.Plan, value, f)
+		if err != nil {
+			return Verdict{}, err
+		}
+		if !v.Accepted {
+			return rejectedBy(f, "kind dispatch", kindName(k)+" case rejects", v.Reason), nil
+		}
+		return accepted(), nil
 	}
-	v, err := in.plan(branch, value, f)
-	if err != nil {
-		return Verdict{}, err
-	}
-	if !v.Accepted {
-		return rejected("kind dispatch[" + kindName(k) + "]: " + v.Reason), nil
-	}
-	return accepted(), nil
+	return rejected(f, "kind dispatch", "no case for "+kindName(k)), nil
 }
 
 // literalDispatch selects the case whose literal equals selector and runs its plan
 // against value. For a [plan.LiteralDispatch] the two are the same value; for a
-// [plan.PropertyDispatch] the selector is the tag property's value.
-func (in *interp) literalDispatch(
-	cases []plan.LiteralCase,
-	selector, value any,
-	what string,
-	f frame,
-) (Verdict, error) {
-	for _, c := range cases {
-		eq, err := equalValues(selector, literalValue(c))
+// [plan.PropertyDispatch] the selector is the tag property's value. Both dispatches
+// enumerate their cases the same way, as literal-labeled children of n.
+func (in *interp) literalDispatch(n planwalk.Node, selector, value any, what string, f frame) (Verdict, error) {
+	for c := range planwalk.Children(n) {
+		switch c.Edge.Kind {
+		case planwalk.EdgeLiteralCase, planwalk.EdgePropertyCase:
+		default:
+			return Verdict{}, internalf("unhandled literal dispatch child edge %s", c.Edge.Kind)
+		}
+
+		eq, err := equalValues(selector, edgeLiteral(c.Edge))
 		if err != nil {
-			return Verdict{}, err
+			return Verdict{}, withPath(f.path, err)
 		}
 		if !eq {
 			continue
@@ -103,42 +81,49 @@ func (in *interp) literalDispatch(
 			return Verdict{}, err
 		}
 		if !v.Accepted {
-			return rejected(what + " dispatch: selected case rejects: " + v.Reason), nil
+			return rejectedBy(f, what, "selected case rejects", v.Reason), nil
 		}
 		return accepted(), nil
 	}
-	return rejected(what + " dispatch: no case matches the value"), nil
+	return rejected(f, what, "no case matches the value"), nil
 }
 
-func (in *interp) propertyDispatch(
-	property string,
-	cases []plan.LiteralCase,
-	tag plan.TagSource,
-	value any,
-	f frame,
-) (Verdict, error) {
-	switch tag {
+func (in *interp) propertyDispatch(d plan.PropertyDispatch, value any, f frame) (Verdict, error) {
+	switch d.Tag {
 	case plan.TagInferred, plan.TagDeclared, plan.TagAsserted:
 	default:
-		return Verdict{}, errors.Errorf("planterp: unhandled plan.TagSource %d", tag)
+		return Verdict{}, internalf("unhandled plan.TagSource %d", d.Tag)
 	}
 
+	what := "property dispatch[" + strconv.Quote(d.Property) + "]"
 	obj, ok := value.(map[string]any)
 	if !ok {
 		k, err := kindOf(value)
 		if err != nil {
-			return Verdict{}, err
+			return Verdict{}, withPath(f.path, err)
 		}
-		return rejected("property dispatch: value is " + kindName(k)), nil
+		return rejected(f, what, "value is "+kindName(k)), nil
 	}
-	sel, present := obj[property]
+	sel, present := obj[d.Property]
 	if !present {
-		return rejected("property dispatch: tag " + strconv.Quote(property) + " is absent"), nil
+		return rejected(f, what, "tag is absent"), nil
 	}
-	return in.literalDispatch(cases, sel, value, "property "+strconv.Quote(property), f)
+	return in.literalDispatch(planwalk.DispatchNode(d), sel, value, what, f)
 }
 
-func (in *interp) presenceDispatch(property string, present, absent plan.CompilationPlan, value any, f frame) (Verdict, error) {
+func (in *interp) presenceDispatch(d plan.PresenceDispatch, value any, f frame) (Verdict, error) {
+	var present, absent plan.CompilationPlan
+	for c := range planwalk.Children(planwalk.DispatchNode(d)) {
+		switch c.Edge.Kind {
+		case planwalk.EdgePresent:
+			present = c.Plan
+		case planwalk.EdgeAbsent:
+			absent = c.Plan
+		default:
+			return Verdict{}, internalf("unhandled presence dispatch child edge %s", c.Edge.Kind)
+		}
+	}
+
 	obj, ok := value.(map[string]any)
 	if !ok {
 		// A presence dispatch comes from `dependentSchemas`, which applies to objects
@@ -150,7 +135,7 @@ func (in *interp) presenceDispatch(property string, present, absent plan.Compila
 	}
 
 	branch, label := absent, "absent"
-	if _, ok := obj[property]; ok {
+	if _, ok := obj[d.Property]; ok {
 		branch, label = present, "present"
 	}
 	v, err := in.plan(branch, value, f)
@@ -158,27 +143,34 @@ func (in *interp) presenceDispatch(property string, present, absent plan.Compila
 		return Verdict{}, err
 	}
 	if !v.Accepted {
-		return rejected("presence dispatch[" + strconv.Quote(property) + " " + label + "]: " + v.Reason), nil
+		return rejectedBy(f, "presence dispatch["+strconv.Quote(d.Property)+" "+label+"]", "", v.Reason), nil
 	}
 	return accepted(), nil
 }
 
 // predicateCountDispatch is the runtime match-count of docs/integration.md §3: every
 // branch is trial-validated and the number of accepting branches must fall in range.
-func (in *interp) predicateCountDispatch(branches []plan.CompilationPlan, minimum, maximum int, value any, f frame) (Verdict, error) {
+func (in *interp) predicateCountDispatch(d plan.PredicateCountDispatch, value any, f frame) (Verdict, error) {
 	matches := 0
-	for _, branch := range branches {
-		v, err := in.plan(branch, value, f)
+	var last *ValidateError
+	for c := range planwalk.Children(planwalk.DispatchNode(d)) {
+		if c.Edge.Kind != planwalk.EdgeCountBranch {
+			return Verdict{}, internalf("unhandled predicate-count dispatch child edge %s", c.Edge.Kind)
+		}
+		v, err := in.plan(c.Plan, value, f)
 		if err != nil {
 			return Verdict{}, err
 		}
 		if v.Accepted {
 			matches++
+			continue
 		}
+		last = v.Reason
 	}
-	if matches < minimum || matches > maximum {
-		return rejected("predicate-count dispatch: " + strconv.Itoa(matches) + " branches match, want " +
-			strconv.Itoa(minimum) + "-" + strconv.Itoa(maximum)), nil
+	if matches < d.Minimum || matches > d.Maximum {
+		return rejectedBy(f, "predicate-count dispatch",
+			strconv.Itoa(matches)+" branches match, want "+
+				strconv.Itoa(d.Minimum)+"-"+strconv.Itoa(d.Maximum), last), nil
 	}
 	return accepted(), nil
 }

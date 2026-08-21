@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-faster/errors"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ogen-go/schemacompiler"
@@ -65,8 +66,14 @@ const (
 	// interpreter itself could not enforce (an RE2-incompatible pattern, an unasserted
 	// `format`), so it is not evidence against the plan.
 	verdictApproximated
-	// verdictInterpError is the interpreter refusing to give a verdict at all.
-	verdictInterpError
+	// verdictInvalidValue is the interpreter refusing the instance itself: the corpus
+	// decoded into something [encoding/json] does not produce. That is a harness bug.
+	verdictInvalidValue
+	// verdictInternalError is the interpreter unable to read the plan — a variant that
+	// slipped past planterp's TestEveryVariantIsHandled, an unresolvable reference,
+	// malformed plan data. It is the guard the whole design rests on, so it is never
+	// quarantined and always fails.
+	verdictInternalError
 )
 
 func (k verdictKind) String() string {
@@ -79,8 +86,10 @@ func (k verdictKind) String() string {
 		return "accepted-invalid-while-exact"
 	case verdictApproximated:
 		return "accepted-invalid-via-unenforceable-constraint"
-	case verdictInterpError:
-		return "interpreter-error"
+	case verdictInvalidValue:
+		return "invalid-instance-value"
+	case verdictInternalError:
+		return "interpreter-internal-error"
 	default:
 		return fmt.Sprintf("verdictKind(%d)", int(k))
 	}
@@ -185,7 +194,7 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 					}
 					continue
 				}
-				if note, quarantined := diffSkips[key]; quarantined {
+				if note, quarantined := diffSkips[key]; quarantined && kind != verdictInternalError {
 					seen[key] = true
 					tally.quarantined++
 					tally.failures[kind]++
@@ -211,6 +220,9 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 	}
 	require.Empty(t, tally.unusedSkips,
 		"quarantine entries that no longer fire: the bug is fixed, delete the entry")
+	require.Zero(t, tally.bandFailures[verdictInternalError],
+		"planterp could not read a plan in the skipped exactness=UnsupportedConversion band; "+
+			"that band skips the oracle, never the interpreter's own guards")
 }
 
 // judge applies the asymmetric oracle of issue #70 to one instance.
@@ -219,15 +231,22 @@ func judge(t *testing.T, res *schemacompiler.Result, inst diffInstance) (kind ve
 
 	value, err := decodeInstance(inst.Data)
 	if err != nil {
-		return verdictInterpError, "decode instance: " + err.Error()
+		return verdictInvalidValue, "decode instance: " + err.Error()
 	}
 	verdict, err := planterp.Interpret(res.Plan, value)
 	if err != nil {
-		return verdictInterpError, err.Error()
+		// Interpret never reports a rejection through its error slot, so an error here
+		// is one of two unrelated defects, and they must not share a bucket: a bad
+		// fixture is the harness's problem, an unreadable plan is the compiler's.
+		var internal *planterp.InternalError
+		if errors.As(err, &internal) {
+			return verdictInternalError, err.Error()
+		}
+		return verdictInvalidValue, err.Error()
 	}
 
-	detail = fmt.Sprintf("instance %s, capability %v, exactness %v, verdict accepted=%v %s",
-		inst.Data, res.Capability, res.Exactness, verdict.Accepted, verdict.Reason)
+	detail = fmt.Sprintf("instance %s, capability %v, exactness %v, verdict accepted=%v%s",
+		inst.Data, res.Capability, res.Exactness, verdict.Accepted, renderReason(verdict.Reason))
 
 	switch {
 	case inst.Valid && !verdict.Accepted:
@@ -244,6 +263,15 @@ func judge(t *testing.T, res *schemacompiler.Result, inst diffInstance) (kind ve
 	default:
 		return verdictOK, detail
 	}
+}
+
+// renderReason indents a structured rejection under the finding it belongs to, so the
+// path and the cause chain stay readable in the test log.
+func renderReason(reason *planterp.ValidateError) string {
+	if reason == nil {
+		return ""
+	}
+	return "\n  " + strings.ReplaceAll(reason.Error(), "\n", "\n  ")
 }
 
 // decodeInstance decodes with UseNumber so that a literal past float64's precision, and
@@ -300,6 +328,15 @@ func suiteFiles(t *testing.T) []string {
 	return files
 }
 
+// reportedKinds is the order the tally prints its lines in.
+var reportedKinds = []verdictKind{
+	verdictRejectedValid,
+	verdictAcceptedInvalid,
+	verdictApproximated,
+	verdictInvalidValue,
+	verdictInternalError,
+}
+
 func reportTally(t *testing.T, tally diffTally) {
 	t.Helper()
 
@@ -312,12 +349,15 @@ func reportTally(t *testing.T, tally diffTally) {
 	for _, reason := range sortedKeys(tally.outOfDialect) {
 		t.Logf("skipped: out of dialect (%s) %d", reason, tally.outOfDialect[reason])
 	}
-	for _, kind := range []verdictKind{verdictRejectedValid, verdictAcceptedInvalid, verdictApproximated, verdictInterpError} {
+	for _, kind := range reportedKinds {
 		t.Logf("  %-48s %d", kind, tally.failures[kind])
 	}
 	t.Logf("quarantined by diffSkips: %d (entries %d)", tally.quarantined, len(diffSkips))
 	t.Logf("disagreements inside the skipped exactness=UnsupportedConversion band (reported, not failures):")
-	for _, kind := range []verdictKind{verdictRejectedValid, verdictAcceptedInvalid, verdictInterpError} {
+	for _, kind := range reportedKinds {
+		if kind == verdictApproximated {
+			continue
+		}
 		t.Logf("  %-48s %d", kind, tally.bandFailures[kind])
 	}
 }

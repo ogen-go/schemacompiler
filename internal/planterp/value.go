@@ -6,8 +6,7 @@ import (
 	"math/big"
 	"strconv"
 
-	"github.com/go-faster/errors"
-
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -29,7 +28,7 @@ func kindOf(value any) (plan.JSONKind, error) {
 	case map[string]any:
 		return plan.KindObject, nil
 	default:
-		return 0, errors.Errorf("planterp: not a decoded JSON value: %T", value)
+		return 0, invalidValuef(value, "not a decoded JSON value: %T", value)
 	}
 }
 
@@ -48,7 +47,7 @@ func kindName(k plan.JSONKind) string {
 	case plan.KindObject:
 		return "object"
 	default:
-		return "kind(" + string(rune('0'+k)) + ")"
+		return "kind(" + strconv.Itoa(int(k)) + ")"
 	}
 }
 
@@ -59,17 +58,17 @@ func ratOf(value any) (*big.Rat, error) {
 	case json.Number:
 		r, ok := new(big.Rat).SetString(n.String())
 		if !ok {
-			return nil, errors.Errorf("planterp: cannot parse number %q", n.String())
+			return nil, invalidValuef(value, "cannot parse number %q", n.String())
 		}
 		return r, nil
 	case float64:
 		r := new(big.Rat)
 		if r.SetFloat64(n) == nil {
-			return nil, errors.Errorf("planterp: number %v is not finite", n)
+			return nil, invalidValuef(value, "number %v is not finite", n)
 		}
 		return r, nil
 	default:
-		return nil, errors.Errorf("planterp: not a JSON number: %T", value)
+		return nil, invalidValuef(value, "not a JSON number: %T", value)
 	}
 }
 
@@ -81,7 +80,7 @@ func ratOf(value any) (*big.Rat, error) {
 func ratOfFloat(v float64) (*big.Rat, error) {
 	r, ok := new(big.Rat).SetString(strconv.FormatFloat(v, 'g', -1, 64))
 	if !ok {
-		return nil, errors.Errorf("planterp: bound %v is not a finite number", v)
+		return nil, internalf("bound %v is not a finite number", v)
 	}
 	return r, nil
 }
@@ -157,30 +156,24 @@ func equalValues(a, b any) (bool, error) {
 		}
 		return true, nil
 	default:
-		return false, errors.Errorf("planterp: unhandled plan.JSONKind %d", ka)
+		return false, internalf("unhandled plan.JSONKind %d", ka)
 	}
 }
 
-// literalValue is the instance-comparable value of a [plan.LiteralCase]. Raw is
+// edgeLiteral is the instance-comparable value a dispatch case is selected by. Raw is
 // preferred when present: it is the exact source bytes, so a literal past float64's
 // precision compares exactly (plan.LiteralCase's contract).
-func literalValue(c plan.LiteralCase) any {
-	var t struct {
-		Value any
-		Raw   []byte
-		Plan  plan.CompilationPlan
-	} = c
-
-	if len(t.Raw) == 0 {
-		return t.Value
+func edgeLiteral(e planwalk.Edge) any {
+	if len(e.Raw) == 0 {
+		return e.Value
 	}
-	dec := json.NewDecoder(bytes.NewReader(t.Raw))
+	dec := json.NewDecoder(bytes.NewReader(e.Raw))
 	dec.UseNumber()
 	var out any
 	if err := dec.Decode(&out); err != nil {
 		// Raw that does not parse is not a reason to guess: fall back to the Value the
 		// plan says is authoritative when Raw is absent.
-		return t.Value
+		return e.Value
 	}
 	return out
 }

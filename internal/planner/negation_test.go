@@ -49,12 +49,12 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 // All(A, Not(B)) (design §15.2). Dropping that negation is what made the plan accept the
 // subsumed instances while reporting ExactWithValidation.
 //
-// The negation is not emitted here, because its operand is a `$ref` whose target plan
-// drops the const that tags it (#68), and negating an over-approximation rejects valid
-// instances (#82). What the plan must not do is keep claiming exactness: it now reports
-// DeclaredIncomplete and says which constraint went unenforced. Once #68 lands the
-// operand becomes trustworthy, the predicate is emitted, and these move to
-// PredicateDispatch with a non-zero negation count.
+// The negation is not emitted here, because its operand is a `$ref` and a reference is
+// planned from its identity alone, so nothing here proves the target exact and negating an
+// over-approximation rejects valid instances (#82). What the plan must not do is keep
+// claiming exactness: it reports DeclaredIncomplete and says which constraint went
+// unenforced. Once a reference's exactness consults its target the predicate is emitted, and
+// these move to PredicateDispatch with a non-zero negation count.
 //
 // The subset relation is what distinguishes this from the partially-overlapping shape the
 // union-overlap check already rejects, so both orders and the declared/undeclared
@@ -94,7 +94,7 @@ func TestBuild_SubsumedOneOfBranchIsNotClaimedExact(t *testing.T) {
 				"the plan accepts the subsumed instances and nothing in it rejects them")
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 			require.Zero(t, countNegations(t, got.Plan),
-				"blocked on #68: the negated $ref target drops the const that tags it")
+				"blocked on a reference exactness that does not consult its target")
 		})
 	}
 }
@@ -153,11 +153,9 @@ func TestBuild_DisjointNestedCombinatorBranchesStayStatic(t *testing.T) {
 // emitted only when the nested plan is exactly modeled; otherwise the negation is dropped,
 // which widens the outer plan (always sound) and is reported.
 //
-// [plan.Exactness] alone is not enough to decide this, because it is derived from a plan's
-// shape rather than from what the plan enforces: an object, array or reference plan reports
-// itself exact while dropping the constraints inside it (#68, #72). Those rows are gated
-// structurally instead, so today only primitives, literals and kinds are negated. When #68
-// and #72 land the structural check can go and they flip back to emitting.
+// The decision is the nested plan's own [plan.Exactness], one rung per row below, plus the
+// one case exactness cannot see: a reference, whose target is planned by a separate
+// [planner.BuildAt] call, so a reference reads as exact whatever its target turns out to be.
 func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
@@ -166,39 +164,59 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 		emit   bool
 	}{
 		{
-			name:   "exact nested primitive",
+			name:   "nested ExactPureRepresentation",
 			doc:    `{"not": {"type": "integer"}}`,
-			reason: "the nested plan reproduces the schema exactly, so negating it is exact too",
+			reason: "the representation alone reproduces the schema, so negating it is exact too",
 			emit:   true,
 		},
 		{
-			name:   "nested plan is unsupported",
+			name:   "nested ExactWithValidation",
+			doc:    `{"not": {"type": "string", "minLength": 3}}`,
+			reason: "the residual validator closes the representation's gap, so the accepted set is the schema's",
+			emit:   true,
+		},
+		{
+			name:   "nested ExactWithValidation through a match count",
+			doc:    `{"not": {"type": "array", "contains": {"type": "string"}}}`,
+			reason: "PredicateDispatch prices the match count, it does not approximate it (#100)",
+			emit:   true,
+		},
+		{
+			name:   "nested object is exact inside its fields",
+			doc:    `{"not": {"type": "object", "properties": {"a": {"type": "string", "minLength": 1}}}}`,
+			reason: "a field carries the whole sub-plan written there (#68)",
+			emit:   true,
+		},
+		{
+			name:   "nested array is exact inside its items",
+			doc:    `{"not": {"type": "array", "items": {"type": "string", "minLength": 5}}}`,
+			reason: "an item carries the whole sub-plan written there (#68)",
+			emit:   true,
+		},
+		{
+			name:   "nested shape without a sibling type",
+			doc:    `{"not": {"properties": {"a": {"type": "string"}}, "additionalProperties": false}}`,
+			reason: "the shape survives as a kind-guarded predicate (#72)",
+			emit:   true,
+		},
+		{
+			name: "nested SoundOverApproximation",
+			doc: `{"not": {"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Kitten"}],
+				"discriminator": {"propertyName": "petType"}}, ` + subsetPetDefs + `}`,
+			reason: "an asserted discriminator trusts a declared tag, so the nested plan accepts more than the schema",
+			emit:   false,
+		},
+		{
+			name: "nested DeclaredIncomplete",
+			doc: `{"not": {"type": "object", "properties": {"a": {"not": {"$ref": "#/$defs/Cat"}}}}, ` +
+				subsetPetDefs + `}`,
+			reason: "the field's own negation is dropped, so nothing in the nested plan rejects what it should",
+			emit:   false,
+		},
+		{
+			name:   "nested UnsupportedConversion",
 			doc:    `{"not": {"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}}`,
 			reason: "unevaluatedProperties is not modeled, so the nested plan accepts more than the schema",
-			emit:   false,
-		},
-		{
-			name:   "nested plan over-approximates",
-			doc:    `{"not": {"type": "array", "contains": {"type": "string"}}}`,
-			reason: "the nested match-count plan is a declared over-approximation",
-			emit:   false,
-		},
-		{
-			name:   "nested plan enforces nothing",
-			doc:    `{"not": {"properties": {"a": {"type": "string"}}, "additionalProperties": false}}`,
-			reason: "the nested plan accepts every instance (#72), so the negation would reject every instance",
-			emit:   false,
-		},
-		{
-			name:   "nested object claims exactness it does not have (#68)",
-			doc:    `{"not": {"type": "object", "properties": {"a": {"type": "string", "minLength": 1}}}}`,
-			reason: "minLength is dropped inside the field, so the object plan over-accepts however exact it reports",
-			emit:   false,
-		},
-		{
-			name:   "nested array claims exactness it does not have (#68)",
-			doc:    `{"not": {"type": "array", "items": {"type": "string", "minLength": 5}}}`,
-			reason: "minLength is dropped inside the item, so the array plan over-accepts however exact it reports",
 			emit:   false,
 		},
 		{

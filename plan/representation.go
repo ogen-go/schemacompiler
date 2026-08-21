@@ -17,11 +17,11 @@ type NeverRepresentation struct{}
 type PrimitiveRepresentation struct {
 	Kind    JSONKind
 	Numeric NumericDomain // meaningful only when Kind == KindNumber
-	// Format is the `format` applying to this kind, classified. A
-	// [FormatRepresentational] one is a request for a dedicated Go type; the matching
-	// [FormatPredicate] stays in the validation plan regardless, so a backend that
-	// ignores Format still validates (design §24 invariant 4).
-	Format Format
+	// Format is the `format` annotation applying to this kind, as written. The compiler
+	// assigns it no meaning: choosing a Go type for a name is a backend decision. The
+	// matching [FormatPredicate] stays in the validation plan regardless, so a backend
+	// that ignores Format still validates (design §24 invariant 4).
+	Format string
 }
 
 // ObjectRepresentation is a struct/map-like shape (design §7, §12).

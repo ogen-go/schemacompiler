@@ -68,8 +68,8 @@ func writeRepresentation(t *tw, r plan.Representation) {
 		if dom := numericDomainString(r.Numeric); dom != "" {
 			line += " numeric=" + dom
 		}
-		if r.Format.Name != "" {
-			line += fmt.Sprintf(" format=%q/%s", r.Format.Name, formatClassString(r.Format.Class))
+		if r.Format != "" {
+			line += fmt.Sprintf(" format=%q", r.Format)
 		}
 		t.line("%s", line)
 	case plan.ObjectRepresentation:

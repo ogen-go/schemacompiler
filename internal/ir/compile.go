@@ -58,10 +58,16 @@ func Compile(n *frontend.Node) Expr {
 		siblings = append(siblings, All{Operands: compileAll(n.AllOf)})
 	}
 	if len(n.AnyOf) > 0 {
-		siblings = append(siblings, AnyOf{Operands: compileAll(n.AnyOf)})
+		siblings = append(siblings, AnyOf{
+			Operands:      compileAll(n.AnyOf),
+			Discriminator: compileDiscriminator(n.Discriminator),
+		})
 	}
 	if len(n.OneOf) > 0 {
-		siblings = append(siblings, ExactlyOne{Operands: compileAll(n.OneOf)})
+		siblings = append(siblings, ExactlyOne{
+			Operands:      compileAll(n.OneOf),
+			Discriminator: compileDiscriminator(n.Discriminator),
+		})
 	}
 	if n.Not != nil {
 		siblings = append(siblings, Not{Operand: Compile(n.Not)})
@@ -85,6 +91,17 @@ func compileAll(nodes []*frontend.Node) []Expr {
 		operands[i] = Compile(sub)
 	}
 	return operands
+}
+
+func compileDiscriminator(d *frontend.Discriminator) *Discriminator {
+	if d == nil {
+		return nil
+	}
+	out := &Discriminator{PropertyName: d.PropertyName}
+	for _, m := range d.Mapping {
+		out.Mapping = append(out.Mapping, DiscriminatorMapping{Value: m.Value, Ref: m.Ref})
+	}
+	return out
 }
 
 // compileIfThenElse desugars `if`/`then`/`else` per design §11.9:

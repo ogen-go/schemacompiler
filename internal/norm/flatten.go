@@ -77,7 +77,7 @@ func normalizeAnyOf(e ir.AnyOf, st *state) ir.Expr {
 	case 1:
 		return flat[0]
 	default:
-		return ir.AnyOf{Operands: flat}
+		return ir.AnyOf{Operands: flat, Discriminator: e.Discriminator}
 	}
 }
 
@@ -128,10 +128,10 @@ func normalizeExactlyOne(e ir.ExactlyOne, st *state) ir.Expr {
 	// Disjointness -> union (design §15.3): rewriting unlocks static kind
 	// dispatch downstream instead of a residual match-count check.
 	if allPairwiseDisjoint(flat) {
-		return normalize(ir.AnyOf{Operands: flat}, st)
+		return normalize(ir.AnyOf{Operands: flat, Discriminator: e.Discriminator}, st)
 	}
 
-	return ir.ExactlyOne{Operands: flat}
+	return ir.ExactlyOne{Operands: flat, Discriminator: e.Discriminator}
 }
 
 func flattenAllInto(dst []ir.Expr, e ir.Expr) []ir.Expr {
@@ -144,8 +144,10 @@ func flattenAllInto(dst []ir.Expr, e ir.Expr) []ir.Expr {
 	return append(dst, e)
 }
 
+// flattenAnyOfInto merges nested AnyOf operands into dst. An operand carrying its own
+// declared discriminator is kept intact: merging it would drop the declaration.
 func flattenAnyOfInto(dst []ir.Expr, e ir.Expr) []ir.Expr {
-	if a, ok := e.(ir.AnyOf); ok {
+	if a, ok := e.(ir.AnyOf); ok && a.Discriminator == nil {
 		for _, o := range a.Operands {
 			dst = flattenAnyOfInto(dst, o)
 		}

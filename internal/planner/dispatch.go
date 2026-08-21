@@ -47,12 +47,13 @@ type discCase struct {
 // branch (design §9, §18). isOneOf controls the PredicateCountDispatch fallback bounds.
 func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx components, path string) plan.CompilationPlan {
 	var operands []ir.Expr
+	var disc *ir.Discriminator
 	isOneOf := false
 	switch v := combinator.(type) {
 	case ir.AnyOf:
-		operands = v.Operands
+		operands, disc = v.Operands, v.Discriminator
 	case ir.ExactlyOne:
-		operands = v.Operands
+		operands, disc = v.Operands, v.Discriminator
 		isOneOf = true
 	default:
 		return b.build(combinator, path)
@@ -71,12 +72,21 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 		branchExprs[i] = pushContext(k, ctx, op)
 	}
 
+	// A declared discriminator wins over structural inference (design §18.2, issue #17).
+	if disc != nil {
+		if cases, ok := b.declaredDispatchCases(disc, branchExprs); ok {
+			return b.buildPropertyDispatch(disc.PropertyName, cases, plan.TagDeclared, path)
+		}
+		b.diag(path, plan.SeverityWarning,
+			"declared discriminator yields no distinct per-branch value; falling back to structural analysis")
+	}
+
 	// Static discriminator analysis, in preference order (design §18).
 	if cases, ok := literalCases(branchExprs); ok {
 		return b.buildLiteralDispatch(cases, path)
 	}
 	if name, cases, ok := b.propertyDispatchCases(branchExprs); ok {
-		return b.buildPropertyDispatch(name, cases, path)
+		return b.buildPropertyDispatch(name, cases, plan.TagInferred, path)
 	}
 	if name, absent, present, ok := detectPresenceDispatch(branchExprs); ok {
 		return b.buildPresenceDispatch(name, absent, present, path)
@@ -231,11 +241,17 @@ func (b *builder) discriminatorProperty(e ir.Expr) (string, ir.Literal, bool) {
 	if c.never {
 		return "", ir.Literal{}, false
 	}
+	return requiredConstProperty(c, "")
+}
+
+// requiredConstProperty finds a required property constrained to a bare literal. An empty
+// name accepts the first such property; otherwise only that property is considered.
+func requiredConstProperty(c components, name string) (string, ir.Literal, bool) {
 	required := make(map[string]bool)
 	for _, p := range c.predicates {
 		if rd, ok := p.Detail.(ir.RequiredDetail); ok {
-			for _, name := range rd.Properties {
-				required[name] = true
+			for _, prop := range rd.Properties {
+				required[prop] = true
 			}
 		}
 	}
@@ -245,7 +261,7 @@ func (b *builder) discriminatorProperty(e ir.Expr) (string, ir.Literal, bool) {
 			continue
 		}
 		for _, prop := range os.Properties {
-			if !required[prop.Name] {
+			if !required[prop.Name] || (name != "" && prop.Name != name) {
 				continue
 			}
 			if lit, ok := extractLiteral(prop.Schema); ok {
@@ -280,7 +296,7 @@ func (b *builder) propertyDispatchCases(branchExprs []ir.Expr) (string, []discCa
 	return propName, cases, true
 }
 
-func (b *builder) buildPropertyDispatch(name string, cases []discCase, path string) plan.CompilationPlan {
+func (b *builder) buildPropertyDispatch(name string, cases []discCase, tag plan.TagSource, path string) plan.CompilationPlan {
 	lcases := make([]plan.LiteralCase, len(cases))
 	alts := make([]plan.Representation, len(cases))
 	capLevel := plan.StaticDispatch
@@ -294,7 +310,7 @@ func (b *builder) buildPropertyDispatch(name string, cases []discCase, path stri
 	}
 	return plan.CompilationPlan{
 		Representation: unionRepresentation(alts),
-		Dispatch:       plan.PropertyDispatch{Property: name, Cases: lcases},
+		Dispatch:       plan.PropertyDispatch{Property: name, Cases: lcases, Tag: tag},
 		Resolution:     mergeResolution(resParts...),
 		Capability:     capLevel,
 	}

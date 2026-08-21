@@ -196,3 +196,42 @@ func mappingKeys(n *yaml.Node) []string {
 	}
 	return keys
 }
+
+const openAPIDiscriminatorDoc = `
+openapi: 3.1.0
+info: {title: t, version: v}
+paths: {}
+components:
+  schemas:
+    Node:
+      oneOf:
+        - $ref: '#/components/schemas/Cat'
+        - $ref: '#/components/schemas/Dog'
+      discriminator:
+        propertyName: petType
+        mapping:
+          cat: '#/components/schemas/Cat'
+          dog: '#/components/schemas/Dog'
+    Cat: {type: object}
+    Dog: {type: object}
+`
+
+// The discriminator keyword must survive conversion with its mapping in declaration
+// order, so the planner can prefer it over structural inference (issue #17).
+func TestFromLibOpenAPIDiscriminator(t *testing.T) {
+	s, err := FromLibOpenAPI(context.Background(), rootComponent(t, openAPIDiscriminatorDoc), "")
+	require.NoError(t, err)
+
+	require.NotNil(t, s.Root.Discriminator)
+	require.Equal(t, "petType", s.Root.Discriminator.PropertyName)
+	require.Equal(t, []DiscriminatorMapping{
+		{Value: "cat", Ref: "#/components/schemas/Cat"},
+		{Value: "dog", Ref: "#/components/schemas/Dog"},
+	}, s.Root.Discriminator.Mapping)
+}
+
+func TestFromLibOpenAPINoDiscriminator(t *testing.T) {
+	s, err := FromLibOpenAPI(context.Background(), rootComponent(t, openAPIRefDoc), "")
+	require.NoError(t, err)
+	require.Nil(t, s.Root.Discriminator)
+}

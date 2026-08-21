@@ -58,7 +58,7 @@ func distributeAll(operands []ir.Expr, st *state) (ir.Expr, bool) {
 			}
 			branches = append(branches, nb)
 		}
-		return ir.ExactlyOne{Operands: branches}, true
+		return ir.ExactlyOne{Operands: branches, Discriminator: c.Discriminator}, true
 	case ir.AnyOf:
 		branches := make([]ir.Expr, 0, len(c.Operands))
 		for _, b := range c.Operands {
@@ -68,7 +68,7 @@ func distributeAll(operands []ir.Expr, st *state) (ir.Expr, bool) {
 			}
 			branches = append(branches, nb)
 		}
-		return ir.AnyOf{Operands: branches}, true
+		return ir.AnyOf{Operands: branches, Discriminator: c.Discriminator}, true
 	default:
 		return nil, false // unreachable
 	}

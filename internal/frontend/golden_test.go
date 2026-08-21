@@ -100,6 +100,14 @@ func dumpNode(n *Node, indent string, out *strings.Builder) {
 	if d := n.Discriminator; d != nil {
 		fmt.Fprintf(out, "%s  discriminator=%q mapping=%v\n", indent, d.PropertyName, d.Mapping)
 	}
+	for i, c := range n.AllOf {
+		fmt.Fprintf(out, "%s  allOf[%d]:\n", indent, i)
+		dumpNode(c, indent+"    ", out)
+	}
+	for i, c := range n.AnyOf {
+		fmt.Fprintf(out, "%s  anyOf[%d]:\n", indent, i)
+		dumpNode(c, indent+"    ", out)
+	}
 	for i, c := range n.OneOf {
 		fmt.Fprintf(out, "%s  oneOf[%d]:\n", indent, i)
 		dumpNode(c, indent+"    ", out)

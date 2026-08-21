@@ -32,6 +32,19 @@ type Schema struct {
 	// self-recursion). The SCC pass classifies these representable/guarded, but no value
 	// inhabits them; reported here so a caller can warn rather than emit a dead type.
 	Uninhabited []UninhabitedNode
+	// IgnoredNullable lists every `nullable: true` OAS 3.0.3 leaves inert for want of a
+	// sibling `type`.
+	IgnoredNullable []IgnoredNullable
+}
+
+// IgnoredNullable records an OpenAPI 3.0 `nullable: true` that had no effect: OAS 3.0.3
+// line 2335 widens the `type` keyword and only that keyword, so without one declared in
+// the same Schema Object there is nothing for null to be added to (issue #20).
+type IgnoredNullable struct {
+	// Pointer is the JSON Pointer to the schema that declared `nullable`.
+	Pointer string
+	// Position is the source location of that schema.
+	Position plan.Position
 }
 
 // UninhabitedNode records a recursive schema with no finite instance (issue #8).

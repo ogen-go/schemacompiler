@@ -85,6 +85,7 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 
 	diags = append(diags, unresolvedDiagnostics(d.Unresolved)...)
 	diags = append(diags, uninhabitedDiagnostics(d.Uninhabited)...)
+	diags = append(diags, ignoredNullableDiagnostics(d.IgnoredNullable)...)
 	res.Diagnostics = dedupeDiagnostics(diags)
 	return res, nil
 }

@@ -97,6 +97,37 @@ present-value) — today `NilSemantic` alone conflates "optional" and "nullable"
 enum for bare pointer fields, so the generator should prefer the `GenericVariant`
 wrapper path for any field where `Presence` and `Nullable` are asserted independently.
 
+### 2.1. OpenAPI 3.0 `nullable` — schemacompiler is stricter than ogen
+
+schemacompiler reads OAS 3.0.3 line 2335 literally:
+
+> A `true` value adds "null" to the allowed type specified by the `type` keyword, **only if
+> `type` is explicitly defined within the same Schema Object**. Other Schema Object
+> constraints retain their defined behavior, and therefore may disallow the use of `null`
+> as a value.
+
+So `nullable: true` widens the sibling `type` keyword and nothing else. Where no `type` is
+declared in the same Schema Object — `{oneOf: [...], nullable: true}`, `{$ref: X, nullable:
+true}`, a bare `{nullable: true}` — there is nothing to widen, the keyword has no effect,
+and the plan carries a `SeverityWarning` diagnostic naming the schema.
+
+**ogen does not do this.** `extendInfo` sets `Nullable` from the keyword unconditionally,
+`type` or not. On the same 3.0 document the two disagree: ogen makes a nullable `$ref` or
+`oneOf` nullable, schemacompiler leaves it non-nullable and warns. The divergence is
+deliberate — schemacompiler will not assert nullability the document does not state — and
+it is one-directional: schemacompiler never admits null where ogen would not.
+
+A generator migrating onto the plan should surface that warning to the author rather than
+re-deriving nullability from the raw document. The fix is the 3.1 spelling, which both
+tools read the same way and which schemacompiler treats as exactly equivalent:
+
+```yaml
+# ignored, warns
+value: {$ref: "#/components/schemas/Thing", nullable: true}
+# honoured
+value: {type: ["object", "null"], properties: {...}}
+```
+
 ## 3. Dispatch → `SumSpec`
 
 `gen/ir/type.go:56-85`:

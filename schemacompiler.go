@@ -122,11 +122,13 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	diags = append(diags, uninhabitedDiagnostics(schema.Uninhabited)...)
 	diags = append(diags, ignoredNullableDiagnostics(schema.IgnoredNullable)...)
 	diags = append(diags, unusedDiscriminatorDiagnostics(schema.UnusedDiscriminator)...)
+	diags = append(diags, invalidKeywordDiagnostics(schema.InvalidKeyword)...)
 
 	return &Result{
-		Plan:        root.Plan,
-		Capability:  capLevel,
-		Exactness:   exactnessFor(capLevel, maxExactness(root.Exactness, defs.exactness)),
+		Plan:       root.Plan,
+		Capability: capLevel,
+		Exactness: exactnessFor(capLevel, exactnessWithInvalidKeywords(
+			maxExactness(root.Exactness, defs.exactness), schema.InvalidKeyword)),
 		Diagnostics: dedupeDiagnostics(diags),
 	}
 }

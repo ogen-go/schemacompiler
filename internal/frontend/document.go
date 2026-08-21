@@ -28,6 +28,9 @@ type Document struct {
 	Unresolved []UnresolvedRef
 	// IgnoredNullable lists every inert `nullable: true` (see [Schema.IgnoredNullable]).
 	IgnoredNullable []IgnoredNullable
+	// InvalidKeyword lists every keyword with a value the spec does not admit
+	// (see [Schema.InvalidKeyword]).
+	InvalidKeyword []InvalidKeyword
 	// UnusedDiscriminator lists every `discriminator` that names no union to dispatch on
 	// (see [Schema.UnusedDiscriminator]).
 	UnusedDiscriminator []UnusedDiscriminator
@@ -72,6 +75,7 @@ func FromLibOpenAPIDocument(ctx context.Context, schemas *orderedmap.Map[string,
 	out.Unresolved = st.unresolved
 	out.Uninhabited = st.reg.uninhabited
 	out.IgnoredNullable = st.ignoredNullable
+	out.InvalidKeyword = st.invalidKeyword
 	out.UnusedDiscriminator = st.unusedDiscriminator
 	return out, nil
 }
@@ -110,6 +114,7 @@ func FromLibOpenAPIProxy(ctx context.Context, sp *base.SchemaProxy, baseURI stri
 		Uninhabited: st.reg.uninhabited,
 
 		IgnoredNullable:     st.ignoredNullable,
+		InvalidKeyword:      st.invalidKeyword,
 		UnusedDiscriminator: st.unusedDiscriminator,
 	}, nil
 }

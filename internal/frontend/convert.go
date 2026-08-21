@@ -68,6 +68,8 @@ type convState struct {
 	ignoredNullable []IgnoredNullable
 	// unusedDiscriminator records every `discriminator` that names no union.
 	unusedDiscriminator []UnusedDiscriminator
+	// invalidKeyword records every keyword whose value the spec does not admit.
+	invalidKeyword []InvalidKeyword
 }
 
 func newConvState(refMap map[*yaml.Node]string, loader Loader) *convState {
@@ -121,6 +123,7 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 
 		IgnoredNullable:     st.ignoredNullable,
 		UnusedDiscriminator: st.unusedDiscriminator,
+		InvalidKeyword:      st.invalidKeyword,
 	}, nil
 }
 
@@ -348,19 +351,19 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 	n.MultipleOf = hs.MultipleOf
 	n.ExclusiveMinimum, n.ExclusiveMaximum = readExclusiveBounds(low)
 
-	n.MinLength = int64PtrToUint64Ptr(hs.MinLength)
-	n.MaxLength = int64PtrToUint64Ptr(hs.MaxLength)
+	n.MinLength = st.countKeyword(sc, low, "minLength", hs.MinLength)
+	n.MaxLength = st.countKeyword(sc, low, "maxLength", hs.MaxLength)
 	n.Pattern = optionalPattern(low, hs.Pattern)
 	n.Format = hs.Format
 
-	n.MinItems = int64PtrToUint64Ptr(hs.MinItems)
-	n.MaxItems = int64PtrToUint64Ptr(hs.MaxItems)
-	n.MinContains = int64PtrToUint64Ptr(hs.MinContains)
-	n.MaxContains = int64PtrToUint64Ptr(hs.MaxContains)
+	n.MinItems = st.countKeyword(sc, low, "minItems", hs.MinItems)
+	n.MaxItems = st.countKeyword(sc, low, "maxItems", hs.MaxItems)
+	n.MinContains = st.countKeyword(sc, low, "minContains", hs.MinContains)
+	n.MaxContains = st.countKeyword(sc, low, "maxContains", hs.MaxContains)
 	n.UniqueItems = hs.UniqueItems != nil && *hs.UniqueItems
 
-	n.MinProperties = int64PtrToUint64Ptr(hs.MinProperties)
-	n.MaxProperties = int64PtrToUint64Ptr(hs.MaxProperties)
+	n.MinProperties = st.countKeyword(sc, low, "minProperties", hs.MinProperties)
+	n.MaxProperties = st.countKeyword(sc, low, "maxProperties", hs.MaxProperties)
 	n.Required = hs.Required
 
 	n.Discriminator = convertDiscriminator(hs.Discriminator)
@@ -615,37 +618,6 @@ func (st *convState) register(n *Node, sc scope, nearestBaseURI string) {
 	if n.DynamicAnchor != "" {
 		st.reg.dynAnchors[nearestBaseURI+"#"+n.DynamicAnchor] = n
 	}
-}
-
-func readExclusiveBounds(low *lowbase.Schema) (exMin, exMax *float64) {
-	if low == nil || low.RootNode == nil {
-		return nil, nil
-	}
-	return readFloatKeyword(low.RootNode, "exclusiveMinimum"), readFloatKeyword(low.RootNode, "exclusiveMaximum")
-}
-
-// readFloatKeyword reads a numeric keyword directly from the source yaml node, bypassing
-// libopenapi's exclusiveMinimum/exclusiveMaximum parsing: with no OpenAPI SpecIndex (as
-// used by the standalone loader), libopenapi only recognizes integer-tagged scalars for
-// these two keywords and silently drops float values (a libopenapi API surprise).
-func readFloatKeyword(root *yaml.Node, key string) *float64 {
-	v := resolveAlias(keywordNode(root, key))
-	if v == nil || v.Kind != yaml.ScalarNode {
-		return nil
-	}
-	f, err := strconv.ParseFloat(v.Value, 64)
-	if err != nil {
-		return nil
-	}
-	return &f
-}
-
-func int64PtrToUint64Ptr(p *int64) *uint64 {
-	if p == nil || *p < 0 {
-		return nil
-	}
-	v := uint64(*p)
-	return &v
 }
 
 func optionalPattern(low *lowbase.Schema, val string) *string {

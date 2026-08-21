@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "minProperties": 1.0,
+  "maxProperties": 4.0,
+  "properties": {
+    "name": {"type": "string", "minLength": 1.0, "maxLength": 8.0},
+    "tags": {
+      "type": "array",
+      "minItems": 1e1,
+      "maxItems": 2.0e1,
+      "contains": {"const": 1},
+      "minContains": 1.0,
+      "maxContains": 2.0
+    },
+    "invalid": {"type": "string", "maxLength": 2.5}
+  }
+}

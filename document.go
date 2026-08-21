@@ -18,6 +18,19 @@ func buildPlan(n *frontend.Node, reg *frontend.Registry, budget int) planner.Res
 	return res
 }
 
+// refTargetPositions maps every static $ref target's SchemaID to its source position, so
+// a finding about a whole plan can name where that plan came from.
+func refTargetPositions(reg *frontend.Registry) map[plan.SchemaID]plan.Position {
+	out := make(map[plan.SchemaID]plan.Position)
+	if reg == nil {
+		return out
+	}
+	for id, n := range reg.RefTargets() {
+		out[plan.SchemaID(id)] = n.Position
+	}
+	return out
+}
+
 // definitions is the assembled set of named $ref-target plans for a document, plus the
 // diagnostics and worst-case exactness accumulated while compiling them.
 type definitions struct {

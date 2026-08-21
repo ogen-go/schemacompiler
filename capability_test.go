@@ -86,7 +86,7 @@ func TestRollUpCapabilities(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			diags := rollUpCapabilities(tt.plans)
+			diags := rollUpCapabilities(tt.plans, nil)
 			got := make(map[plan.SchemaID]plan.CapabilityLevel, len(tt.plans))
 			for id, p := range tt.plans {
 				got[id] = p.Capability

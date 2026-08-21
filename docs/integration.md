@@ -224,7 +224,12 @@ past `PredicateDispatch`. The gate is per plan and sound to use that way: a plan
 capability is rolled up to at least that of every plan it references (design §22), so a
 generatable plan never points at a refused one. A reference that resolves to no compiled
 schema at all (a dangling or unfetchable `$ref`) makes the referring plan `Unsupported`
-with a `SeverityError` diagnostic, rather than leaving it optimistically generatable.
+with a `SeverityError` diagnostic, rather than leaving it optimistically generatable — the
+root schema included.
+
+`Result.Exactness` / `DocumentResult.Exactness` never contradict that gate: a capability
+past `PredicateDispatch` always reports `UnsupportedConversion`, so a backend reaches the
+same verdict whichever of the two fields it consults.
 
 | `CapabilityLevel` | ogen generation | Rationale |
 |---|---|---|

@@ -161,7 +161,7 @@ func intersectLiterals(a, b []ir.Literal) []ir.Literal {
 	var out []ir.Literal
 	for _, x := range a {
 		for _, y := range b {
-			if literalEqual(x, y) {
+			if x.Equal(y) {
 				out = append(out, x)
 				break
 			}
@@ -176,7 +176,7 @@ func coversAll(have, want []ir.Literal) (ir.Literal, bool) {
 	for _, w := range want {
 		found := false
 		for _, h := range have {
-			if literalEqual(h, w) {
+			if h.Equal(w) {
 				found = true
 				break
 			}

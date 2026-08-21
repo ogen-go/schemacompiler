@@ -86,6 +86,11 @@ type NegationPredicate struct{ Schema CompilationPlan }
 // prescribes. Schema is built for exactly that one kind, so its representation is the
 // [ObjectRepresentation] or [ArrayRepresentation] a sibling `type` would have produced.
 //
+// It also carries the conjuncts of an `allOf` a `$ref` cannot absorb (issue #78). The
+// reference supplies the representation — a name, not a structure — so every other member
+// of the intersection survives here instead of being dropped, guarded on [SetAny] since
+// none of them is kind-conditional.
+//
 // Lowering contract. A backend runs Schema against the whole instance whenever the
 // instance's kind is in the guard, and takes its verdict. Nothing about the stored shape
 // changes: the enclosing representation stays the over-approximation, and only this

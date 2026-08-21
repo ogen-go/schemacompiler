@@ -270,6 +270,10 @@ func writePredicateExpr(t *tw, e plan.PredicateExpr) {
 		} = e
 		t.line("ContainsCount min=%d max=%s", g.Min, uintPtrString(g.Max))
 		t.enter(func() { writePlan(t, g.Schema, map[plan.SchemaID]bool{}) })
+	case plan.NegationPredicate:
+		var g struct{ Schema plan.CompilationPlan } = e
+		t.line("Negation")
+		t.enter(func() { writePlan(t, g.Schema, map[plan.SchemaID]bool{}) })
 	case plan.RequiredPredicate:
 		var g struct{ Properties []string } = e
 		t.line("Required %v", g.Properties)

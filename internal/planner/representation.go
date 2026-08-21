@@ -95,10 +95,6 @@ func (b *builder) buildUnrestricted(c components, path string) plan.CompilationP
 		b.diag(path, plan.SeverityError, "unevaluatedItems requires evaluated-item tracking")
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}
-	if len(c.nots) > 0 {
-		b.diag(path, plan.SeverityInfo, "residual negation is not enforced by the v1 validator")
-	}
-
 	rep := plan.Representation(plan.AnyRepresentation{})
 	var disp plan.DispatchPlan = plan.NoDispatch{}
 	res := mergeResolution(resParts...)
@@ -183,10 +179,6 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 		Format:  b.pickFormat(formats, path),
 	})
 	var disp plan.DispatchPlan = plan.NoDispatch{}
-	if len(c.nots) > 0 {
-		b.diag(path, plan.SeverityInfo, "residual negation is not enforced by the v1 validator")
-	}
-
 	res := mergeResolution(resParts...)
 	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))
 	return plan.CompilationPlan{Representation: rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}

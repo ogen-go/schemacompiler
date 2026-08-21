@@ -46,6 +46,7 @@ func AllPredicateExprs() []plan.PredicateExpr {
 		plan.MaxItemsPredicate{},
 		plan.UniqueItemsPredicate{},
 		plan.ContainsCountPredicate{},
+		plan.NegationPredicate{},
 		plan.RequiredPredicate{},
 		plan.MinPropertiesPredicate{},
 		plan.MaxPropertiesPredicate{},

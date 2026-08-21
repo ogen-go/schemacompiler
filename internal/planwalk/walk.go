@@ -263,6 +263,9 @@ func Predicate(e plan.PredicateExpr, visit func(plan.CompilationPlan)) {
 			Max    *uint64
 		} = e
 		visit(t.Schema)
+	case plan.NegationPredicate:
+		var t struct{ Schema plan.CompilationPlan } = e
+		visit(t.Schema)
 	case plan.RequiredPredicate:
 		var t struct{ Properties []string } = e
 		_ = t

@@ -35,31 +35,31 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 		{
 			name: "object field",
 			p: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-				Fields: map[string]plan.FieldRepresentation{"a": {Representation: refRep("A")}},
+				Fields: map[string]plan.FieldRepresentation{"a": {Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 			}},
 		},
 		{
 			name: "object additional",
 			p: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-				Additional: refRep("A"),
+				Additional: &plan.CompilationPlan{Representation: refRep("A")},
 			}},
 		},
 		{
 			name: "object pattern rule",
 			p: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Representation: refRep("A")}},
+				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 			}},
 		},
 		{
 			name: "array prefix item",
 			p: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
-				Prefix: []plan.ItemRepresentation{{Representation: refRep("A")}},
+				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 			}},
 		},
 		{
 			name: "array rest item",
 			p: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
-				Rest: plan.ItemRepresentation{Representation: refRep("A")},
+				Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: refRep("A")}},
 			}},
 		},
 		{
@@ -104,7 +104,7 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 				Representation: plan.AnyRepresentation{},
 				Dispatch: plan.PredicateCountDispatch{
 					Branches: []plan.CompilationPlan{{Representation: plan.ObjectRepresentation{
-						Fields: map[string]plan.FieldRepresentation{"a": {Representation: refRep("A")}},
+						Fields: map[string]plan.FieldRepresentation{"a": {Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 					}}},
 					Minimum: 1,
 					Maximum: 1,
@@ -129,10 +129,10 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 func TestPlanDOTNestedReferenceIsStableAndDeduplicated(t *testing.T) {
 	p := plan.CompilationPlan{Representation: plan.ObjectRepresentation{
 		Fields: map[string]plan.FieldRepresentation{
-			"a": {Representation: refRep("A")},
-			"b": {Representation: refRep("B")},
-			"c": {Representation: refRep("A")},
-			"d": {Representation: refRep("C")},
+			"a": {Plan: plan.CompilationPlan{Representation: refRep("A")}},
+			"b": {Plan: plan.CompilationPlan{Representation: refRep("B")}},
+			"c": {Plan: plan.CompilationPlan{Representation: refRep("A")}},
+			"d": {Plan: plan.CompilationPlan{Representation: refRep("C")}},
 		},
 	}}
 	defs := targetDefs("A", "B", "C")
@@ -152,7 +152,7 @@ func TestPlanDOTNestedReferenceIsStableAndDeduplicated(t *testing.T) {
 
 func TestPlanDOTNestedReferenceToMissingDefIsStub(t *testing.T) {
 	p := plan.CompilationPlan{Representation: plan.ArrayRepresentation{
-		Rest: plan.ItemRepresentation{Representation: refRep("Missing")},
+		Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: refRep("Missing")}},
 	}}
 
 	var out strings.Builder

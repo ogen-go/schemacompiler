@@ -88,16 +88,15 @@ func exactlyModeled(e plan.Exactness) bool {
 // which is stricter than p's own [plan.Exactness] and is what negating it requires.
 //
 // Exactness is computed from a plan's shape, not from what the plan actually enforces, and
-// three constructs make it optimistic today. Object and array representations drop the
-// constraints inside a field or item, because [plan.FieldRepresentation] has no slot to
-// carry them (#68) - a const-tagged property plans as a bare string field. An object whose
-// keywords were dropped entirely widens to Any while still reporting DirectGoType (#72).
-// And a reference exactness never consults its target, so a reference claims to be exact
-// whatever its target is. Everywhere else those are harmless over-approximations; under a
-// negation each one rejects valid instances (#82).
+// two constructs make it optimistic today. An object whose keywords were dropped entirely
+// widens to Any while still reporting DirectGoType (#72). And a reference exactness never
+// consults its target, so a reference claims to be exact whatever its target is. Everywhere
+// else those are harmless over-approximations; under a negation each one rejects valid
+// instances (#82).
 //
-// So only plans built from primitives, literals and kinds are negated for now. Widening
-// this is gated on #68 and #72, after which the exactness check alone would suffice.
+// So only plans built from primitives, literals and kinds are negated for now. Object and
+// array representations no longer drop what is inside a field or an item (#68), so
+// widening this is gated on #72 and on reference exactness alone (#82).
 func negatable(p plan.CompilationPlan, operand ir.Expr) bool {
 	if vacuous(p, operand) {
 		return false

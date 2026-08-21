@@ -25,8 +25,8 @@ KindGeneric, KindSum, KindAny, KindStream`.
 | `AnyRepresentation` | `KindAny` | Backend's "unknown JSON value" (`json.RawMessage`-like). |
 | `NeverRepresentation` | — | No instance is ever valid; ogen has no direct analog. The generator should refuse (emit a diagnostic) rather than invent an uninhabited type, unless the containing context (e.g. an unreachable union branch) can simply omit it. |
 | `PrimitiveRepresentation{Kind, Numeric, Format}` | `KindPrimitive` | `Numeric == IntegerOnly` selects an integer Go type (`int64`/`int32`); `NonIntegerOnly`/`AnyNumber` select `float64`. `Format` is the raw `format` name the backend may refine that choice with: see §1.1. |
-| `ObjectRepresentation{Fields, Additional, PatternRules}` | `KindStruct` (+ `KindMap` when `Additional`/`PatternRules` dominate and there are no named `Fields`) | See §2 for `FieldRepresentation` → field generics. `PatternRules` has no first-class ogen construct today; the generator would need a custom map-with-pattern-validation field, or fall back to `KindMap` plus a residual `PatternPredicate` in `ValidationPlan` (soundness-preserving over-approximation, design §24). |
-| `ArrayRepresentation{Prefix, Rest}` | `KindArray` when `Prefix` is empty; a tuple-as-struct (`KindStruct` with positional fields) when `Prefix` is non-empty, following ogen's existing `prefixItems` tuple lowering | `Rest == nil` (no additional items) has no first-class ogen fixed-length-array kind; treat as a tuple struct with a validated length instead of relying on a fixed-size Go array. |
+| `ObjectRepresentation{Fields, Additional, PatternRules}` | `KindStruct` (+ `KindMap` when `Additional`/`PatternRules` dominate and there are no named `Fields`) | Each of the three slots carries a whole `CompilationPlan`, not a bare `Representation`: lower it by recursing through §1-§4 on that plan, so the sub-schema's own validation and dispatch land on the value stored there. See §2 for `FieldRepresentation` → field generics. `Additional` is a `*CompilationPlan`: nil means additional properties are not representable as a field, which is a statement about storage and never a rejection. `PatternRules` has no first-class ogen construct today; the generator would need a custom map-with-pattern-validation field, or fall back to `KindMap` plus a residual `PatternPredicate` in `ValidationPlan` (soundness-preserving over-approximation, design §24). |
+| `ArrayRepresentation{Prefix, Rest}` | `KindArray` when `Prefix` is empty; a tuple-as-struct (`KindStruct` with positional fields) when `Prefix` is non-empty, following ogen's existing `prefixItems` tuple lowering | Every `ItemRepresentation` carries a whole `CompilationPlan` for the values at that position, lowered by recursing through §1-§4. A nil `Rest.Plan.Representation` (no additional items) has no first-class ogen fixed-length-array kind; treat as a tuple struct with a validated length instead of relying on a fixed-size Go array. |
 | `UnionRepresentation{Alternatives}` | `KindSum` | Paired with a `plan.DispatchPlan` (see §3) to fill `SumSpec`. |
 | `RecursiveRepresentation{Name, Body}` | `KindPointer` wrapping the named type, or `KindStruct` with a named self-reference resolved through ogen's existing "generate the type once, reference it" pass | Corresponds to design §19's guarded recursion; ogen already generates self-referential structs for JSON Schema `$ref` cycles through object/array descent, so this is compatible in spirit, but the compile-time proof of guardedness now comes from schemacompiler (`internal/frontend`'s SCC classification) rather than ogen's own ref-graph walk. |
 | `ReferenceRepresentation{Name}` | `KindAlias` (or a direct reference to the already-generated named type) | Requires the referenced name to have already been lowered; the referenced plan is found in `DocumentResult.Plans` (or `plan.StaticReferenceGraph.Definitions`) under the same `SchemaID`; see "Whole-document compilation". |
@@ -80,8 +80,10 @@ with `Name()` building the `Opt`/`Nil`/`OptNil` wrapper type name. `gen/ir/nil_s
 `type NilSemantic string` with constants `NilInvalid`, `NilOptional`, `NilNull`, attached
 to pointer (`KindPointer`) types.
 
-`plan.FieldRepresentation{Presence, Nullable}` (design §7.1: presence and nullability are
-independent) maps directly:
+`plan.FieldRepresentation{Plan, Presence, Nullable}` (design §7.1: presence and
+nullability are independent) maps directly. `Plan` is the field value's own plan and is
+lowered by recursion; `Presence` and `Nullable` describe the slot around it, and the
+planner strips `null` out of `Plan` when it sets `Nullable`, so the two never overlap:
 
 | `Presence` | `Nullable` | `GenericVariant` | `NilSemantic` (if `KindPointer` is used instead of a wrapper) |
 |---|---|---|---|
@@ -280,6 +282,14 @@ generatable plan never points at a refused one. A reference that resolves to no 
 schema at all (a dangling or unfetchable `$ref`) makes the referring plan `Unsupported`
 with a `SeverityError` diagnostic, rather than leaving it optimistically generatable — the
 root schema included.
+
+The gate is also per *plan*, not per representation node: an object field, a pattern
+rule, an `Additional` value and an array item each carry their own `CompilationPlan`, and
+each one's capability is rolled into the plan that contains it. So a field whose
+sub-schema needs validation raises its parent to `GoTypeWithValidation`, and the
+predicate that costs it sits in that field's own `ValidationPlan` — where the value it
+constrains is. A backend that lowered only the root's `Validation` would emit nothing for
+it (issue #68).
 
 `Result.Exactness` / `DocumentResult.Exactness` never contradict that gate **in the
 refusing direction**: a capability past `PredicateDispatch` always reports

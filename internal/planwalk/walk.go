@@ -39,13 +39,17 @@ func Plan(p plan.CompilationPlan, visit func(plan.Representation)) {
 }
 
 // Representation calls visit for r and for every representation nested within it,
-// in pre-order. A nil r visits nothing.
+// in pre-order. Nesting crosses the whole plans an object field, an additional or
+// pattern value and an array item carry, so their validation and dispatch are reached
+// too. A nil r visits nothing.
 func Representation(r plan.Representation, visit func(plan.Representation)) {
 	if r == nil {
 		return
 	}
 	FoldNode(RepresentationNode(r), struct{}{}, func(acc struct{}, n Node) (struct{}, Action) {
-		visit(n.Representation)
+		if n.Kind == NodeRepresentation {
+			visit(n.Representation)
+		}
 		return acc, Descend
 	})
 }

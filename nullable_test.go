@@ -101,7 +101,7 @@ func TestNullablePlan_Property(t *testing.T) {
 	field := obj.Fields["a"]
 	require.Equal(t, plan.PresenceRequired, field.Presence)
 	require.True(t, field.Nullable)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Representation)
+	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Plan.Representation)
 }
 
 // Clause 2: `nullable` widens the `type` keyword and nothing else, so sibling constraints
@@ -258,7 +258,7 @@ func TestNullablePlan_ArrayItself(t *testing.T) {
 	field := obj.Fields["a"]
 	require.True(t, field.Nullable)
 	require.Equal(t, "A", field.Metadata.Title)
-	require.IsType(t, plan.ArrayRepresentation{}, field.Representation)
+	require.IsType(t, plan.ArrayRepresentation{}, field.Plan.Representation)
 }
 
 // `nullable: false` never removes a null the document declared itself, and repeating an

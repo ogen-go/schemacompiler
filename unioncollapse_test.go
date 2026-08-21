@@ -81,7 +81,7 @@ func TestNullableUnionField(t *testing.T) {
 			res, err := schemacompiler.Compile(context.Background(), []byte(tt.schema), schemacompiler.Options{})
 			require.NoError(t, err)
 			f := fieldOf(t, res.Plan.Representation, "a")
-			require.Equal(t, tt.rep, repShape(f.Representation), "field representation")
+			require.Equal(t, tt.rep, repShape(f.Plan.Representation), "field representation")
 			require.Equal(t, tt.presence, f.Presence, "presence")
 			require.Equal(t, tt.nullable, f.Nullable, "nullable")
 			requireNoNever(t, res.Plan)
@@ -122,7 +122,7 @@ func TestNullableUnionRootAndItems(t *testing.T) {
 	require.NoError(t, err)
 	arr, ok := res.Plan.Representation.(plan.ArrayRepresentation)
 	require.True(t, ok)
-	require.Equal(t, "union(primitive:string,primitive:null)", repShape(arr.Rest.Representation))
+	require.Equal(t, "union(primitive:string,primitive:null)", repShape(arr.Rest.Plan.Representation))
 	requireNoNever(t, res.Plan)
 }
 

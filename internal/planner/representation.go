@@ -295,38 +295,47 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 		}
 		sub := b.build(buildExpr, pointerAppend(path+"/properties", name))
 		fields[name] = plan.FieldRepresentation{
-			Representation: sub.Representation,
-			Presence:       presence,
-			Nullable:       nullable,
-			Metadata:       merged.metadata[name],
+			Plan:     sub,
+			Presence: presence,
+			Nullable: nullable,
+			Metadata: merged.metadata[name],
 		}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	}
 
-	var additional plan.Representation
-	if merged.additionalProperties == nil {
+	var additional *plan.CompilationPlan
+	switch {
+	case merged.additionalProperties == nil:
 		// additionalProperties absent defaults to true (arbitrary extra values allowed);
 		// keep the representation sound by admitting any value there (design §24).
-		additional = plan.AnyRepresentation{}
-	} else {
-		if _, never := merged.additionalProperties.(ir.Never); never {
-			additional = plan.NeverRepresentation{} // additionalProperties: false
-		} else {
-			sub := b.build(merged.additionalProperties, path+"/additionalProperties")
-			additional = sub.Representation
-			capLevel = maxCapability(capLevel, sub.Capability)
-			resParts = append(resParts, sub.Resolution)
+		additional = &plan.CompilationPlan{
+			Representation: plan.AnyRepresentation{},
+			Dispatch:       plan.NoDispatch{},
+			Resolution:     plan.FullyResolved{},
+			Capability:     plan.DirectGoType,
 		}
+	case isNever(merged.additionalProperties):
+		additional = &plan.CompilationPlan{ // additionalProperties: false
+			Representation: plan.NeverRepresentation{},
+			Dispatch:       plan.NoDispatch{},
+			Resolution:     plan.FullyResolved{},
+			Capability:     plan.DirectGoType,
+		}
+	default:
+		sub := b.build(merged.additionalProperties, path+"/additionalProperties")
+		additional = &sub
+		capLevel = maxCapability(capLevel, sub.Capability)
+		resParts = append(resParts, sub.Resolution)
 	}
 
 	var patternRules []plan.PatternFieldRepresentation
 	for _, pp := range merged.patternProperties {
 		sub := b.build(pp.Schema, pointerAppend(path+"/patternProperties", pp.Pattern))
 		patternRules = append(patternRules, plan.PatternFieldRepresentation{
-			Pattern:        pp.Pattern,
-			Representation: sub.Representation,
-			Metadata:       pp.Metadata,
+			Pattern:  pp.Pattern,
+			Plan:     sub,
+			Metadata: pp.Metadata,
 		})
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
@@ -408,7 +417,7 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	prefix := make([]plan.ItemRepresentation, len(prefixExprs))
 	for i, pe := range prefixExprs {
 		sub := b.build(pe.Schema, path+"/prefixItems/"+strconv.Itoa(i))
-		prefix[i] = plan.ItemRepresentation{Representation: sub.Representation, Metadata: pe.Metadata}
+		prefix[i] = plan.ItemRepresentation{Plan: sub, Metadata: pe.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	}
@@ -417,11 +426,16 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	switch {
 	case itemsExpr.Schema != nil:
 		sub := b.build(itemsExpr.Schema, path+"/items")
-		rest = plan.ItemRepresentation{Representation: sub.Representation, Metadata: itemsExpr.Metadata}
+		rest = plan.ItemRepresentation{Plan: sub, Metadata: itemsExpr.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	default:
-		rest = plan.ItemRepresentation{Representation: plan.AnyRepresentation{}}
+		rest = plan.ItemRepresentation{Plan: plan.CompilationPlan{
+			Representation: plan.AnyRepresentation{},
+			Dispatch:       plan.NoDispatch{},
+			Resolution:     plan.FullyResolved{},
+			Capability:     plan.DirectGoType,
+		}}
 	}
 
 	if unevaluated {
@@ -434,4 +448,11 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	res := mergeResolution(resParts...)
 	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))
 	return plan.CompilationPlan{Representation: rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
+}
+
+// isNever reports whether e is the unsatisfiable expression, which `additionalProperties:
+// false` normalizes to.
+func isNever(e ir.Expr) bool {
+	_, never := e.(ir.Never)
+	return never
 }

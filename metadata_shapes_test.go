@@ -26,24 +26,26 @@ func collectMetadata(r plan.Representation, prefix string, out map[string]plan.M
 			f := r.Fields[name]
 			key := prefix + "field:" + name
 			out[key] = f.Metadata
-			collectMetadata(f.Representation, key+"/", out)
+			collectMetadata(f.Plan.Representation, key+"/", out)
 		}
 		for _, pr := range r.PatternRules {
 			key := prefix + "pattern:" + pr.Pattern
 			out[key] = pr.Metadata
-			collectMetadata(pr.Representation, key+"/", out)
+			collectMetadata(pr.Plan.Representation, key+"/", out)
 		}
-		collectMetadata(r.Additional, prefix+"additional/", out)
+		if r.Additional != nil {
+			collectMetadata(r.Additional.Representation, prefix+"additional/", out)
+		}
 	case plan.ArrayRepresentation:
 		for i, p := range r.Prefix {
 			key := fmt.Sprintf("%sprefix:%d", prefix, i)
 			out[key] = p.Metadata
-			collectMetadata(p.Representation, key+"/", out)
+			collectMetadata(p.Plan.Representation, key+"/", out)
 		}
-		if r.Rest.Representation != nil {
+		if r.Rest.Plan.Representation != nil {
 			key := prefix + "items"
 			out[key] = r.Rest.Metadata
-			collectMetadata(r.Rest.Representation, key+"/", out)
+			collectMetadata(r.Rest.Plan.Representation, key+"/", out)
 		}
 	case plan.UnionRepresentation:
 		for _, alt := range r.Alternatives {

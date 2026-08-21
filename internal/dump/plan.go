@@ -30,7 +30,7 @@ func writePlan(t *tw, p plan.CompilationPlan, visiting map[plan.SchemaID]bool) {
 		writeMetadata(t, g.Metadata)
 
 		t.line("Representation")
-		t.enter(func() { writeRepresentation(t, g.Representation) })
+		t.enter(func() { writeRepresentation(t, g.Representation, visiting) })
 
 		t.line("Validation")
 		t.enter(func() { writeValidation(t, g.Validation) })
@@ -64,7 +64,7 @@ func capabilityString(c plan.CapabilityLevel) string {
 	}
 }
 
-func writeRepresentation(t *tw, r plan.Representation) {
+func writeRepresentation(t *tw, r plan.Representation, visiting map[plan.SchemaID]bool) {
 	switch r := r.(type) {
 	case nil:
 		t.line("<nil>")
@@ -93,7 +93,7 @@ func writeRepresentation(t *tw, r plan.Representation) {
 	case plan.ObjectRepresentation:
 		var g struct {
 			Fields       map[string]plan.FieldRepresentation
-			Additional   plan.Representation
+			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
 		} = r
 		t.line("Object")
@@ -104,14 +104,14 @@ func writeRepresentation(t *tw, r plan.Representation) {
 			}
 			sort.Strings(names)
 			for _, name := range names {
-				writeField(t, name, g.Fields[name])
+				writeField(t, name, g.Fields[name], visiting)
 			}
 			if g.Additional != nil {
 				t.line("additional")
-				t.enter(func() { writeRepresentation(t, g.Additional) })
+				t.enter(func() { writePlan(t, *g.Additional, visiting) })
 			}
 			for _, pr := range g.PatternRules {
-				writePatternField(t, pr)
+				writePatternField(t, pr, visiting)
 			}
 		})
 	case plan.ArrayRepresentation:
@@ -123,11 +123,11 @@ func writeRepresentation(t *tw, r plan.Representation) {
 		t.enter(func() {
 			for i, p := range g.Prefix {
 				t.line("prefix[%d]", i)
-				t.enter(func() { writeItem(t, p) })
+				t.enter(func() { writeItem(t, p, visiting) })
 			}
-			if g.Rest.Representation != nil {
+			if g.Rest.Plan.Representation != nil {
 				t.line("rest")
-				t.enter(func() { writeItem(t, g.Rest) })
+				t.enter(func() { writeItem(t, g.Rest, visiting) })
 			}
 		})
 	case plan.UnionRepresentation:
@@ -138,7 +138,7 @@ func writeRepresentation(t *tw, r plan.Representation) {
 		t.enter(func() {
 			for i, alt := range g.Alternatives {
 				t.line("alternative[%d]", i)
-				t.enter(func() { writeRepresentation(t, alt) })
+				t.enter(func() { writeRepresentation(t, alt, visiting) })
 			}
 		})
 	case plan.RecursiveRepresentation:
@@ -147,7 +147,7 @@ func writeRepresentation(t *tw, r plan.Representation) {
 			Body plan.Representation
 		} = r
 		t.line("Recursive %q", g.Name)
-		t.enter(func() { writeRepresentation(t, g.Body) })
+		t.enter(func() { writeRepresentation(t, g.Body, visiting) })
 	case plan.ReferenceRepresentation:
 		var g struct {
 			Name string
@@ -158,40 +158,40 @@ func writeRepresentation(t *tw, r plan.Representation) {
 	}
 }
 
-func writeField(t *tw, name string, f plan.FieldRepresentation) {
+func writeField(t *tw, name string, f plan.FieldRepresentation, visiting map[plan.SchemaID]bool) {
 	var g struct {
-		Representation plan.Representation
-		Presence       plan.PresenceMode
-		Nullable       bool
-		Metadata       plan.Metadata
+		Plan     plan.CompilationPlan
+		Presence plan.PresenceMode
+		Nullable bool
+		Metadata plan.Metadata
 	} = f
 	t.line("field %q presence=%s nullable=%v", name, presenceString(g.Presence), g.Nullable)
 	t.enter(func() {
 		writeMetadata(t, g.Metadata)
-		writeRepresentation(t, g.Representation)
+		writePlan(t, g.Plan, visiting)
 	})
 }
 
-func writePatternField(t *tw, p plan.PatternFieldRepresentation) {
+func writePatternField(t *tw, p plan.PatternFieldRepresentation, visiting map[plan.SchemaID]bool) {
 	var g struct {
-		Pattern        string
-		Representation plan.Representation
-		Metadata       plan.Metadata
+		Pattern  string
+		Plan     plan.CompilationPlan
+		Metadata plan.Metadata
 	} = p
 	t.line("patternRule %q", g.Pattern)
 	t.enter(func() {
 		writeMetadata(t, g.Metadata)
-		writeRepresentation(t, g.Representation)
+		writePlan(t, g.Plan, visiting)
 	})
 }
 
-func writeItem(t *tw, i plan.ItemRepresentation) {
+func writeItem(t *tw, i plan.ItemRepresentation, visiting map[plan.SchemaID]bool) {
 	var g struct {
-		Representation plan.Representation
-		Metadata       plan.Metadata
+		Plan     plan.CompilationPlan
+		Metadata plan.Metadata
 	} = i
 	writeMetadata(t, g.Metadata)
-	writeRepresentation(t, g.Representation)
+	writePlan(t, g.Plan, visiting)
 }
 
 func presenceString(p plan.PresenceMode) string {

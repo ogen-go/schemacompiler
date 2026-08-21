@@ -17,23 +17,23 @@ func nestedRejectionPlan() plan.CompilationPlan {
 	element := plan.ObjectRepresentation{
 		Fields: map[string]plan.FieldRepresentation{
 			"name": {
-				Representation: plan.PrimitiveRepresentation{Kind: plan.KindString},
-				Presence:       plan.PresenceRequired,
+				Plan:     plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
+				Presence: plan.PresenceRequired,
 			},
 		},
-		Additional: plan.AnyRepresentation{},
+		Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 	}
 	branch := plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
 			Fields: map[string]plan.FieldRepresentation{
 				"items": {
-					Representation: plan.ArrayRepresentation{
-						Rest: plan.ItemRepresentation{Representation: element},
-					},
+					Plan: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
+						Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: element}},
+					}},
 					Presence: plan.PresenceRequired,
 				},
 			},
-			Additional: plan.AnyRepresentation{},
+			Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 		},
 	}
 	return plan.CompilationPlan{Dispatch: plan.PredicateCountDispatch{
@@ -132,7 +132,7 @@ func TestErrorKindsAreDiscriminated(t *testing.T) {
 func TestInvalidValueErrorCarriesLocation(t *testing.T) {
 	p := plan.CompilationPlan{Representation: plan.ArrayRepresentation{
 		Rest: plan.ItemRepresentation{
-			Representation: plan.PrimitiveRepresentation{Kind: plan.KindString},
+			Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
 		},
 	}}
 	_, err := planterp.Interpret(p, []any{"ok", int32(1)})
@@ -146,11 +146,11 @@ func TestPointerTokensAreEscaped(t *testing.T) {
 	p := plan.CompilationPlan{Representation: plan.ObjectRepresentation{
 		Fields: map[string]plan.FieldRepresentation{
 			"a/b~c": {
-				Representation: plan.PrimitiveRepresentation{Kind: plan.KindString},
-				Presence:       plan.PresenceRequired,
+				Plan:     plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
+				Presence: plan.PresenceRequired,
 			},
 		},
-		Additional: plan.AnyRepresentation{},
+		Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 	}}
 	v, err := planterp.Interpret(p, map[string]any{"a/b~c": 1.0})
 	require.NoError(t, err)

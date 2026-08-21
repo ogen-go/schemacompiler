@@ -12,7 +12,7 @@ func refPlan(target string, level plan.CapabilityLevel) plan.CompilationPlan {
 	return plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
 			Fields: map[string]plan.FieldRepresentation{
-				"f": {Representation: plan.ReferenceRepresentation{Name: target}},
+				"f": {Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: target}}},
 			},
 		},
 		Capability: level,
@@ -103,13 +103,13 @@ func TestRollUpCapabilities(t *testing.T) {
 func TestPlanReferencesNested(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.ArrayRepresentation{
-			Prefix: []plan.ItemRepresentation{{Representation: plan.ReferenceRepresentation{Name: "P"}}},
-			Rest: plan.ItemRepresentation{Representation: plan.UnionRepresentation{
+			Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "P"}}}},
+			Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{
 				Alternatives: []plan.Representation{
 					plan.ReferenceRepresentation{Name: "U"},
 					plan.RecursiveRepresentation{Name: "R", Body: plan.ReferenceRepresentation{Name: "B"}},
 				},
-			}},
+			}}},
 		},
 		Dispatch: plan.PredicateCountDispatch{
 			Branches: []plan.CompilationPlan{

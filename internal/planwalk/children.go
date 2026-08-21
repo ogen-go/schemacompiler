@@ -91,39 +91,41 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 	case plan.ObjectRepresentation:
 		var t struct {
 			Fields       map[string]plan.FieldRepresentation
-			Additional   plan.Representation
+			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
 		} = r
 		for name, f := range t.Fields {
 			var g struct {
-				Representation plan.Representation
-				Presence       plan.PresenceMode
-				Nullable       bool
-				Metadata       plan.Metadata
+				Plan     plan.CompilationPlan
+				Presence plan.PresenceMode
+				Nullable bool
+				Metadata plan.Metadata
 			} = f
-			if !subRepresentation(g.Representation, Edge{
+			if !yield(Node{Kind: NodePlan, Edge: Edge{
 				Kind:     EdgeField,
 				Name:     name,
 				Presence: g.Presence,
 				Nullable: g.Nullable,
-			}, yield) {
+			}, Plan: g.Plan}) {
 				return
 			}
 		}
-		if !subRepresentation(t.Additional, Edge{Kind: EdgeAdditional}, yield) {
-			return
+		if t.Additional != nil {
+			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeAdditional}, Plan: *t.Additional}) {
+				return
+			}
 		}
 		for i, pr := range t.PatternRules {
 			var g struct {
-				Pattern        string
-				Representation plan.Representation
-				Metadata       plan.Metadata
+				Pattern  string
+				Plan     plan.CompilationPlan
+				Metadata plan.Metadata
 			} = pr
-			if !subRepresentation(g.Representation, Edge{
+			if !yield(Node{Kind: NodePlan, Edge: Edge{
 				Kind:  EdgePatternRule,
 				Name:  g.Pattern,
 				Index: i,
-			}, yield) {
+			}, Plan: g.Plan}) {
 				return
 			}
 		}
@@ -133,12 +135,14 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 			Rest   plan.ItemRepresentation
 		} = r
 		for i, it := range t.Prefix {
-			if !subRepresentation(itemRepresentation(it), Edge{Kind: EdgePrefixItem, Index: i}, yield) {
+			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePrefixItem, Index: i}, Plan: itemPlan(it)}) {
 				return
 			}
 		}
-		if !subRepresentation(itemRepresentation(t.Rest), Edge{Kind: EdgeRestItem}, yield) {
-			return
+		if rest := itemPlan(t.Rest); rest.Representation != nil {
+			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeRestItem}, Plan: rest}) {
+				return
+			}
 		}
 	case plan.UnionRepresentation:
 		var t struct {
@@ -167,12 +171,12 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 	}
 }
 
-func itemRepresentation(i plan.ItemRepresentation) plan.Representation {
+func itemPlan(i plan.ItemRepresentation) plan.CompilationPlan {
 	var t struct {
-		Representation plan.Representation
-		Metadata       plan.Metadata
+		Plan     plan.CompilationPlan
+		Metadata plan.Metadata
 	} = i
-	return t.Representation
+	return t.Plan
 }
 
 // subRepresentation yields one representation child, dropping an absent one. It reports

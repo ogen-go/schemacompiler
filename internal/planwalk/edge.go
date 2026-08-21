@@ -19,18 +19,19 @@ const (
 	EdgeDispatch
 	// EdgeValidation links a plan to its residual validation.
 	EdgeValidation
-	// EdgeField links an object representation to a declared field. Name is the
-	// property name; Presence and Nullable are the field's own.
+	// EdgeField links an object representation to the plan of a declared field's
+	// values. Name is the property name; Presence and Nullable are the field's own.
 	EdgeField
-	// EdgeAdditional links an object representation to its Additional value shape,
-	// which holds every property no field and no pattern rule covers.
+	// EdgeAdditional links an object representation to the plan of its Additional
+	// values, which cover every property no field and no pattern rule covers.
 	EdgeAdditional
-	// EdgePatternRule links an object representation to a pattern rule. Name is the
-	// pattern and Index its position in PatternRules.
+	// EdgePatternRule links an object representation to the plan of a pattern rule's
+	// values. Name is the pattern and Index its position in PatternRules.
 	EdgePatternRule
-	// EdgePrefixItem links an array representation to a tuple slot at Index.
+	// EdgePrefixItem links an array representation to the plan of the tuple slot at
+	// Index.
 	EdgePrefixItem
-	// EdgeRestItem links an array representation to the shape of every item past the
+	// EdgeRestItem links an array representation to the plan of every item past the
 	// tuple prefix.
 	EdgeRestItem
 	// EdgeAlternative links a union representation to the alternative at Index.

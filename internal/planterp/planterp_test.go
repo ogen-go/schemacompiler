@@ -320,7 +320,7 @@ func TestApproximatedIsReported(t *testing.T) {
 		expr plan.PredicateExpr
 	}{
 		{name: "format is never asserted", expr: plan.FormatPredicate{Format: "uuid"}},
-		{name: "a pattern RE2 cannot compile", expr: plan.PatternPredicate{Regex: "(?=a)"}},
+		{name: "a pattern the engine cannot compile", expr: plan.PatternPredicate{Regex: "("}},
 	}
 
 	for _, tt := range tests {
@@ -348,7 +348,7 @@ func TestNegationOverAnApproximatedSubPlanAccepts(t *testing.T) {
 		expr plan.PredicateExpr
 	}{
 		{name: "format is never asserted", expr: plan.FormatPredicate{Format: "uuid"}},
-		{name: "a pattern RE2 cannot compile", expr: plan.PatternPredicate{Regex: "(?=a)"}},
+		{name: "a pattern the engine cannot compile", expr: plan.PatternPredicate{Regex: "("}},
 	}
 
 	for _, tt := range tests {

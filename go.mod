@@ -3,6 +3,7 @@ module github.com/ogen-go/schemacompiler
 go 1.25.7
 
 require (
+	github.com/dlclark/regexp2 v1.12.0
 	github.com/go-faster/errors v0.7.1
 	github.com/go-faster/jx v1.2.0
 	github.com/go-faster/sdk v0.37.0

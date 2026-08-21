@@ -219,6 +219,48 @@ func TestCompile_ArrayFamily(t *testing.T) {
 	require.Equal(t, ptr(uint64(1)), containsDetail.Min)
 }
 
+func TestCompile_ContainsRequiresSibling(t *testing.T) {
+	item := &frontend.Node{HasType: true, Types: frontend.KindNumber}
+	tests := []struct {
+		name string
+		node *frontend.Node
+		want *ContainsDetail
+	}{
+		{
+			name: "minContains alone is inert",
+			node: &frontend.Node{MinContains: ptr(uint64(1))},
+		},
+		{
+			name: "maxContains alone is inert",
+			node: &frontend.Node{MaxContains: ptr(uint64(1))},
+		},
+		{
+			name: "both bounds without contains are inert",
+			node: &frontend.Node{MinContains: ptr(uint64(2)), MaxContains: ptr(uint64(3))},
+		},
+		{
+			name: "contains alone leaves the bounds to the planner",
+			node: &frontend.Node{Contains: item},
+			want: &ContainsDetail{Schema: Compile(item)},
+		},
+		{
+			name: "contains carries its sibling bounds",
+			node: &frontend.Node{Contains: item, MinContains: ptr(uint64(2)), MaxContains: ptr(uint64(3))},
+			want: &ContainsDetail{Schema: Compile(item), Min: ptr(uint64(2)), Max: ptr(uint64(3))},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := compileArrayKeywords(tt.node)
+			if tt.want == nil {
+				require.Empty(t, got)
+				return
+			}
+			require.Equal(t, []Expr{Predicate{Guard: plan.SetArray, Detail: *tt.want}}, got)
+		})
+	}
+}
+
 func TestCompile_ObjectFamily(t *testing.T) {
 	n := &frontend.Node{
 		Required:      []string{"a", "b"},

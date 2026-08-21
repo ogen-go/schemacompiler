@@ -66,6 +66,8 @@ type convState struct {
 	// ignoredNullable records every `nullable: true` that OAS 3.0.3 line 2335 leaves
 	// inert because no `type` was declared alongside it.
 	ignoredNullable []IgnoredNullable
+	// unusedDiscriminator records every `discriminator` that names no union.
+	unusedDiscriminator []UnusedDiscriminator
 }
 
 func newConvState(refMap map[*yaml.Node]string, loader Loader) *convState {
@@ -117,7 +119,8 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 		Unresolved:  st.unresolved,
 		Uninhabited: st.reg.uninhabited,
 
-		IgnoredNullable: st.ignoredNullable,
+		IgnoredNullable:     st.ignoredNullable,
+		UnusedDiscriminator: st.unusedDiscriminator,
 	}, nil
 }
 
@@ -532,6 +535,7 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 		return nil, errors.Wrapf(err, "build keywords alongside $ref at %q", sc.docPointer)
 	}
 	st.applyNullable(n, authored)
+	st.recordUnusedDiscriminator(n)
 
 	return n, nil
 }

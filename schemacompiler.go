@@ -121,6 +121,7 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	diags = append(diags, unresolvedDiagnostics(schema.Unresolved)...)
 	diags = append(diags, uninhabitedDiagnostics(schema.Uninhabited)...)
 	diags = append(diags, ignoredNullableDiagnostics(schema.IgnoredNullable)...)
+	diags = append(diags, unusedDiscriminatorDiagnostics(schema.UnusedDiscriminator)...)
 
 	return &Result{
 		Plan:        root.Plan,

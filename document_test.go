@@ -99,8 +99,8 @@ func TestCompileDeclaredDiscriminatorSurvivesPipeline(t *testing.T) {
 		"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Dog"}],
 		"discriminator": {"propertyName": "petType", "mapping": {"cat": "#/$defs/Cat", "dog": "#/$defs/Dog"}},
 		"$defs": {
-			"Cat": {"type": "object", "properties": {"petType": {"type": "string"}}, "required": ["petType"]},
-			"Dog": {"type": "object", "properties": {"petType": {"type": "string"}}, "required": ["petType"]}
+			"Cat": {"type": "object", "properties": {"petType": {"const": "cat"}}, "required": ["petType"]},
+			"Dog": {"type": "object", "properties": {"petType": {"const": "dog"}}, "required": ["petType"]}
 		}
 	}`
 

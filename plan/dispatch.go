@@ -42,7 +42,9 @@ type PropertyDispatch struct {
 	Tag TagSource
 }
 
-// TagSource says where a [PropertyDispatch]'s tagging property came from.
+// TagSource says where a [PropertyDispatch]'s tagging property came from. Either way the
+// branches are proven disjoint on that property (design §18, §15.3); a declaration alone
+// never yields a [PropertyDispatch].
 type TagSource uint8
 
 const (

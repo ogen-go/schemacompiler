@@ -10,9 +10,15 @@ import (
 )
 
 // declaredDispatchCases builds the cases of a union carrying an explicit OpenAPI
-// `discriminator` (issue #17). The returned reason is empty on success; otherwise it
-// explains why the declaration cannot drive dispatch, and the caller warns and falls back
-// to structural inference.
+// `discriminator` (issue #17). A declaration is not a disjointness proof: static property
+// dispatch is only sound when every branch is selected by a finite structural observation
+// of the instance (design §18, §15.3), so the declared path must discharge the same
+// obligation as the inferred one — the property is required on every branch, constrained
+// there to a const/enum, and the branch's case values cover every value it accepts, with
+// all case values pairwise distinct. The returned reason is empty on success; otherwise it
+// explains why the declaration cannot drive dispatch and the caller warns and falls back
+// to structural inference and, ultimately, to predicate-count dispatch (design §20.6,
+// §22).
 func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Expr) (cases []discCase, reason string) {
 	if d.PropertyName == "" {
 		return nil, "discriminator has no propertyName"
@@ -40,15 +46,26 @@ func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Ex
 	seen := newValueSet(len(branchExprs))
 	for i, be := range branchExprs {
 		c := b.flattenThroughRefs(be, nil)
-		if c.never || !declaresProperty(c, d.PropertyName) {
-			return nil, fmt.Sprintf("discriminator property %q is not declared by every branch", d.PropertyName)
+		if c.never {
+			return nil, "discriminator union has an uninhabited branch"
+		}
+		accepted, ok := requiredLiteralValues(c, d.PropertyName)
+		if !ok {
+			return nil, fmt.Sprintf(
+				"discriminator property %q is not required and constrained to a const/enum on every branch, so the branches are not provably disjoint",
+				d.PropertyName)
 		}
 		values := mapped[i]
 		if len(values) == 0 {
-			values = declaredBranchValues(c, targets[i], d.PropertyName)
-		}
-		if len(values) == 0 {
-			return nil, fmt.Sprintf("discriminator property %q has no value on every branch", d.PropertyName)
+			// The implicit mapping (OpenAPI 3.1 §4.8.25.1) names the component, which
+			// constrains nothing in the instance and so cannot select a branch (design
+			// §18). Dispatch on what the branch itself accepts, which coincides with the
+			// component name exactly when the branch constrains the property to it.
+			values = accepted
+		} else if missing, ok := coversAll(values, accepted); !ok {
+			return nil, fmt.Sprintf(
+				"discriminator mapping does not cover value %s, which branch %d accepts on property %q",
+				literalString(missing), i, d.PropertyName)
 		}
 		for _, lit := range values {
 			if !seen.add(lit) {
@@ -60,25 +77,101 @@ func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Ex
 	return cases, ""
 }
 
-// declaredBranchValues returns the values selecting a branch no mapping entry named: its
-// own const on the declared property, else the implicit mapping — the component name of
-// its `$ref` (OpenAPI 3.1 §4.8.25.1).
-func declaredBranchValues(c components, targets []plan.SchemaID, property string) []ir.Literal {
-	if _, lit, ok := requiredConstProperty(c, property); ok {
-		return []ir.Literal{lit}
+// requiredLiteralValues returns the values a branch accepts on a required property,
+// proving the branch is observable from that property alone (design §18, discriminator
+// classes 3 and 4). Declarations of the property that are not a bare const/enum are
+// skipped: they can only narrow the accepted set further, and the result is consumed as a
+// superset obligation.
+func requiredLiteralValues(c components, name string) ([]ir.Literal, bool) {
+	if !requiredProperty(c, name) {
+		return nil, false
 	}
-	for _, t := range targets {
-		if name := componentName(string(t)); name != "" {
-			return []ir.Literal{stringLiteral(name)}
+	var acc []ir.Literal
+	found := false
+	for _, sd := range c.shapes {
+		os, ok := sd.(ir.ObjectShape)
+		if !ok {
+			continue
+		}
+		for _, prop := range os.Properties {
+			if prop.Name != name {
+				continue
+			}
+			values, ok := literalValues(prop.Schema)
+			if !ok {
+				continue
+			}
+			if !found {
+				acc, found = values, true
+				continue
+			}
+			acc = intersectLiterals(acc, values)
 		}
 	}
-	return nil
+	if !found || len(acc) == 0 {
+		return nil, false
+	}
+	return acc, true
 }
 
-// declaresProperty reports whether a branch declares the property the discriminator
-// switches on, as a required name or as an object property. OpenAPI requires it on every
-// branch; dispatching on a property no branch carries could never select one at runtime.
-func declaresProperty(c components, name string) bool {
+// literalValues reports whether e restricts its instance to a finite set of literals: a
+// bare const, or the AnyOf of literals an enum desugars to.
+func literalValues(e ir.Expr) ([]ir.Literal, bool) {
+	if lit, ok := extractLiteral(e); ok {
+		return []ir.Literal{lit}, true
+	}
+	c := flattenAll([]ir.Expr{e})
+	if c.never || c.literal != nil || len(c.shapes) > 0 || len(c.predicates) > 0 ||
+		len(c.nots) > 0 || len(c.refs) > 0 || len(c.combinators) != 1 {
+		return nil, false
+	}
+	anyOf, ok := c.combinators[0].(ir.AnyOf)
+	if !ok || len(anyOf.Operands) == 0 {
+		return nil, false
+	}
+	out := make([]ir.Literal, 0, len(anyOf.Operands))
+	for _, op := range anyOf.Operands {
+		lit, ok := op.(ir.Literal)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, lit)
+	}
+	return out, true
+}
+
+func intersectLiterals(a, b []ir.Literal) []ir.Literal {
+	var out []ir.Literal
+	for _, x := range a {
+		for _, y := range b {
+			if literalEqual(x, y) {
+				out = append(out, x)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// coversAll reports whether every literal of want appears in have, returning the first
+// uncovered one otherwise.
+func coversAll(have, want []ir.Literal) (ir.Literal, bool) {
+	for _, w := range want {
+		found := false
+		for _, h := range have {
+			if literalEqual(h, w) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return w, false
+		}
+	}
+	return ir.Literal{}, true
+}
+
+func requiredProperty(c components, name string) bool {
 	for _, p := range c.predicates {
 		rd, ok := p.Detail.(ir.RequiredDetail)
 		if !ok {
@@ -86,17 +179,6 @@ func declaresProperty(c components, name string) bool {
 		}
 		for _, prop := range rd.Properties {
 			if prop == name {
-				return true
-			}
-		}
-	}
-	for _, sd := range c.shapes {
-		os, ok := sd.(ir.ObjectShape)
-		if !ok {
-			continue
-		}
-		for _, prop := range os.Properties {
-			if prop.Name == name {
 				return true
 			}
 		}

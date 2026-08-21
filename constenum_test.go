@@ -123,12 +123,12 @@ func TestCompileConstEnum(t *testing.T) {
 		},
 		{
 			name: "const object", schema: `{"const":{"a":1}}`,
-			rep: "primitive:object", dispatch: "literal", literals: []string{`{"a":1}`},
+			rep: "object", dispatch: "literal", literals: []string{`{"a":1}`},
 			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
 		},
 		{
 			name: "const array", schema: `{"const":[1,2]}`,
-			rep: "primitive:array", dispatch: "literal", literals: []string{`[1,2]`},
+			rep: "array", dispatch: "literal", literals: []string{`[1,2]`},
 			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
 		},
 
@@ -177,7 +177,7 @@ func TestCompileConstEnum(t *testing.T) {
 		},
 		{
 			name: "enum single object", schema: `{"enum":[{"a":1}]}`,
-			rep: "primitive:object", dispatch: "literal", literals: []string{`{"a":1}`},
+			rep: "object", dispatch: "literal", literals: []string{`{"a":1}`},
 			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
 		},
 
@@ -231,7 +231,7 @@ func TestCompileConstEnum(t *testing.T) {
 		},
 		{
 			name: "enum objects equal across member order", schema: `{"enum":[{"a":1,"b":2},{"b":2,"a":1}]}`,
-			rep: "primitive:object", dispatch: "literal", literals: []string{`{"a":1,"b":2}`},
+			rep: "object", dispatch: "literal", literals: []string{`{"a":1,"b":2}`},
 			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
 		},
 		{
@@ -293,6 +293,39 @@ func TestCompileConstEnum(t *testing.T) {
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
 			exactness: plan.ExactPureRepresentation,
 		},
+
+		// An enum member the sibling type excludes is dead and must be dropped, not kept
+		// as a Never dispatch case (design §15.5, §16.2; issue #59).
+		{
+			name: "enum no members excluded by type", schema: `{"type":"string","enum":["a","b"]}`,
+			rep: "union(primitive:string,primitive:string)", dispatch: "literal",
+			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+		},
+		{
+			name: "enum one member excluded by type", schema: `{"type":"string","enum":["a",1]}`,
+			rep: "primitive:string", dispatch: "literal", literals: []string{`"a"`},
+			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+		},
+		{
+			name: "enum some members excluded by type", schema: `{"type":"string","enum":["a",1,true,"b",null]}`,
+			rep: "union(primitive:string,primitive:string)", dispatch: "literal",
+			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+		},
+		{
+			name: "enum members excluded by integer type", schema: `{"type":"integer","enum":[1,"a"]}`,
+			rep: "primitive:number", dispatch: "literal", literals: []string{`1`},
+			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+		},
+		{
+			name: "enum all members excluded by type", schema: `{"type":"string","enum":[1,2]}`,
+			rep: "never", dispatch: "none", capability: plan.DirectGoType,
+			exactness: plan.ExactPureRepresentation,
+		},
+		{
+			name: "enum all members excluded by object type", schema: `{"type":"object","enum":["a",1]}`,
+			rep: "never", dispatch: "none", capability: plan.DirectGoType,
+			exactness: plan.ExactPureRepresentation,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -307,6 +340,42 @@ func TestCompileConstEnum(t *testing.T) {
 			for _, d := range res.Diagnostics {
 				require.NotEqual(t, plan.SeverityWarning, d.Severity, "unexpected diagnostic: %s", d.Message)
 				require.NotEqual(t, plan.SeverityError, d.Severity, "unexpected diagnostic: %s", d.Message)
+			}
+		})
+	}
+}
+
+// TestConstEnumSpellingsAgree pins that a single-value `const`/`enum` compiles to the
+// same representation whether or not a redundant sibling `type` is written, for every
+// value kind (issue #58): a literal never yields a PrimitiveRepresentation for an object
+// or array value, which docs/integration.md §1 reserves for Go scalars.
+func TestConstEnumSpellingsAgree(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		typ   string
+		value string
+		rep   string
+	}{
+		{"null", "null", `null`, "primitive:null"},
+		{"boolean", "boolean", `true`, "primitive:boolean"},
+		{"number", "number", `3`, "primitive:number"},
+		{"string", "string", `"x"`, "primitive:string"},
+		{"array", "array", `[1,2]`, "array"},
+		{"object", "object", `{"a":1}`, "object"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, spelling := range []string{
+				fmt.Sprintf(`{"const":%s}`, tt.value),
+				fmt.Sprintf(`{"type":%q,"const":%s}`, tt.typ, tt.value),
+				fmt.Sprintf(`{"enum":[%s]}`, tt.value),
+				fmt.Sprintf(`{"type":%q,"enum":[%s]}`, tt.typ, tt.value),
+			} {
+				res, err := schemacompiler.Compile(context.Background(), []byte(spelling), schemacompiler.Options{})
+				require.NoError(t, err, spelling)
+				require.Equal(t, tt.rep, repShape(res.Plan.Representation), spelling)
+				require.Equal(t, "literal", dispatchShape(res.Plan.Dispatch), spelling)
+				require.Equal(t, []string{tt.value}, literalCaseValues(res.Plan.Dispatch), spelling)
+				require.Equal(t, plan.StaticDispatch, res.Capability, spelling)
 			}
 		})
 	}

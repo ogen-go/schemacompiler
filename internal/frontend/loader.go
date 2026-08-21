@@ -31,43 +31,6 @@ func loadDocument(data []byte) (*yaml.Node, error) {
 	return doc.Content[0], nil
 }
 
-// stripRefs walks root, extracting every `$ref` key/value pair into refs (keyed by the
-// exact *yaml.Node it was removed from) and deleting it from the node's Content.
-//
-// This is done so libopenapi never sees a `$ref`: low/base.Schema.Build auto-follows any
-// node containing a literal `$ref` key (regardless of sibling keywords), replacing the
-// node in place with its resolved target via the low-level index/rolodex — machinery this
-// package deliberately bypasses in favor of its own resolver (design §10). Stripping
-// `$ref` upfront, recursively, lets libopenapi build every sibling keyword normally
-// (matching JSON Schema 2020-12, where `$ref` coexists with other keywords) while we
-// recover the reference string ourselves from the map.
-//
-// `$dynamicRef` needs no such treatment: libopenapi stores it verbatim without ever
-// attempting to follow it.
-func stripRefs(root *yaml.Node, refs map[*yaml.Node]string) {
-	if root == nil {
-		return
-	}
-	switch root.Kind {
-	case yaml.MappingNode:
-		for i := 0; i < len(root.Content); i += 2 {
-			if root.Content[i].Value == "$ref" {
-				refs[root] = root.Content[i+1].Value
-				root.Content = append(root.Content[:i], root.Content[i+2:]...)
-				i -= 2
-				continue
-			}
-		}
-		for _, c := range root.Content {
-			stripRefs(c, refs)
-		}
-	case yaml.SequenceNode, yaml.DocumentNode:
-		for _, c := range root.Content {
-			stripRefs(c, refs)
-		}
-	}
-}
-
 // buildHighSchema parses data (JSON or YAML) into a high-level libopenapi schema plus the
 // map of `$ref` strings stripped from it (see [stripRefs]) and the document's root yaml
 // node. A boolean root schema (`true`/`false`) is reported via the returned bool pointer,

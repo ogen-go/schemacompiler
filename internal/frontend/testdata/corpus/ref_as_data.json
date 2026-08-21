@@ -1,0 +1,21 @@
+{
+  "$defs": {
+    "IsString": {"type": "string"},
+    "$ref": {"type": "number"}
+  },
+  "properties": {
+    "$ref": {"$ref": "#/$defs/IsString"},
+    "plain": {"$ref": "#/$defs/$ref"}
+  },
+  "patternProperties": {
+    "^\\$ref$": {"type": "boolean"}
+  },
+  "dependentSchemas": {
+    "$ref": {"required": ["plain"]}
+  },
+  "const": {"$ref": "#/$defs/IsString"},
+  "enum": [{"$ref": "#/$defs/IsString"}],
+  "default": {"$ref": "#/$defs/IsString"},
+  "examples": [{"$ref": "#/$defs/IsString"}],
+  "x-vendor": {"$ref": "#/$defs/IsString"}
+}

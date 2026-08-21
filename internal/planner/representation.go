@@ -194,59 +194,10 @@ func (b *builder) buildLiteral(v ir.Literal, path string) plan.CompilationPlan {
 	return b.buildLeaf(literalKind(v.Value), components{numeric: plan.AnyNumber, literal: &v}, path)
 }
 
-// mergedObject is the result of intersecting every ObjectShape sibling found in an All
-// (design §12.3: allOf-composed object constraints intersect).
-type mergedObject struct {
-	properties           map[string]ir.Expr
-	metadata             map[string]plan.Metadata
-	order                []string
-	patternProperties    []ir.PatternPropertyExpr
-	additionalProperties ir.Expr
-	unevaluated          bool
-}
-
-func mergeObjectShapes(shapes []ir.ShapeDetail) mergedObject {
-	m := mergedObject{
-		properties: make(map[string]ir.Expr),
-		metadata:   make(map[string]plan.Metadata),
-	}
-	for _, sd := range shapes {
-		os, ok := sd.(ir.ObjectShape)
-		if !ok {
-			continue
-		}
-		for _, p := range os.Properties {
-			if existing, ok := m.properties[p.Name]; ok {
-				m.properties[p.Name] = ir.All{Operands: []ir.Expr{existing, p.Schema}}
-			} else {
-				m.properties[p.Name] = p.Schema
-				m.order = append(m.order, p.Name)
-			}
-			// The same property may be declared by several conjoined branches; only one
-			// annotation set can survive, so the last branch that carries any wins.
-			if !metadataEmpty(p.Metadata) {
-				m.metadata[p.Name] = p.Metadata
-			}
-		}
-		m.patternProperties = append(m.patternProperties, os.PatternProperties...)
-		if os.AdditionalProperties != nil {
-			if m.additionalProperties == nil {
-				m.additionalProperties = os.AdditionalProperties
-			} else {
-				m.additionalProperties = ir.All{Operands: []ir.Expr{m.additionalProperties, os.AdditionalProperties}}
-			}
-		}
-		if os.UnevaluatedProperties != nil {
-			m.unevaluated = true
-		}
-	}
-	return m
-}
-
 // buildObject infers an ObjectRepresentation (design §7, §12): fields carry the
 // three-state presence/nullable model (§7.1, §12.2), independent of each other.
 func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
-	merged := mergeObjectShapes(c.shapes)
+	merged := b.mergeObjectShapes(c.shapes, path)
 	required := make(map[string]bool)
 	var val plan.ValidationPlan
 	capLevel := plan.DirectGoType
@@ -273,7 +224,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 
 	fields := make([]plan.FieldRepresentation, 0, len(merged.order))
 	for _, name := range merged.order {
-		subExpr := b.fieldConstraint(name, merged.properties[name], merged.patternProperties, path)
+		subExpr := merged.fields[name]
 		presence := plan.PresenceOptional
 		if required[name] {
 			presence = plan.PresenceRequired
@@ -305,7 +256,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 
 	var additional *plan.CompilationPlan
 	switch {
-	case merged.additionalProperties == nil:
+	case merged.additional == nil:
 		// additionalProperties absent defaults to true (arbitrary extra values allowed);
 		// keep the representation sound by admitting any value there (design §24).
 		additional = &plan.CompilationPlan{
@@ -314,7 +265,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 			Resolution:     plan.FullyResolved{},
 			Capability:     plan.DirectGoType,
 		}
-	case isNever(merged.additionalProperties):
+	case isNever(merged.additional):
 		additional = &plan.CompilationPlan{ // additionalProperties: false
 			Representation: plan.NeverRepresentation{},
 			Dispatch:       plan.NoDispatch{},
@@ -322,14 +273,14 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 			Capability:     plan.DirectGoType,
 		}
 	default:
-		sub := b.build(merged.additionalProperties, path+"/additionalProperties")
+		sub := b.build(merged.additional, path+"/additionalProperties")
 		additional = &sub
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	}
 
 	var patternRules []plan.PatternFieldRepresentation
-	for _, pp := range merged.patternProperties {
+	for _, pp := range merged.patternRules {
 		sub := b.build(pp.Schema, pointerAppend(path+"/patternProperties", pp.Pattern))
 		patternRules = append(patternRules, plan.PatternFieldRepresentation{
 			Pattern:  pp.Pattern,
@@ -353,48 +304,11 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 	return plan.CompilationPlan{Representation: rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
 }
 
-// mergeArrayShapes intersects every ArrayShape sibling found in an All, position-wise
-// for the prefix and via conjunction for the trailing item schema (design §13).
-func mergeArrayShapes(shapes []ir.ShapeDetail) (prefix []ir.ItemExpr, items ir.ItemExpr, unevaluated bool) {
-	for _, sd := range shapes {
-		as, ok := sd.(ir.ArrayShape)
-		if !ok {
-			continue
-		}
-		for i, p := range as.PrefixItems {
-			if i < len(prefix) {
-				prefix[i] = mergeItem(prefix[i], p)
-			} else {
-				prefix = append(prefix, p)
-			}
-		}
-		if as.Items.Schema != nil {
-			if items.Schema == nil {
-				items = as.Items
-			} else {
-				items = mergeItem(items, as.Items)
-			}
-		}
-		if as.UnevaluatedItems != nil {
-			unevaluated = true
-		}
-	}
-	return prefix, items, unevaluated
-}
-
-func mergeItem(a, b ir.ItemExpr) ir.ItemExpr {
-	out := ir.ItemExpr{Schema: ir.All{Operands: []ir.Expr{a.Schema, b.Schema}}, Metadata: a.Metadata}
-	if !metadataEmpty(b.Metadata) {
-		out.Metadata = b.Metadata
-	}
-	return out
-}
-
 // buildArray infers an ArrayRepresentation (design §7, §13): a tuple prefix plus a
 // homogeneous rest, defaulting the rest to Any when `items` is absent (trailing
 // elements are unconstrained per spec default, so soundness requires admitting them).
 func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
-	prefixExprs, itemsExpr, unevaluated := mergeArrayShapes(c.shapes)
+	merged := mergeArrayShapes(c.shapes)
 
 	var val plan.ValidationPlan
 	capLevel := plan.DirectGoType
@@ -413,8 +327,8 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 		}
 	}
 
-	prefix := make([]plan.ItemRepresentation, len(prefixExprs))
-	for i, pe := range prefixExprs {
+	prefix := make([]plan.ItemRepresentation, len(merged.prefix))
+	for i, pe := range merged.prefix {
 		sub := b.build(pe.Schema, path+"/prefixItems/"+strconv.Itoa(i))
 		prefix[i] = plan.ItemRepresentation{Plan: sub, Metadata: pe.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
@@ -423,9 +337,9 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 
 	var rest plan.ItemRepresentation
 	switch {
-	case itemsExpr.Schema != nil:
-		sub := b.build(itemsExpr.Schema, path+"/items")
-		rest = plan.ItemRepresentation{Plan: sub, Metadata: itemsExpr.Metadata}
+	case merged.items.Schema != nil:
+		sub := b.build(merged.items.Schema, path+"/items")
+		rest = plan.ItemRepresentation{Plan: sub, Metadata: merged.items.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	default:
@@ -437,7 +351,7 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 		}}
 	}
 
-	if unevaluated {
+	if merged.unevaluated {
 		b.diag(path, plan.SeverityError, "unevaluatedItems requires evaluated-item tracking")
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}

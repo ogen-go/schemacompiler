@@ -591,3 +591,19 @@ func TestBuild_ContainsCount_PredicateDispatchWarning(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, uint64(2), cc.Min)
 }
+
+func TestBuildAt_DiagnosticOrigin(t *testing.T) {
+	e := ir.All{Operands: []ir.Expr{ir.DynamicRef{Anchor: "node"}}}
+	origin := planner.Origin{
+		Pointer:  "/$defs/A",
+		Position: plan.Position{File: "schema.json", Line: 12, Column: 5},
+	}
+
+	got := planner.BuildAt(e, nil, origin)
+
+	require.NotEmpty(t, got.Diagnostics)
+	for _, d := range got.Diagnostics {
+		require.Equal(t, origin.Pointer, d.Pointer)
+		require.Equal(t, origin.Position, d.Position)
+	}
+}

@@ -12,7 +12,8 @@ import (
 // ir.Compile → norm.Normalize → planner.Build, then re-attaches the metadata that
 // ir.Compile drops.
 func buildPlan(n *frontend.Node, reg *frontend.Registry, budget int) planner.Result {
-	res := planner.Build(norm.Normalize(ir.Compile(n), budget), reg)
+	origin := planner.Origin{Pointer: n.Pointer, Position: n.Position}
+	res := planner.BuildAt(norm.Normalize(ir.Compile(n), budget), reg, origin)
 	annotateMetadata(&res.Plan, n)
 	return res
 }
@@ -54,6 +55,7 @@ func unresolvedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
 	for i, u := range s.Unresolved {
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
+			Position: u.Position,
 			Severity: plan.SeverityError,
 			Message:  "unresolved $ref " + u.Ref + ": " + u.Reason,
 		}
@@ -73,6 +75,7 @@ func uninhabitedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
 	for i, u := range s.Uninhabited {
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
+			Position: u.Position,
 			Severity: plan.SeverityWarning,
 			Message:  "uninhabited schema: " + u.Reason,
 		}
@@ -96,8 +99,8 @@ func maxExactness(a, b plan.Exactness) plan.Exactness {
 	return a
 }
 
-// dedupeDiagnostics removes diagnostics that are identical in pointer, severity, and
-// message — a schema referenced from several places would otherwise report the same
+// dedupeDiagnostics removes diagnostics that are identical in pointer, position, severity,
+// and message — a schema referenced from several places would otherwise report the same
 // finding more than once.
 func dedupeDiagnostics(diags []plan.Diagnostic) []plan.Diagnostic {
 	if len(diags) == 0 {

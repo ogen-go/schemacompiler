@@ -127,3 +127,56 @@ func TestCompileDynamicRefDiagnostic(t *testing.T) {
 	}
 	require.True(t, sawError, "expected a SeverityError diagnostic")
 }
+
+func TestCompileDiagnosticPositions(t *testing.T) {
+	const schema = `type: object
+properties:
+  broken:
+    $ref: '#/$defs/Missing'
+  dyn:
+    $dynamicRef: '#meta'
+`
+	res, err := schemacompiler.Compile(context.Background(), []byte(schema),
+		schemacompiler.Options{BaseURI: "schema.yml"})
+	require.NoError(t, err)
+	require.NotEmpty(t, res.Diagnostics)
+
+	byPointer := make(map[string]plan.Diagnostic, len(res.Diagnostics))
+	for _, d := range res.Diagnostics {
+		require.False(t, d.Position.IsZero(), "diagnostic without a position: %+v", d)
+		byPointer[d.Pointer] = d
+	}
+
+	broken, ok := byPointer["/properties/broken"]
+	require.True(t, ok, "expected a diagnostic for the dangling $ref: %+v", res.Diagnostics)
+	require.Equal(t, plan.Position{File: "schema.yml", Line: 4, Column: 5}, broken.Position)
+	require.Contains(t, broken.Message, "unresolved $ref")
+
+	dyn, ok := byPointer["/properties/dyn"]
+	require.True(t, ok, "expected a diagnostic for the $dynamicRef: %+v", res.Diagnostics)
+	require.Equal(t, plan.Position{File: "schema.yml", Line: 6, Column: 5}, dyn.Position)
+}
+
+func TestCompileDefinitionDiagnosticPointers(t *testing.T) {
+	const schema = `$ref: '#/$defs/A'
+$defs:
+  A:
+    type: object
+    properties:
+      dyn:
+        $dynamicRef: '#meta'
+`
+	const baseURI = "https://ex.com/schema.yml"
+	res, err := schemacompiler.Compile(context.Background(), []byte(schema),
+		schemacompiler.Options{BaseURI: baseURI})
+	require.NoError(t, err)
+
+	var found bool
+	for _, d := range res.Diagnostics {
+		if d.Pointer == "/$defs/A/properties/dyn" {
+			found = true
+			require.Equal(t, plan.Position{File: baseURI, Line: 7, Column: 9}, d.Position)
+		}
+	}
+	require.True(t, found, "a definition's diagnostic should carry a document-absolute pointer: %+v", res.Diagnostics)
+}

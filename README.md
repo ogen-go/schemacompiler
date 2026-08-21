@@ -46,7 +46,7 @@ if err != nil {
 }
 fmt.Println(res.Capability, res.Exactness)
 for _, d := range res.Diagnostics {
-    fmt.Println(d.Severity, d.Pointer, d.Message)
+    fmt.Println(d.Severity, d.Position, d.Pointer, d.Message)
 }
 ```
 

@@ -12,6 +12,8 @@
 // registry.go.
 package frontend
 
+import "github.com/ogen-go/schemacompiler/plan"
+
 // Schema is a loaded, resolved schema document: the root [Node] plus the [Registry] of
 // every resource reachable from it. The Node AST is defined in ast.go.
 type Schema struct {
@@ -34,6 +36,8 @@ type Schema struct {
 type UninhabitedNode struct {
 	// Pointer is the JSON Pointer to the uninhabited schema.
 	Pointer string
+	// Position is the source location of that schema.
+	Position plan.Position
 	// Reason explains why no instance exists.
 	Reason string
 }
@@ -42,6 +46,8 @@ type UninhabitedNode struct {
 type UnresolvedRef struct {
 	// Pointer is the JSON Pointer to the schema that declared the reference.
 	Pointer string
+	// Position is the source location of the schema that declared the reference.
+	Position plan.Position
 	// Ref is the raw `$ref` string.
 	Ref string
 	// Reason explains why resolution failed.

@@ -116,7 +116,7 @@ func run(args []string, stdout io.Writer) error {
 				_, _ = fmt.Fprintln(stdout, "(none)")
 			}
 			for _, d := range result.Diagnostics {
-				_, _ = fmt.Fprintf(stdout, "%s: %s: %s\n", severityString(d.Severity), d.Pointer, d.Message)
+				_, _ = fmt.Fprintf(stdout, "%s: %s: %s\n", severityString(d.Severity), diagLocation(d), d.Message)
 			}
 		}
 	}
@@ -147,6 +147,15 @@ func planDefinitions(p plan.CompilationPlan) map[plan.SchemaID]plan.CompilationP
 	default:
 		return nil
 	}
+}
+
+// diagLocation renders a diagnostic's source position, falling back to its JSON Pointer
+// when the position is unknown.
+func diagLocation(d plan.Diagnostic) string {
+	if d.Position.IsZero() {
+		return d.Pointer
+	}
+	return d.Position.String() + " (" + d.Pointer + ")"
 }
 
 func severityString(s plan.Severity) string {

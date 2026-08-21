@@ -42,15 +42,24 @@ type PropertyDispatch struct {
 	Tag TagSource
 }
 
-// TagSource says where a [PropertyDispatch]'s tagging property came from.
+// TagSource says where a [PropertyDispatch]'s tagging property came from, and whether the
+// branches are proven disjoint on it (design §18, §15.3) or merely asserted to be.
 type TagSource uint8
 
 const (
-	// TagInferred means the property was recovered from per-branch const values.
+	// TagInferred means the property was recovered from per-branch const values, which
+	// proves the branches disjoint.
 	TagInferred TagSource = iota
-	// TagDeclared means an OpenAPI `discriminator` named the property; its `mapping`
-	// entries, where present, supplied the case values.
+	// TagDeclared means an OpenAPI `discriminator` named the property and every branch
+	// requires it and pins it to a const/enum the cases cover, which proves the branches
+	// disjoint.
 	TagDeclared
+	// TagAsserted means an OpenAPI `discriminator` named the property and its `mapping`
+	// supplied the case values, but the branches only require the property without
+	// constraining it: dispatch trusts the declaration as the "hint to shortcut
+	// validation and selection" OAS 3.0.3 permits, and is not proven exact. Plans
+	// containing one report [SoundOverApproximation].
+	TagAsserted
 )
 
 // PresenceDispatch selects a branch by whether a property is present (design §12.7).

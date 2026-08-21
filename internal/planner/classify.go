@@ -35,14 +35,19 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 }
 
 // exactnessOf derives the top-level Exactness from a finished plan's capability and
-// whether it carries residual validation (design §24, §25).
-func exactnessOf(p plan.CompilationPlan) plan.Exactness {
+// whether it carries residual validation (design §24, §25). asserted reports whether some
+// dispatch trusts a declared discriminator instead of proving it ([plan.TagAsserted]),
+// which makes the plan an over-approximation however exact its parts are.
+func exactnessOf(p plan.CompilationPlan, asserted bool) plan.Exactness {
 	switch p.Capability {
 	case plan.EvaluationStateValidation, plan.DynamicSchemaResolution, plan.Unsupported:
 		return plan.UnsupportedConversion
 	}
 	if _, never := p.Representation.(plan.NeverRepresentation); never {
 		return plan.ExactPureRepresentation
+	}
+	if asserted {
+		return plan.SoundOverApproximation
 	}
 	if _, isAny := p.Representation.(plan.AnyRepresentation); isAny && !p.Validation.Empty() {
 		// A schema with no representable type restriction plus residual predicates:

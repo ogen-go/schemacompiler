@@ -43,6 +43,9 @@ var manifest = map[string]caseExpectation{
 	"direct/pattern_properties.json":           exact(plan.DirectGoType, plan.ExactPureRepresentation),
 	"direct/additional_properties_schema.json": exact(plan.DirectGoType, plan.ExactPureRepresentation),
 	"direct/additional_properties_false.json":  exact(plan.DirectGoType, plan.ExactPureRepresentation),
+	// A string format against a number type: the guard never fires, so nothing survives
+	// onto the representation or into the validator.
+	"direct/format_inapplicable_kind.json": exact(plan.DirectGoType, plan.ExactPureRepresentation),
 	// `not` is representable structurally but the v1 validator does not enforce the
 	// residual negation (design's v1 scope); it still counts as DirectGoType and
 	// carries an informational diagnostic, not a capability downgrade.
@@ -57,6 +60,16 @@ var manifest = map[string]caseExpectation{
 	"validation/integer_multipleof.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
 	"validation/array_minmax_items.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
 	"validation/array_unique_items.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
+	// `format` is a kind-guarded assertion (design §3): it reaches the representation and
+	// the validation plan only for the kind it applies to.
+	"validation/format_string.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
+	"validation/format_number.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
+	// {"format": "uuid"} accepts every non-string value, so the representation widens to
+	// any and the guarded assertion is all that remains.
+	"validation/format_no_type.json": exact(plan.GoTypeWithValidation, plan.SoundOverApproximation),
+	// Two distinct formats intersected by allOf (unordered, design §11.5): neither shapes
+	// the representation, both stay in the validation plan, and the loss is reported.
+	"validation/format_allof_conflict.json": withDiag(exact(plan.GoTypeWithValidation, plan.ExactWithValidation)),
 	// `required` always leaves a residual RequiredPredicate (internal/planner/representation.go).
 	"validation/object_required.json": exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
 	// Three-state presence/nullable field: nullable is folded into the field's own

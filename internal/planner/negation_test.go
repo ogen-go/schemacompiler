@@ -43,18 +43,23 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 	return n
 }
 
-// TestBuild_SubsumedOneOfBranchKeepsResidualNegation pins issue #71. `oneOf` is
-// ExactlyOne, so a branch whose accepted set is a *subset* of another branch's is
-// unreachable and the wider branch loses the overlap: normalization rewrites
-// ExactlyOne(A, B) with B ⊆ A into All(A, Not(B)) (design §15.2). That negation is the
-// whole difference between the schema and a plain union, so the plan must carry it as a
-// residual [plan.NegationPredicate] rather than drop it into a static dispatch that
-// accepts the subsumed instances (design §24, docs/implementation.md invariant 4).
+// TestBuild_SubsumedOneOfBranchIsNotClaimedExact pins issue #71. `oneOf` is ExactlyOne,
+// so a branch whose accepted set is a *subset* of another branch's is unreachable and the
+// wider branch loses the overlap: normalization rewrites ExactlyOne(A, B) with B ⊆ A into
+// All(A, Not(B)) (design §15.2). Dropping that negation is what made the plan accept the
+// subsumed instances while reporting ExactWithValidation.
+//
+// The negation is not emitted here, because its operand is a `$ref` whose target plan
+// drops the const that tags it (#68), and negating an over-approximation rejects valid
+// instances (#82). What the plan must not do is keep claiming exactness: it now reports
+// SoundOverApproximation and says which constraint went unenforced. Once #68 lands the
+// operand becomes trustworthy, the predicate is emitted, and these move to
+// PredicateDispatch with a non-zero negation count.
 //
 // The subset relation is what distinguishes this from the partially-overlapping shape the
 // union-overlap check already rejects, so both orders and the declared/undeclared
-// discriminator are covered: none of them may reach StaticDispatch.
-func TestBuild_SubsumedOneOfBranchKeepsResidualNegation(t *testing.T) {
+// discriminator are covered.
+func TestBuild_SubsumedOneOfBranchIsNotClaimedExact(t *testing.T) {
 	const catOrKitten = `{"anyOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Kitten"}]}`
 	const kitten = `{"$ref": "#/$defs/Kitten"}`
 
@@ -85,11 +90,11 @@ func TestBuild_SubsumedOneOfBranchKeepsResidualNegation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := buildNormalized(t, tt.doc)
 
-			require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
-			require.Equal(t, plan.SoundOverApproximation, got.Exactness)
-			require.NotZero(t, countNegations(t, got.Plan),
-				"the residual negation must survive into the plan")
+			require.Equal(t, plan.SoundOverApproximation, got.Exactness,
+				"the plan accepts the subsumed instances and must say so")
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
+			require.Zero(t, countNegations(t, got.Plan),
+				"blocked on #68: the negated $ref target drops the const that tags it")
 		})
 	}
 }
@@ -137,6 +142,85 @@ func TestBuild_DisjointNestedCombinatorBranchesStayStatic(t *testing.T) {
 			require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 			require.Equal(t, plan.TagDeclared, disp.Tag)
 			require.Equal(t, []any{"cat", "kitten", "dog"}, caseValues(disp.Cases))
+		})
+	}
+}
+
+// TestBuild_NegationIsGatedOnNestedExactness pins issue #82. `not S` accepts exactly what
+// S rejects, so negation inverts the approximation polarity of its operand: a nested plan
+// that over-approximates S makes the negation *under*-approximate `not S` and reject valid
+// instances, which §24 never permits in either direction. The predicate is therefore
+// emitted only when the nested plan is exactly modeled; otherwise the negation is dropped,
+// which widens the outer plan (always sound) and is reported.
+//
+// [plan.Exactness] alone is not enough to decide this, because it is derived from a plan's
+// shape rather than from what the plan enforces: an object, array or reference plan reports
+// itself exact while dropping the constraints inside it (#68, #72). Those rows are gated
+// structurally instead, so today only primitives, literals and kinds are negated. When #68
+// and #72 land the structural check can go and they flip back to emitting.
+func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		doc    string
+		reason string
+		emit   bool
+	}{
+		{
+			name:   "exact nested primitive",
+			doc:    `{"not": {"type": "integer"}}`,
+			reason: "the nested plan reproduces the schema exactly, so negating it is exact too",
+			emit:   true,
+		},
+		{
+			name:   "nested plan is unsupported",
+			doc:    `{"not": {"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}}`,
+			reason: "unevaluatedProperties is not modeled, so the nested plan accepts more than the schema",
+			emit:   false,
+		},
+		{
+			name:   "nested plan over-approximates",
+			doc:    `{"not": {"type": "array", "contains": {"type": "string"}}}`,
+			reason: "the nested match-count plan is a declared over-approximation",
+			emit:   false,
+		},
+		{
+			name:   "nested plan enforces nothing",
+			doc:    `{"not": {"properties": {"a": {"type": "string"}}, "additionalProperties": false}}`,
+			reason: "the nested plan accepts every instance (#72), so the negation would reject every instance",
+			emit:   false,
+		},
+		{
+			name:   "nested object claims exactness it does not have (#68)",
+			doc:    `{"not": {"type": "object", "properties": {"a": {"type": "string", "minLength": 1}}}}`,
+			reason: "minLength is dropped inside the field, so the object plan over-accepts however exact it reports",
+			emit:   false,
+		},
+		{
+			name:   "nested array claims exactness it does not have (#68)",
+			doc:    `{"not": {"type": "array", "items": {"type": "string", "minLength": 5}}}`,
+			reason: "minLength is dropped inside the item, so the array plan over-accepts however exact it reports",
+			emit:   false,
+		},
+		{
+			name:   "nested reference is never proven exact",
+			doc:    `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S": {"type": "string"}}}`,
+			reason: "a reference's exactness does not consult its target, so it cannot be trusted here",
+			emit:   false,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildNormalized(t, tt.doc)
+
+			if tt.emit {
+				require.Equal(t, 1, countNegations(t, got.Plan), tt.reason)
+				require.Equal(t, plan.PredicateDispatch, got.Plan.Capability, tt.reason)
+			} else {
+				require.Zero(t, countNegations(t, got.Plan), tt.reason)
+				require.Less(t, got.Plan.Capability, plan.PredicateDispatch,
+					"a dropped negation costs nothing at runtime")
+			}
+			require.Equal(t, plan.SoundOverApproximation, got.Exactness, tt.reason)
+			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 		})
 	}
 }

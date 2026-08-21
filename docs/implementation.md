@@ -59,9 +59,11 @@ to refuse to generate for these, which is acceptable:
   (`PredicateCountDispatch`) but classify as `PredicateDispatch`; a diagnostic notes the
   runtime match-count cost. (These are representable, just flagged — do not drop them.)
 - **a negation normalization could not eliminate** (§11.8) → keep it as a
-  `plan.NegationPredicate` over the negated sub-schema and classify as `PredicateDispatch`.
-  No representation can express a complement, so dropping it would silently accept more
-  (invariant 4); a diagnostic notes the runtime sub-schema check.
+  `plan.NegationPredicate` over the negated sub-schema and classify as `PredicateDispatch`,
+  **but only when that sub-schema's plan is exact**. Negation inverts approximation
+  polarity: negating an over-approximation under-approximates, i.e. rejects valid
+  instances, which invariant 4 forbids outright. Otherwise drop the negation (the outer
+  plan then accepts a superset, which is sound), report `SoundOverApproximation` and warn.
 
 Everything that normalizes to `DirectGoType`, `GoTypeWithValidation`, or `StaticDispatch`
 is fully supported and is the primary target. The point of the capability ladder is to

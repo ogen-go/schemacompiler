@@ -209,11 +209,17 @@ already incorporates the `minContains` default of 1. This is the element-wise co
 of the branch match-count above, and the same "emit or refuse" rule applies.
 
 **`NegationPredicate{Schema}`.** Run `Schema` (a full `CompilationPlan`) against the whole
-instance and invert the outcome: the instance is valid iff `Schema` rejects it. It appears
-wherever normalization could not eliminate a complement, including the `All(A, Not(B))` form
-a `oneOf` with a subsumed branch rewrites to (design §15.2), where the negation is the only
-thing separating the schema from a plain union. Like the two counts above it forces
-`CapabilityLevel.PredicateDispatch`, so it arrives already flagged.
+instance and invert the outcome: the instance is valid iff `Schema` rejects it. Like the two
+counts above it forces `CapabilityLevel.PredicateDispatch`, so it arrives already flagged.
+
+Negation inverts approximation polarity, so this predicate is emitted **only** when the
+nested plan reproduces its schema exactly: a nested plan that accepts more than its schema
+would make the negation reject valid instances, which §24 forbids. Where that cannot be
+established the compiler drops the negation instead — the outer plan then accepts a superset,
+reports `SoundOverApproximation`, and carries a `SeverityWarning` naming the constraint it
+could not enforce. A backend therefore never sees a `NegationPredicate` it must distrust, but
+it must not read the absence of one as "the schema had no `not`"; the exactness and the
+diagnostic are what say so.
 
 **Representation.** In every case the accepted value is stored via the plan's
 `Representation` (a `UnionRepresentation` for dispatch; the array's own representation for

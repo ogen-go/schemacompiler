@@ -204,7 +204,7 @@ func TestCompile_ArrayFamily(t *testing.T) {
 	arrShape, ok := shape.Detail.(ArrayShape)
 	require.True(t, ok)
 	require.Len(t, arrShape.PrefixItems, 1)
-	require.Equal(t, Compile(item), arrShape.Items)
+	require.Equal(t, Compile(item), arrShape.Items.Schema)
 
 	require.Equal(t, Predicate{Guard: plan.SetArray, Detail: MinItemsDetail{Value: 1}}, got.Operands[1])
 	require.Equal(t, Predicate{Guard: plan.SetArray, Detail: MaxItemsDetail{Value: 2}}, got.Operands[2])

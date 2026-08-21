@@ -107,10 +107,10 @@ func normalizeShape(e ir.Shape, st *state) ir.Expr {
 	case ir.ObjectShape:
 		nd := ir.ObjectShape{}
 		for _, p := range d.Properties {
-			nd.Properties = append(nd.Properties, ir.PropertyExpr{Name: p.Name, Schema: normalize(p.Schema, st)})
+			nd.Properties = append(nd.Properties, ir.PropertyExpr{Name: p.Name, Schema: normalize(p.Schema, st), Metadata: p.Metadata})
 		}
 		for _, p := range d.PatternProperties {
-			nd.PatternProperties = append(nd.PatternProperties, ir.PatternPropertyExpr{Pattern: p.Pattern, Schema: normalize(p.Schema, st)})
+			nd.PatternProperties = append(nd.PatternProperties, ir.PatternPropertyExpr{Pattern: p.Pattern, Schema: normalize(p.Schema, st), Metadata: p.Metadata})
 		}
 		if d.AdditionalProperties != nil {
 			nd.AdditionalProperties = normalize(d.AdditionalProperties, st)
@@ -122,10 +122,10 @@ func normalizeShape(e ir.Shape, st *state) ir.Expr {
 	case ir.ArrayShape:
 		nd := ir.ArrayShape{}
 		for _, it := range d.PrefixItems {
-			nd.PrefixItems = append(nd.PrefixItems, normalize(it, st))
+			nd.PrefixItems = append(nd.PrefixItems, ir.ItemExpr{Schema: normalize(it.Schema, st), Metadata: it.Metadata})
 		}
-		if d.Items != nil {
-			nd.Items = normalize(d.Items, st)
+		if d.Items.Schema != nil {
+			nd.Items = ir.ItemExpr{Schema: normalize(d.Items.Schema, st), Metadata: d.Items.Metadata}
 		}
 		if d.UnevaluatedItems != nil {
 			nd.UnevaluatedItems = normalize(d.UnevaluatedItems, st)

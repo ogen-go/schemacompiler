@@ -35,6 +35,7 @@ type ObjectRepresentation struct {
 type PatternFieldRepresentation struct {
 	Pattern        string
 	Representation Representation
+	Metadata       Metadata
 }
 
 // PresenceMode captures whether a field must be present (design §7.1, §12.2).
@@ -56,10 +57,19 @@ type FieldRepresentation struct {
 	Metadata       Metadata
 }
 
+// ItemRepresentation is one array position: its value representation plus the
+// annotations of the sub-schema it came from.
+type ItemRepresentation struct {
+	Representation Representation
+	Metadata       Metadata
+}
+
 // ArrayRepresentation is a tuple prefix plus a homogeneous rest (design §13).
 type ArrayRepresentation struct {
-	Prefix []Representation
-	Rest   Representation // nil means no additional items beyond the prefix
+	Prefix []ItemRepresentation
+	// Rest describes items beyond the prefix; a nil Rest.Representation means there are
+	// none.
+	Rest ItemRepresentation
 }
 
 // UnionRepresentation is a set of alternatives selected by a DispatchPlan.

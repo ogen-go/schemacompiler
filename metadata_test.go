@@ -110,8 +110,8 @@ func TestCompile_ArrayItemMetadata(t *testing.T) {
 	}`)
 	arr, ok := p.Representation.(plan.ArrayRepresentation)
 	require.True(t, ok, "got %T", p.Representation)
-	obj, ok := arr.Rest.(plan.ObjectRepresentation)
-	require.True(t, ok, "got %T", arr.Rest)
+	obj, ok := arr.Rest.Representation.(plan.ObjectRepresentation)
+	require.True(t, ok, "got %T", arr.Rest.Representation)
 	require.Equal(t, map[string]any{"x-tag": "t"}, obj.Fields["a"].Metadata.Extensions)
 }
 
@@ -126,4 +126,12 @@ func TestCompile_DefinitionMetadata(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "Named", def.Metadata.Title)
 	require.Equal(t, map[string]any{"x-ogen-name": "N"}, def.Metadata.Extensions)
+}
+
+func compileResult(t *testing.T, schema string) *schemacompiler.Result {
+	t.Helper()
+	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	return res
 }

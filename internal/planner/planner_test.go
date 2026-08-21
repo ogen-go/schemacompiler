@@ -527,8 +527,8 @@ func TestBuild_ArrayRepresentation_PrefixAndRest(t *testing.T) {
 	e := ir.All{Operands: []ir.Expr{
 		ir.Kinds{Set: plan.SetArray},
 		ir.Shape{Detail: ir.ArrayShape{
-			PrefixItems: []ir.Expr{ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}},
-			Items:       ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetNumber}}},
+			PrefixItems: []ir.ItemExpr{{Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}}},
+			Items:       ir.ItemExpr{Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetNumber}}}},
 		}},
 	}}
 
@@ -537,8 +537,8 @@ func TestBuild_ArrayRepresentation_PrefixAndRest(t *testing.T) {
 	arr, ok := got.Plan.Representation.(plan.ArrayRepresentation)
 	require.True(t, ok)
 	require.Len(t, arr.Prefix, 1)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, arr.Prefix[0])
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindNumber}, arr.Rest)
+	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, arr.Prefix[0].Representation)
+	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindNumber}, arr.Rest.Representation)
 }
 
 func TestBuild_Never(t *testing.T) {

@@ -1,0 +1,22 @@
+Node pointer=""
+  $defs["Cat"]:
+    Node pointer="/$defs/Cat"
+      type=00100000 integer=false
+      required=[petType]
+      properties["petType"]:
+        Node pointer="/$defs/Cat/properties/petType"
+          type=00001000 integer=false
+  $defs["Dog"]:
+    Node pointer="/$defs/Dog"
+      type=00100000 integer=false
+      required=[petType]
+      properties["petType"]:
+        Node pointer="/$defs/Dog/properties/petType"
+          type=00001000 integer=false
+  discriminator="petType" mapping=[{cat #/$defs/Cat} {dog #/$defs/Dog}]
+  oneOf[0]:
+    Node pointer="/oneOf/0"
+      ref="#/$defs/Cat" resolved=true
+  oneOf[1]:
+    Node pointer="/oneOf/1"
+      ref="#/$defs/Dog" resolved=true

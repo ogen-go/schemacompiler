@@ -27,9 +27,6 @@ import (
 // compiler and this interpreter implement it, so running them would report a mismatched
 // oracle as a compiler bug. Every skipped schema is still counted.
 var outOfDialect = map[string]string{
-	// These schemas assert ECMA-262 regex corners (\s over Unicode whitespace, the BOM)
-	// that Go's RE2 does not share. That is the interpreter's engine, not the plan.
-	"optional/ecmascript-regex.json": "RE2 is not ECMA-262",
 	// `dependencies` is a draft-04/07 keyword. Draft 2020-12 split it into
 	// dependentRequired/dependentSchemas and treats the old spelling as unknown, so
 	// ignoring it is correct behavior, not a dropped constraint.
@@ -63,8 +60,8 @@ const (
 	// while claiming ExactPureRepresentation or ExactWithValidation.
 	verdictAcceptedInvalid
 	// verdictApproximated is verdictAcceptedInvalid reached through a constraint the
-	// interpreter itself could not enforce (an RE2-incompatible pattern, an unasserted
-	// `format`), so it is not evidence against the plan.
+	// interpreter itself could not enforce (a pattern its ECMA-262 engine cannot compile
+	// or cannot finish, an unasserted `format`), so it is not evidence against the plan.
 	verdictApproximated
 	// verdictDeclaredInexact is verdictAcceptedInvalid reached through a plan that says it
 	// accepts more than its schema — [plan.SoundOverApproximation] and above. The oracle

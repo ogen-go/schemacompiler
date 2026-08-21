@@ -236,7 +236,15 @@ func (in *interp) field(field objectField, obj map[string]any, f frame) (Verdict
 func (in *interp) patternRules(rules []patternRule, name string, value any, f frame) (bool, Verdict, error) {
 	matched := false
 	for _, rule := range rules {
-		if !in.matchPattern(rule.pattern, name) {
+		switch in.matchPattern(rule.pattern, name) {
+		case patternNoMatch:
+			continue
+		case patternUnknown:
+			// Whether the rule covers name is undecidable, and both answers can reject a
+			// valid instance: running the rule's plan on a name it does not cover, or
+			// falling through to an Additional that forbids it. Claiming the name without
+			// constraining it is the only branch that cannot (design §24).
+			matched = true
 			continue
 		}
 		matched = true

@@ -29,9 +29,9 @@ type Verdict struct {
 	// failure underneath it. Nil when accepted.
 	Reason *ValidateError
 	// Approximated lists constraints the interpreter could not enforce even though the
-	// plan carries them: an ECMA-262 pattern Go's RE2 cannot compile, and `format`,
-	// which the 2020-12 format-annotation dialect does not assert. An acceptance with a
-	// non-empty Approximated is not evidence that the plan is exact.
+	// plan carries them: a `pattern` the ECMA-262 engine cannot compile or cannot finish
+	// matching, and `format`, which the 2020-12 format-annotation dialect does not assert.
+	// An acceptance with a non-empty Approximated is not evidence that the plan is exact.
 	Approximated []string
 }
 

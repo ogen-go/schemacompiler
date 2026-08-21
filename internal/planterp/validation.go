@@ -50,7 +50,7 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 		if !ok {
 			return accepted(), nil
 		}
-		if !in.matchPattern(e.Regex, s) {
+		if in.matchPattern(e.Regex, s) == patternNoMatch {
 			return rejected(f, "pattern", strconv.Quote(e.Regex)+": no match"), nil
 		}
 		return accepted(), nil

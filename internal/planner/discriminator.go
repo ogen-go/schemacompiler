@@ -55,16 +55,16 @@ func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Ex
 	tag = plan.TagDeclared
 	seen := newValueSet(len(branchExprs))
 	for i, be := range branchExprs {
-		c := b.flattenThroughRefs(be, nil)
-		if c.never {
+		f := b.tagFacts(be, d.PropertyName, nil)
+		if f.never {
 			return nil, 0, "discriminator union has an uninhabited branch"
 		}
-		if !requiredProperty(c, d.PropertyName) {
+		if !f.required {
 			return nil, 0, fmt.Sprintf(
 				"discriminator property %q is not required by every branch, which OAS 3.0.3 line 2354 mandates",
 				d.PropertyName)
 		}
-		accepted, proven := requiredLiteralValues(c, d.PropertyName)
+		accepted, proven := f.accepted()
 		values := mapped[i]
 		switch {
 		case len(values) == 0 && !proven:
@@ -80,7 +80,7 @@ func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Ex
 		case !proven:
 			tag = plan.TagAsserted
 		default:
-			if _, covered := coversAll(values, accepted); !covered {
+			if !coversAll(values, accepted) {
 				tag = plan.TagAsserted
 			}
 		}
@@ -92,43 +92,6 @@ func (b *builder) declaredDispatchCases(d *ir.Discriminator, branchExprs []ir.Ex
 		}
 	}
 	return cases, tag, ""
-}
-
-// requiredLiteralValues returns the values a branch accepts on a required property,
-// proving the branch is observable from that property alone (design §18, discriminator
-// classes 3 and 4). Declarations of the property that are not a bare const/enum are
-// skipped: they can only narrow the accepted set further, and the result is consumed as a
-// superset obligation.
-func requiredLiteralValues(c components, name string) ([]ir.Literal, bool) {
-	if !requiredProperty(c, name) {
-		return nil, false
-	}
-	var acc []ir.Literal
-	found := false
-	for _, sd := range c.shapes {
-		os, ok := sd.(ir.ObjectShape)
-		if !ok {
-			continue
-		}
-		for _, prop := range os.Properties {
-			if prop.Name != name {
-				continue
-			}
-			values, ok := literalValues(prop.Schema)
-			if !ok {
-				continue
-			}
-			if !found {
-				acc, found = values, true
-				continue
-			}
-			acc = intersectLiterals(acc, values)
-		}
-	}
-	if !found || len(acc) == 0 {
-		return nil, false
-	}
-	return acc, true
 }
 
 // literalValues reports whether e restricts its instance to a finite set of literals: a
@@ -170,22 +133,23 @@ func intersectLiterals(a, b []ir.Literal) []ir.Literal {
 	return out
 }
 
-// coversAll reports whether every literal of want appears in have, returning the first
-// uncovered one otherwise.
-func coversAll(have, want []ir.Literal) (ir.Literal, bool) {
+// coversAll reports whether every literal of want appears in have.
+func coversAll(have, want []ir.Literal) bool {
 	for _, w := range want {
-		found := false
-		for _, h := range have {
-			if h.Equal(w) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return w, false
+		if !containsLiteral(have, w) {
+			return false
 		}
 	}
-	return ir.Literal{}, true
+	return true
+}
+
+func containsLiteral(have []ir.Literal, want ir.Literal) bool {
+	for _, h := range have {
+		if h.Equal(want) {
+			return true
+		}
+	}
+	return false
 }
 
 func requiredProperty(c components, name string) bool {

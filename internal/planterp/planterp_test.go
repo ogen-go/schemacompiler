@@ -336,3 +336,59 @@ func TestApproximatedIsReported(t *testing.T) {
 		})
 	}
 }
+
+// TestNegationOverAnApproximatedSubPlanAccepts pins the interpreter's half of issue #82.
+// The planner only emits a [plan.NegationPredicate] over a plan it proved exact, but the
+// interpreter has constraints of its own it cannot check; inverting an acceptance it had to
+// approximate would turn a harmless over-acceptance into the rejection of a valid instance,
+// which design §24 forbids in every direction.
+func TestNegationOverAnApproximatedSubPlanAccepts(t *testing.T) {
+	tests := []struct {
+		name string
+		expr plan.PredicateExpr
+	}{
+		{name: "format is never asserted", expr: plan.FormatPredicate{Format: "uuid"}},
+		{name: "a pattern RE2 cannot compile", expr: plan.PatternPredicate{Regex: "(?=a)"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := plan.CompilationPlan{
+				Representation: plan.AnyRepresentation{},
+				Capability:     plan.PredicateDispatch,
+				Validation: guarded(plan.SetAny, plan.NegationPredicate{Schema: plan.CompilationPlan{
+					Representation: plan.AnyRepresentation{},
+					Validation:     guarded(plan.SetString, tt.expr),
+				}}),
+			}
+			verdict, err := planterp.Interpret(p, "x")
+			require.NoError(t, err)
+			require.True(t, verdict.Accepted,
+				"the sub-plan's acceptance was approximated, so inverting it would reject a valid instance")
+			require.NotEmpty(t, verdict.Approximated)
+		})
+	}
+}
+
+// TestNegationOverAnEnforcedSubPlanInverts keeps the guard above from swallowing the
+// predicate's whole purpose: an acceptance the interpreter really did check still inverts.
+func TestNegationOverAnEnforcedSubPlanInverts(t *testing.T) {
+	sub := plan.CompilationPlan{
+		Representation: plan.AnyRepresentation{},
+		Validation:     guarded(plan.SetString, plan.PatternPredicate{Regex: "^x"}),
+	}
+	p := plan.CompilationPlan{
+		Representation: plan.AnyRepresentation{},
+		Capability:     plan.PredicateDispatch,
+		Validation:     guarded(plan.SetAny, plan.NegationPredicate{Schema: sub}),
+	}
+
+	verdict, err := planterp.Interpret(p, "x")
+	require.NoError(t, err)
+	require.False(t, verdict.Accepted)
+	require.Empty(t, verdict.Approximated)
+
+	verdict, err = planterp.Interpret(p, "y")
+	require.NoError(t, err)
+	require.True(t, verdict.Accepted)
+}

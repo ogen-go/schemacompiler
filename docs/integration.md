@@ -239,10 +239,16 @@ Negation inverts approximation polarity, so this predicate is emitted **only** w
 nested plan reproduces its schema exactly: a nested plan that accepts more than its schema
 would make the negation reject valid instances, which §24 forbids. Where that cannot be
 established the compiler drops the negation instead — the outer plan then accepts a superset,
-reports `SoundOverApproximation`, and carries a `SeverityWarning` naming the constraint it
-could not enforce. A backend therefore never sees a `NegationPredicate` it must distrust, but
-it must not read the absence of one as "the schema had no `not`"; the exactness and the
+reports `DeclaredIncomplete`, and carries a `SeverityWarning` naming the constraint it could
+not enforce. A backend therefore never sees a `NegationPredicate` it must distrust, but it
+must not read the absence of one as "the schema had no `not`"; the exactness and the
 diagnostic are what say so.
+
+The polarity rule binds the backend too, and one rung lower than the plan. A backend that
+cannot enforce some constraint *inside* `Schema` — an unasserted `format`, a regex its engine
+does not accept — reaches an acceptance that is really an over-acceptance, and inverting it
+rejects a valid instance. Such an acceptance must be reported as accepted here as well; only
+an acceptance the backend actually checked may be inverted.
 
 **Representation.** In every case the accepted value is stored via the plan's
 `Representation` (a `UnionRepresentation` for dispatch; the array's own representation for

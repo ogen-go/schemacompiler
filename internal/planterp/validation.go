@@ -285,17 +285,22 @@ func (in *interp) containsCount(schema plan.CompilationPlan, minCount uint64, ma
 }
 
 // negation runs the negated sub-plan against the whole instance and inverts the verdict.
-// The planner only emits a [plan.NegationPredicate] over a sub-plan it proved exact, so
-// inverting it here is exact too (design §11.8).
+// The planner only emits a [plan.NegationPredicate] over a sub-plan it proved exact
+// (design §11.8), so the plan itself is exact — but the interpreter has constraints of its
+// own it cannot enforce, and inverting a verdict reached over one of them turns an
+// over-acceptance into a rejection of a valid instance, which §24 forbids. An acceptance
+// the sub-run had to approximate therefore yields an acceptance here too, which only ever
+// widens.
 func (in *interp) negation(schema plan.CompilationPlan, value any, f frame) (Verdict, error) {
+	before := len(in.approx)
 	v, err := in.plan(schema, value, f.here())
 	if err != nil {
 		return Verdict{}, err
 	}
-	if v.Accepted {
-		return rejected(f, "not", "the negated schema accepts this instance"), nil
+	if !v.Accepted || len(in.approx) > before {
+		return accepted(), nil
 	}
-	return accepted(), nil
+	return rejected(f, "not", "the negated schema accepts this instance"), nil
 }
 
 // shape runs a kind-restricted sub-plan against the whole instance. The enclosing

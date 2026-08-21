@@ -137,21 +137,13 @@ func vacuous(p plan.CompilationPlan, operand ir.Expr) bool {
 // sub-builder (design §21.1, §22).
 func (b *builder) buildConjunction(k plan.KindSet, c components, path string) plan.CompilationPlan {
 	switch {
-	case len(c.refs) == 1 && len(c.shapes) == 0 && len(c.predicates) == 0 &&
-		c.literal == nil && len(c.combinators) == 0:
-		// The common case: a bare `$ref` (or `$dynamicRef`) with no sibling keywords.
-		return b.build(c.refs[0], path)
-
 	case len(c.refs) > 0:
-		// A $ref combined with sibling constraints (e.g. allOf-merged): the planner does
-		// not resolve the ref target here (that requires whole-document context owned by
-		// the caller), so it cannot precisely intersect the two. Widen soundly: keep the
-		// reference's representation, fold in local residual validation only.
-		b.diag(path, plan.SeverityWarning, "$ref combined with sibling constraints is not precisely merged; widened")
+		// A bare `$ref` (or `$dynamicRef`) is the reference's own plan; anything else in
+		// the conjunction becomes a residual obligation over it (issue #78).
 		base := b.build(c.refs[0], path)
-		c.refs = nil
-		rest := b.buildKindRestricted(k, c, path)
-		return mergePlans(base, rest)
+		rest := c
+		rest.refs = c.refs[1:]
+		return b.withResidualConjuncts(k, base, rest, path)
 
 	case len(c.combinators) >= 1:
 		primary := c.combinators[0]

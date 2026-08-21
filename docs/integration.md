@@ -320,6 +320,30 @@ guard, not inside it — so the nested `ObjectRepresentation`'s fields read
 numeric domain — `plan.NumericDomain` still only distinguishes
 `AnyNumber`/`IntegerOnly`/`NonIntegerOnly`.
 
+### 4.2. `ShapePredicate` — the conjuncts a `$ref` cannot absorb
+
+`allOf` is an unordered intersection (design §11.5) and a `$ref` contributes a name rather
+than a structure, so `{"allOf": [{"$ref": "#/$defs/A"}, X]}` cannot merge `X` into the
+referenced type. The plan is `ReferenceRepresentation{A}` plus
+
+```text
+GuardedPredicate{
+    Applicability: plan.SetAny,
+    Expression:    plan.ShapePredicate{Schema: <the plan for X>},
+}
+```
+
+with `X`'s own capability and reference graph rolled up into the enclosing plan (issue
+#78). Members needing nothing but residual predicates — `{"allOf": [{"$ref": …},
+{"maxLength": 3}]}` — are merged flat into the validation plan instead, so the wrapper
+appears only where `X` has a representation or dispatch of its own. Both spellings are
+exact: nothing is dropped, and the guard is `SetAny` because the member applies to every
+kind the reference admits.
+
+A backend that wants one merged Go struct for `allOf` composition must do that merge
+itself from `Schema`; it must not simply generate the referenced type and skip the
+predicate, which is the acceptance bug the wrapper exists to prevent.
+
 ## 5. Resolution → generator behavior
 
 | `plan.ResolutionPlan` | Generator behavior |

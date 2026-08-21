@@ -94,7 +94,24 @@ type patternRule struct {
 	representation plan.Representation
 }
 
-func objectShapeOf(r plan.ObjectRepresentation) (objectShape, error) {
+// objectShapeOf reads the representation's children, having first checked the slots
+// [planwalk.Children] would silently drop. Only Additional documents a nil
+// Representation as meaningful; a nil anywhere else is malformed plan data, and dropping
+// it would narrow the accepted set, which is the one direction design §24 forbids.
+func objectShapeOf(r plan.ObjectRepresentation, f frame) (objectShape, error) {
+	for name, field := range r.Fields {
+		if field.Representation == nil {
+			return objectShape{}, internalf("field %q at %s has no representation",
+				name, instanceLocation(f))
+		}
+	}
+	for i, rule := range r.PatternRules {
+		if rule.Representation == nil {
+			return objectShape{}, internalf("pattern rule %d (%q) at %s has no representation",
+				i, rule.Pattern, instanceLocation(f))
+		}
+	}
+
 	shape := objectShape{fields: map[string]objectField{}}
 	for c := range planwalk.Children(planwalk.RepresentationNode(r)) {
 		switch c.Edge.Kind {
@@ -123,7 +140,7 @@ func objectShapeOf(r plan.ObjectRepresentation) (objectShape, error) {
 // field is not also run through a matching pattern rule: the plan states one storage
 // slot per property, and it is the field.
 func (in *interp) object(r plan.ObjectRepresentation, value any, f frame) (Verdict, error) {
-	shape, err := objectShapeOf(r)
+	shape, err := objectShapeOf(r, f)
 	if err != nil {
 		return Verdict{}, err
 	}
@@ -241,7 +258,8 @@ func (in *interp) array(r plan.ArrayRepresentation, value any, f frame) (Verdict
 		at := f.descend(strconv.Itoa(i))
 		if slot.Representation == nil {
 			if i < len(r.Prefix) {
-				return Verdict{}, internalf("prefix item %d has no representation", i)
+				return Verdict{}, internalf("prefix item %d at %s has no representation",
+					i, instanceLocation(f))
 			}
 			// A nil Rest.Representation means there are no items past the prefix
 			// (plan.ArrayRepresentation's contract).
@@ -259,6 +277,15 @@ func (in *interp) array(r plan.ArrayRepresentation, value any, f frame) (Verdict
 }
 
 func (in *interp) union(r plan.UnionRepresentation, value any, f frame) (Verdict, error) {
+	for i, alt := range r.Alternatives {
+		// planwalk.Children drops a nil alternative, which would turn a malformed union
+		// into one that rejects rather than one that fails loudly (design §24).
+		if alt == nil {
+			return Verdict{}, internalf("union alternative %d at %s has no representation",
+				i, instanceLocation(f))
+		}
+	}
+
 	var last *ValidateError
 	for c := range planwalk.Children(planwalk.RepresentationNode(r)) {
 		if c.Edge.Kind != planwalk.EdgeAlternative {

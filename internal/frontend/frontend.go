@@ -5,9 +5,11 @@
 // Isolating libopenapi here keeps ir/norm/planner hermetic and shields them from the
 // parser's v0.x API churn. See docs/implementation.md (Phase 1).
 //
-// Entry points: [Load] (standalone schema documents, loader.go) and [FromLibOpenAPI]
-// (already-parsed schemas, e.g. from an OpenAPI document, loader.go). Both share the
-// conversion core in convert.go, then resolve.go resolves every `$ref` and scc.go
+// Entry points: [Load] (standalone schema documents, loader.go), [FromLibOpenAPI] /
+// [FromLibOpenAPIProxy] (an already-parsed schema, loader.go and document.go) and
+// [FromLibOpenAPIDocument] (a whole OpenAPI component set sharing one registry,
+// document.go). They share the conversion core in convert.go, then resolve.go
+// resolves every `$ref` and scc.go
 // classifies recursive schemas (design §10, §19); the resulting [Registry] is defined in
 // registry.go.
 package frontend

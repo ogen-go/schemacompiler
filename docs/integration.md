@@ -29,7 +29,7 @@ KindGeneric, KindSum, KindAny, KindStream`.
 | `ArrayRepresentation{Prefix, Rest}` | `KindArray` when `Prefix` is empty; a tuple-as-struct (`KindStruct` with positional fields) when `Prefix` is non-empty, following ogen's existing `prefixItems` tuple lowering | `Rest == nil` (no additional items) has no first-class ogen fixed-length-array kind; treat as a tuple struct with a validated length instead of relying on a fixed-size Go array. |
 | `UnionRepresentation{Alternatives}` | `KindSum` | Paired with a `plan.DispatchPlan` (see §3) to fill `SumSpec`. |
 | `RecursiveRepresentation{Name, Body}` | `KindPointer` wrapping the named type, or `KindStruct` with a named self-reference resolved through ogen's existing "generate the type once, reference it" pass | Corresponds to design §19's guarded recursion; ogen already generates self-referential structs for JSON Schema `$ref` cycles through object/array descent, so this is compatible in spirit, but the compile-time proof of guardedness now comes from schemacompiler (`internal/frontend`'s SCC classification) rather than ogen's own ref-graph walk. |
-| `ReferenceRepresentation{Name}` | `KindAlias` (or a direct reference to the already-generated named type) | Requires the referenced name to have already been lowered; see the "known v1 limitation" in §6 for why whole-document `$ref` assembly isn't wired yet in the root pipeline. |
+| `ReferenceRepresentation{Name}` | `KindAlias` (or a direct reference to the already-generated named type) | Requires the referenced name to have already been lowered; the referenced plan is found in `DocumentResult.Plans` (or `plan.StaticReferenceGraph.Definitions`) under the same `SchemaID`; see "Whole-document compilation". |
 
 
 ### 1.1. `format` → Go type
@@ -240,26 +240,18 @@ is the generator's job — it reads them off `Metadata.Extensions` (per-property
 field's `Metadata.Extensions`) and applies its own semantics, so new vendor keys need no
 change here.
 
-## Known v1 limitation: whole-document `$ref` assembly is not wired in the root pipeline
+## 8. Whole-document compilation
 
-`schemacompiler.Compile` (`schemacompiler.go:52-72`) calls `planner.Build(expr,
-schema.Registry)` for the **root schema only**. `plan.StaticReferenceGraph.Definitions`
-and cross-resource `RecursiveRepresentation` assembly depend on the planner being able
-to look up other schema resources by `plan.SchemaID` (the frontend's resolved node
-pointer) — but `internal/frontend.Registry` currently exposes no public "get Node by
-SchemaID" accessor (it only exposes `SCCs()` for recursion classification, consumed in
-`internal/planner/planner.go:49-59`). In practice this means: a single self-contained
-schema (using only internal `$defs`/`$ref`, as in every `ref/*.json` corpus entry under
-`conformance/testdata/corpus`) compiles and resolves correctly end-to-end, but a
-multi-document OpenAPI component set (where one component's schema `$ref`s a sibling
-top-level component) has no root-pipeline path today for the planner to reach that
-sibling's plan and populate `Definitions`/`RecursiveRepresentation` across resource
-boundaries.
+`schemacompiler.CompileDocument` (`compile_document.go`) compiles an OpenAPI
+`components.schemas` set as one unit: every component is converted into a single
+`internal/frontend` registry under its JSON Pointer (`/components/schemas/<name>`), so
+`$ref`s between siblings resolve and recursion is classified across component
+boundaries. `DocumentResult.Plans` is keyed by that pointer — the same `plan.SchemaID` a
+`ReferenceRepresentation.Name` carries — which gives a generator a stable type-naming key
+and the graph to resolve references against.
 
-This is a **follow-up**, not a Phase 5 blocker: ogen's own use case (feeding one
-`base.Schema` per OpenAPI component into a per-component `Compile`-like call, per this
-doc's design notes on libopenapi joining) works within today's scope, but true
-whole-document generation — resolving `$ref`s across sibling components at the plan
-level rather than one component at a time — needs `frontend.Registry` extended with a
-public schema-by-`SchemaID` lookup, and `schemacompiler.Compile` (or a new multi-schema
-entry point) threading that lookup through to the planner.
+`schemacompiler.CompileSchema` compiles a single already-parsed `*base.SchemaProxy` (no
+re-serialization); references to sibling components stay unresolved and are reported as
+`SeverityError` diagnostics, so prefer `CompileDocument` when the whole set is available.
+`schemacompiler.Compile` (raw bytes) keeps resolving a self-contained document's own
+`$defs`/`$ref` into `plan.StaticReferenceGraph.Definitions`.

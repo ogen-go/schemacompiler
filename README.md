@@ -50,9 +50,19 @@ for _, d := range res.Diagnostics {
 }
 ```
 
-The parser is [libopenapi](https://github.com/pb33f/libopenapi), isolated behind an
-internal frontend adapter, so an OpenAPI 3.1 schema already parsed by ogen can be fed in
-directly without re-parsing.
+An OpenAPI 3.1 document already parsed by [libopenapi](https://github.com/pb33f/libopenapi)
+is compiled without re-parsing:
+
+```go
+doc := schemacompiler.Document{Schemas: model.Model.Components.Schemas}
+res, err := schemacompiler.CompileDocument(ctx, doc, schemacompiler.Options{})
+plan := res.Plans["/components/schemas/Pet"]
+```
+
+`CompileDocument` compiles the whole component set against one registry, so `$ref`s
+between siblings resolve and recursion is classified across components; `CompileSchema`
+does the same for a single `*base.SchemaProxy`. libopenapi is otherwise isolated behind
+the internal frontend adapter.
 
 ## Debugging: `cmd/schemac`
 

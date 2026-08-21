@@ -8,6 +8,7 @@ import (
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
+	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v4"
 )
@@ -25,6 +26,17 @@ func rootComponent(t *testing.T, doc string) *base.Schema {
 func rootComponentProxy(t *testing.T, doc string, transformSiblingRefs bool) *base.SchemaProxy {
 	t.Helper()
 
+	const name = "Node"
+	sp, ok := componentSchemas(t, doc, transformSiblingRefs).Get(name)
+	require.True(t, ok, "component %q not found", name)
+	return sp
+}
+
+// componentSchemas parses doc as an OpenAPI 3.1 document and returns its whole component
+// schema set.
+func componentSchemas(t *testing.T, doc string, transformSiblingRefs bool) *orderedmap.Map[string, *base.SchemaProxy] {
+	t.Helper()
+
 	cfg := datamodel.NewDocumentConfiguration()
 	cfg.TransformSiblingRefs = transformSiblingRefs
 	cfg.MergeReferencedProperties = false
@@ -36,10 +48,7 @@ func rootComponentProxy(t *testing.T, doc string, transformSiblingRefs bool) *ba
 	model, errs := d.BuildV3Model()
 	require.NoError(t, errs)
 
-	const name = "Node"
-	sp, ok := model.Model.Components.Schemas.Get(name)
-	require.True(t, ok, "component %q not found", name)
-	return sp
+	return model.Model.Components.Schemas
 }
 
 // property returns the named property schema of n.
@@ -94,10 +103,10 @@ func TestFromLibOpenAPIRefIsNotInlined(t *testing.T) {
 	require.Zero(t, pet.Types)
 }
 
-// Component targets live outside the schema handed in, so they resolve to nothing today
-// and are reported as diagnostics rather than aborting. Seeding the registry with the
-// document's component set is the follow-up that makes them resolve.
-func TestFromLibOpenAPIComponentRefsUnresolved(t *testing.T) {
+// A schema converted on its own cannot see its sibling components, so their targets are
+// reported as diagnostics rather than aborting. [FromLibOpenAPIDocument] is the entry
+// point that resolves them.
+func TestFromLibOpenAPIStandaloneComponentRefsUnresolved(t *testing.T) {
 	s, err := FromLibOpenAPI(context.Background(), rootComponent(t, openAPIRefDoc), "")
 	require.NoError(t, err)
 

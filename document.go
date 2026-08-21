@@ -47,12 +47,12 @@ func buildDefinitions(reg *frontend.Registry, budget int) definitions {
 // unresolvedDiagnostics reports every dangling `$ref` the loader could not resolve as a
 // SeverityError diagnostic (design §25). Loading does not fail on these, so the rest of
 // the document still yields a plan.
-func unresolvedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
-	if len(s.Unresolved) == 0 {
+func unresolvedDiagnostics(refs []frontend.UnresolvedRef) []plan.Diagnostic {
+	if len(refs) == 0 {
 		return nil
 	}
-	diags := make([]plan.Diagnostic, len(s.Unresolved))
-	for i, u := range s.Unresolved {
+	diags := make([]plan.Diagnostic, len(refs))
+	for i, u := range refs {
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
 			Position: u.Position,
@@ -67,12 +67,12 @@ func unresolvedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
 // (required self-recursion) as a SeverityWarning: the schema is well-formed and its Go type
 // is representable, but no value inhabits it, so a generator should not emit a dead type
 // (design §25, issue #8).
-func uninhabitedDiagnostics(s *frontend.Schema) []plan.Diagnostic {
-	if len(s.Uninhabited) == 0 {
+func uninhabitedDiagnostics(nodes []frontend.UninhabitedNode) []plan.Diagnostic {
+	if len(nodes) == 0 {
 		return nil
 	}
-	diags := make([]plan.Diagnostic, len(s.Uninhabited))
-	for i, u := range s.Uninhabited {
+	diags := make([]plan.Diagnostic, len(nodes))
+	for i, u := range nodes {
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
 			Position: u.Position,

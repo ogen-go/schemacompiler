@@ -37,9 +37,17 @@ type Exactness uint8
 const (
 	// ExactPureRepresentation means the Go type alone is exact; no validator needed.
 	ExactPureRepresentation Exactness = iota
-	// ExactWithValidation means the Go type plus residual validator is exact.
+	// ExactWithValidation means the Go type plus residual validator is exact. The Go type
+	// alone may admit extra values — `any` for a bare `{"minLength":3}` no less than
+	// `string` for `{"type":"string","minLength":3}` — as long as the residual validator
+	// rejects them: exactness is a property of the plan's accepted set, not of the width
+	// of its representation (design §24's biconditional, issue #95).
 	ExactWithValidation
-	// SoundOverApproximation means the Go type admits extra values that the validator rejects.
+	// SoundOverApproximation means the plan's accepted set is a strict superset of the
+	// schema's even after the residual validator runs, with the plan's own machinery
+	// bounding the excess: today an asserted discriminator ([TagAsserted]), which trusts a
+	// declared tag rather than proving the branches disjoint while every branch still
+	// validates what it selects.
 	SoundOverApproximation
 	// DeclaredIncomplete means the plan admits extra values and nothing in it closes the
 	// gap: a constraint was dropped because enforcing it would not have been sound, and no

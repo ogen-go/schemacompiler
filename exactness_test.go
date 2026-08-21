@@ -104,7 +104,7 @@ func TestCompileDeclaredIncompleteIsGeneratable(t *testing.T) {
 			name:       "negation over an exactly modeled operand keeps its residual check",
 			schema:     `{"not":{"type":"integer"}}`,
 			capability: plan.PredicateDispatch,
-			exactness:  plan.SoundOverApproximation,
+			exactness:  plan.ExactWithValidation,
 		},
 		{
 			name:       "negation over an object operand is dropped and nothing closes the gap",
@@ -124,6 +124,72 @@ func TestCompileDeclaredIncompleteIsGeneratable(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tt.capability, res.Capability)
 			require.Equal(t, tt.exactness, res.Exactness)
+			requireExactnessAgrees(t, res.Capability, res.Exactness)
+		})
+	}
+}
+
+// TestCompileExactnessTracksTheAcceptedSet pins issue #95: [plan.Exactness] describes the
+// accepted set of the whole plan, so a representation wider than the schema costs nothing
+// as long as the residual validator closes the gap. A rung is spent only when the plan
+// still accepts more after validation runs.
+func TestCompileExactnessTracksTheAcceptedSet(t *testing.T) {
+	const assertedDiscriminator = `{
+		"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Dog"}],
+		"discriminator": {"propertyName": "kind", "mapping": {"cat": "#/$defs/Cat", "dog": "#/$defs/Dog"}},
+		"$defs": {
+			"Cat": {"type": "object", "required": ["kind"], "properties": {"kind": {"type": "string"}}},
+			"Dog": {"type": "object", "required": ["kind"], "properties": {"kind": {"type": "string"}}}
+		}
+	}`
+
+	for _, tt := range []struct {
+		name      string
+		schema    string
+		exactness plan.Exactness
+		why       string
+	}{
+		{
+			name:      "bare minLength widens the representation to any",
+			schema:    `{"minLength":3}`,
+			exactness: plan.ExactWithValidation,
+			why:       "the kind-guarded MinLength accepts every non-string and rejects short strings",
+		},
+		{
+			name:      "bare properties/additionalProperties widens the representation to any",
+			schema:    `{"properties":{"a":{"type":"string"}},"additionalProperties":false}`,
+			exactness: plan.ExactWithValidation,
+			why:       "the kind-guarded Shape carries the whole object plan and is vacuous elsewhere",
+		},
+		{
+			name:      "match-count dispatch is a cost, not an approximation",
+			schema:    `{"contains":{"const":1},"minContains":2}`,
+			exactness: plan.ExactWithValidation,
+			why:       "PredicateCountDispatch's lowering contract reproduces the accepted set exactly",
+		},
+		{
+			name:      "a negation over an exactly modeled operand is exact",
+			schema:    `{"not":{"type":"integer"}}`,
+			exactness: plan.ExactWithValidation,
+			why:       "negating an exact plan yields an exact plan (issue #82)",
+		},
+		{
+			name:      "an asserted discriminator still over-accepts",
+			schema:    assertedDiscriminator,
+			exactness: plan.SoundOverApproximation,
+			why:       "nothing proved the branches disjoint, so a mis-tagged instance is accepted",
+		},
+		{
+			name:      "a dropped negation is closed by nothing",
+			schema:    `{"not":{"$ref":"#/$defs/S"},"$defs":{"S":{"type":"string"}}}`,
+			exactness: plan.DeclaredIncomplete,
+			why:       "the negation was dropped and no residual check replaces it (issue #84)",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := schemacompiler.Compile(context.Background(), []byte(tt.schema), schemacompiler.Options{})
+			require.NoError(t, err)
+			require.Equal(t, tt.exactness, res.Exactness, tt.why)
 			requireExactnessAgrees(t, res.Capability, res.Exactness)
 		})
 	}

@@ -170,7 +170,7 @@ func TestNullablePlan_DiscriminatorTiers(t *testing.T) {
 			name:      "Unusable",
 			defs:      unusable,
 			dispatch:  "PredicateCountDispatch min=1 max=1",
-			exactness: plan.SoundOverApproximation,
+			exactness: plan.ExactWithValidation,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

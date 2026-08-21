@@ -30,7 +30,9 @@ const metaRoot = "testdata/meta"
 var metaExpect = map[string]plan.CapabilityLevel{
 	"oas31.json":     plan.DynamicSchemaResolution,   // uses $dynamicRef/$dynamicAnchor
 	"overlay11.json": plan.EvaluationStateValidation, // uses unevaluatedProperties
-	"arazzo11.json":  plan.EvaluationStateValidation, // uses unevaluatedProperties
+	// unevaluatedProperties, plus a $ref to the 2020-12 meta-schema that no Loader is
+	// configured to fetch here: an unfetchable target is not generatable (design §24).
+	"arazzo11.json": plan.Unsupported,
 }
 
 func TestMetaSchemas(t *testing.T) {

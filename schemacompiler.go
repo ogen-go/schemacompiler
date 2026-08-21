@@ -80,6 +80,7 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	// Whole-document assembly: compile every $ref target into a named definition and
 	// attach the resulting reference graph to the root plan (design §10.1).
 	defs := buildDefinitions(schema.Registry, budget)
+	defs.diags = append(defs.diags, rollUpCapabilities(defs.plans)...)
 	if len(defs.plans) > 0 {
 		if schema.Registry.HasDynamicRefs() {
 			root.Plan.Resolution = plan.DynamicReferenceGraph{StaticDefinitions: defs.plans}

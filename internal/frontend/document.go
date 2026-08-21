@@ -31,12 +31,18 @@ type Document struct {
 }
 
 // FromLibOpenAPIDocument converts an OpenAPI document's component schemas into one shared
-// registry, registering each under `/components/schemas/<name>`.
-func FromLibOpenAPIDocument(ctx context.Context, schemas *orderedmap.Map[string, *base.SchemaProxy], baseURI string) (*Document, error) {
+// registry, registering each under `/components/schemas/<name>`, and resolves external
+// references through loader (nil disables external resolution).
+func FromLibOpenAPIDocument(ctx context.Context, schemas *orderedmap.Map[string, *base.SchemaProxy], baseURI string, loader Loader) (*Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	st := newConvState(nil, nil)
+	normalized, err := normalizeBaseURI(baseURI)
+	if err != nil {
+		return nil, err
+	}
+
+	st := newConvState(nil, loader)
 	out := &Document{Schemas: make(map[string]*Node, orderedmap.Len(schemas))}
 	if schemas != nil {
 		for name, sp := range schemas.FromOldest() {
@@ -44,7 +50,7 @@ func FromLibOpenAPIDocument(ctx context.Context, schemas *orderedmap.Map[string,
 				continue
 			}
 			pointer := ComponentPointer(name)
-			sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}, docPointer: pointer}
+			sc := scope{frames: []frame{{baseURI: normalized, root: ""}}, docPointer: pointer, source: baseURI}
 			n, err := st.convertProxy(ctx, sp, sc)
 			if err != nil {
 				return nil, errors.Wrapf(err, "convert component %q", name)
@@ -64,22 +70,28 @@ func FromLibOpenAPIDocument(ctx context.Context, schemas *orderedmap.Map[string,
 }
 
 // FromLibOpenAPIProxy adapts an already-parsed libopenapi schema position, including a
-// boolean or `$ref` one, into the internal AST.
-func FromLibOpenAPIProxy(ctx context.Context, sp *base.SchemaProxy, baseURI string) (*Schema, error) {
+// boolean or `$ref` one, into the internal AST, resolving external references through
+// loader (nil disables external resolution).
+func FromLibOpenAPIProxy(ctx context.Context, sp *base.SchemaProxy, baseURI string, loader Loader) (*Schema, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if sp == nil {
 		return nil, errors.New("nil schema")
 	}
-	st := newConvState(nil, nil)
-	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}}
+	normalized, err := normalizeBaseURI(baseURI)
+	if err != nil {
+		return nil, err
+	}
+
+	st := newConvState(nil, loader)
+	sc := scope{frames: []frame{{baseURI: normalized, root: ""}}, source: baseURI}
 	root, err := st.convertProxy(ctx, sp, sc)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert root schema")
 	}
-	if _, ok := st.reg.resources[baseURI]; !ok {
-		st.reg.resources[baseURI] = root
+	if _, ok := st.reg.resources[normalized]; !ok {
+		st.reg.resources[normalized] = root
 	}
 
 	st.analyze(ctx)

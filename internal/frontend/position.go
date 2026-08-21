@@ -7,11 +7,10 @@ import (
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
-// file is the retrieval URI of the document being converted: the outermost frame's base
-// URI, which a nested `$id` re-bases for reference resolution but does not move to
-// another document.
+// file is the retrieval URI of the document being converted, as the caller supplied it: a
+// nested `$id` re-bases reference resolution but does not move to another document.
 func (sc scope) file() string {
-	return sc.frames[0].baseURI
+	return sc.source
 }
 
 // nodePosition is the source position of yn within the document identified by file. A nil

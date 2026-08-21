@@ -28,9 +28,13 @@ Parsing uses `github.com/pb33f/libopenapi` (`datamodel/high/base.Schema`), chose
 3.1 component schema already *is* a `base.Schema`, so ogen feeds schemacompiler with no
 re-parse.
 
-**The `frontend` adapter is the only package allowed to import libopenapi.** It converts
-`base.Schema` → our presence-normalized internal AST. This isolates libopenapi's v0.x
-churn and keeps `ir` / `norm` / `plan` hermetically testable.
+**No analysis package may import libopenapi: only the `frontend` adapter, plus the join
+signatures in the root package.** frontend converts `base.Schema` → our presence-normalized
+internal AST; the root package's `CompileSchema(ctx, *base.SchemaProxy, Options)` and
+`CompileDocument(ctx, Document, Options)` name libopenapi types so ogen can hand over
+already-parsed schemas without re-serializing them (issue #15) — deliberately, at the cost
+of a libopenapi v0.x bump becoming a joint upgrade with ogen. `ir` / `norm` / `planner` /
+`plan` stay hermetic, and `frontend` stays `internal/`.
 
 Known libopenapi gaps we cover ourselves:
 - `$dynamicRef` / `$dynamicAnchor` are stored but **not resolved** — frontend implements
@@ -79,7 +83,8 @@ draw this line explicitly and soundly, never to emit a wrong narrow type (invari
 ## Package layout
 
 ```
-schemacompiler            root: Compile(ctx, ...) (*Result, error), Options, Result   [public]
+schemacompiler            root: Compile / CompileSchema (*Result, error),            [public]
+                          CompileDocument (*DocumentResult, error), Options
   plan/                   output IR consumed by ogen: CompilationPlan, Representation, [public]
                           ValidationPlan, DispatchPlan, ResolutionPlan, Capability,
                           Exactness, Diagnostic
@@ -115,7 +120,7 @@ Only `plan` and the root package are importable by ogen. Everything analytical i
 | 3 | `norm` | rewrite/subsumption/disjointness/constraint-push/discriminator loop with expansion budget (§15–18) |
 | 4 | `planner` + `plan` | Representation/Validation/Dispatch/Resolution inference + recursive classify → Capability + Exactness + Diagnostics (§7–10, §22, §24, §25) |
 | 5 | `conformance` | JSON-Schema-Test-Suite 2020-12 harness (no silent caps — log skips), e2e goldens, `plan → ogen gen/ir` integration notes |
-| 6 | root `document.go` | whole-document `$ref` assembly: every `$ref` target compiled into `plan.StaticReferenceGraph.Definitions`, keyed by SchemaID; `Registry.RefTargets()` exposes the targets |
+| 6 | root `document.go`, `compile_document.go` | whole-document `$ref` assembly: every `$ref` target compiled into `plan.StaticReferenceGraph.Definitions` on the root plan (`Compile`/`CompileSchema`) or into `DocumentResult.Plans` with `FullyResolved` per plan (`CompileDocument`), keyed by SchemaID; `Registry.RefTargets()` exposes the targets, and every plan's capability rolls up over what it references (§22) |
 
 Each phase must land with tests green and `golangci-lint run` clean before the next
 starts. Phases 2–4 depend only on the internal AST from Phase 1, so their logic can be

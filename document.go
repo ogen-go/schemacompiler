@@ -31,11 +31,20 @@ type definitions struct {
 // tie recursive knots (design §10.1, §19). Each target is compiled once; references
 // inside a target lower to ReferenceRepresentation leaves rather than recursing here.
 func buildDefinitions(reg *frontend.Registry, budget int) definitions {
+	return buildDefinitionsExcept(reg, budget, nil)
+}
+
+// buildDefinitionsExcept is [buildDefinitions] skipping targets already compiled by the
+// caller, so a component that is both a document entry and a $ref target is planned once.
+func buildDefinitionsExcept(reg *frontend.Registry, budget int, have map[plan.SchemaID]plan.CompilationPlan) definitions {
 	out := definitions{plans: make(map[plan.SchemaID]plan.CompilationPlan)}
 	if reg == nil {
 		return out
 	}
 	for id, node := range reg.RefTargets() {
+		if _, ok := have[plan.SchemaID(id)]; ok {
+			continue
+		}
 		res := buildPlan(node, reg, budget)
 		out.plans[plan.SchemaID(id)] = res.Plan
 		out.diags = append(out.diags, res.Diagnostics...)

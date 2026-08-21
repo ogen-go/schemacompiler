@@ -10,7 +10,7 @@ import (
 // Converting the whole component set into one registry resolves `$ref`s between siblings
 // and classifies recursion across them.
 func TestFromLibOpenAPIDocumentComponentRefsResolve(t *testing.T) {
-	doc, err := FromLibOpenAPIDocument(context.Background(), componentSchemas(t, openAPIRefDoc, false), "")
+	doc, err := FromLibOpenAPIDocument(context.Background(), componentSchemas(t, openAPIRefDoc, false), "", nil)
 	require.NoError(t, err)
 	require.Empty(t, doc.Unresolved)
 
@@ -30,7 +30,7 @@ func TestFromLibOpenAPIDocumentComponentRefsResolve(t *testing.T) {
 }
 
 func TestFromLibOpenAPIDocumentEmpty(t *testing.T) {
-	doc, err := FromLibOpenAPIDocument(context.Background(), nil, "")
+	doc, err := FromLibOpenAPIDocument(context.Background(), nil, "", nil)
 	require.NoError(t, err)
 	require.Empty(t, doc.Schemas)
 	require.NotNil(t, doc.Registry)
@@ -45,7 +45,7 @@ components:
   schemas:
     Node: true
 `
-	s, err := FromLibOpenAPIProxy(context.Background(), rootComponentProxy(t, boolDoc, false), "")
+	s, err := FromLibOpenAPIProxy(context.Background(), rootComponentProxy(t, boolDoc, false), "", nil)
 	require.NoError(t, err)
 	require.NotNil(t, s.Root.Always)
 	require.True(t, *s.Root.Always)

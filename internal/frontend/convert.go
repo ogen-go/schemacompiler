@@ -24,6 +24,9 @@ type frame struct {
 type scope struct {
 	frames     []frame
 	docPointer string
+	// source is the retrieval URI as the caller supplied it, reported in diagnostic
+	// positions; frames[0].baseURI holds its normalized form, which keys resolution.
+	source string
 }
 
 func (sc scope) baseURI() string {
@@ -31,7 +34,7 @@ func (sc scope) baseURI() string {
 }
 
 func (sc scope) child(pointerSegment string) scope {
-	return scope{frames: sc.frames, docPointer: jsonPointerAppend(sc.docPointer, pointerSegment)}
+	return scope{frames: sc.frames, docPointer: jsonPointerAppend(sc.docPointer, pointerSegment), source: sc.source}
 }
 
 func (sc scope) childIndex(i int) scope {
@@ -87,15 +90,20 @@ func convertRoot(ctx context.Context, hs *base.Schema, refMap map[*yaml.Node]str
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	normalized, err := normalizeBaseURI(baseURI)
+	if err != nil {
+		return nil, err
+	}
+
 	st := newConvState(refMap, loader)
-	sc := scope{frames: []frame{{baseURI: baseURI, root: ""}}}
+	sc := scope{frames: []frame{{baseURI: normalized, root: ""}}, source: baseURI}
 
 	root, err := st.convertSchema(ctx, hs, sc)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert root schema")
 	}
-	if _, ok := st.reg.resources[baseURI]; !ok {
-		st.reg.resources[baseURI] = root
+	if _, ok := st.reg.resources[normalized]; !ok {
+		st.reg.resources[normalized] = root
 	}
 
 	st.analyze(ctx)
@@ -266,7 +274,7 @@ func (st *convState) convertSchema(ctx context.Context, hs *base.Schema, sc scop
 		childFrames = append(append([]frame(nil), sc.frames...), frame{baseURI: abs, root: sc.docPointer})
 		st.reg.resources[abs] = n
 	}
-	childScope := scope{frames: childFrames, docPointer: sc.docPointer}
+	childScope := scope{frames: childFrames, docPointer: sc.docPointer, source: sc.source}
 
 	n.Anchor = hs.Anchor
 	n.DynamicAnchor = hs.DynamicAnchor

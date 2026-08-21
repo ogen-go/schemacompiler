@@ -14,7 +14,7 @@ type MaxLengthDetail struct{ Value uint64 }
 // PatternDetail is `pattern` (string-guarded); Regex is the raw ECMA-262 source.
 type PatternDetail struct{ Regex string }
 
-// FormatDetail is `format` (string-guarded); stubbed here, full semantics in phase 4.
+// FormatDetail is `format`, guarded on the kinds it can apply to (string, number).
 type FormatDetail struct{ Format string }
 
 // MinimumDetail is `minimum` (number-guarded).

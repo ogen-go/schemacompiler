@@ -122,9 +122,13 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 	var val plan.ValidationPlan
 	capLevel := plan.DirectGoType
 	var resParts []plan.ResolutionPlan
+	var formats []string
 	for _, p := range c.predicates {
 		if p.Guard&guard == 0 {
 			continue // vacuous for this kind: the guard never fires, safe to drop.
+		}
+		if fd, ok := p.Detail.(ir.FormatDetail); ok {
+			formats = append(formats, fd.Format)
 		}
 		m := b.mapPredicate(p, path)
 		if m.Expr != nil {
@@ -136,7 +140,11 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 		}
 	}
 
-	rep := plan.Representation(plan.PrimitiveRepresentation{Kind: kind, Numeric: c.numeric})
+	rep := plan.Representation(plan.PrimitiveRepresentation{
+		Kind:    kind,
+		Numeric: c.numeric,
+		Format:  b.pickFormat(formats, path),
+	})
 	var disp plan.DispatchPlan = plan.NoDispatch{}
 	if c.literal != nil && literalKind(c.literal.Value) == kind {
 		disp = plan.LiteralDispatch{Cases: []plan.LiteralCase{{

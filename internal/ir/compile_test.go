@@ -181,7 +181,7 @@ func TestCompile_StringFamily(t *testing.T) {
 		Predicate{Guard: plan.SetString, Detail: MinLengthDetail{Value: 1}},
 		Predicate{Guard: plan.SetString, Detail: MaxLengthDetail{Value: 2}},
 		Predicate{Guard: plan.SetString, Detail: PatternDetail{Regex: "^a"}},
-		Predicate{Guard: plan.SetString, Detail: FormatDetail{Format: "date-time"}},
+		Predicate{Guard: plan.SetString | plan.SetNumber, Detail: FormatDetail{Format: "date-time"}},
 	}, got.Operands)
 }
 

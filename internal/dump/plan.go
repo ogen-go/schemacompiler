@@ -64,11 +64,14 @@ func writeRepresentation(t *tw, r plan.Representation) {
 	case plan.NeverRepresentation:
 		t.line("Never")
 	case plan.PrimitiveRepresentation:
+		line := "Primitive " + jsonKindString(r.Kind)
 		if dom := numericDomainString(r.Numeric); dom != "" {
-			t.line("Primitive %s numeric=%s", jsonKindString(r.Kind), dom)
-		} else {
-			t.line("Primitive %s", jsonKindString(r.Kind))
+			line += " numeric=" + dom
 		}
+		if r.Format.Name != "" {
+			line += fmt.Sprintf(" format=%q/%s", r.Format.Name, formatClassString(r.Format.Class))
+		}
+		t.line("%s", line)
 	case plan.ObjectRepresentation:
 		t.line("Object")
 		t.enter(func() {

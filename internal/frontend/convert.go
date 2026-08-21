@@ -581,9 +581,6 @@ func (st *convState) addEdge(from, to *Node, descent bool) {
 // $dynamicAnchor within the nearest enclosing resource.
 func (st *convState) register(n *Node, sc scope, nearestBaseURI string) {
 	st.reg.nodes = append(st.reg.nodes, n)
-	if _, ok := st.reg.positions[n.Pointer]; !ok {
-		st.reg.positions[n.Pointer] = n.Position
-	}
 	for _, f := range sc.frames {
 		rel := sc.docPointer[len(f.root):]
 		st.reg.pointers[f.baseURI+"\x00"+rel] = n

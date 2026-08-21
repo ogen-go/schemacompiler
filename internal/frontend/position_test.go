@@ -33,10 +33,6 @@ additionalProperties: false
 
 	require.Len(t, s.Unresolved, 1)
 	require.Equal(t, byName["other"].Position, s.Unresolved[0].Position)
-
-	pos, ok := s.Registry.PositionOf("/properties/name")
-	require.True(t, ok)
-	require.Equal(t, byName["name"].Position, pos)
 }
 
 func TestPositionsExternalDocument(t *testing.T) {

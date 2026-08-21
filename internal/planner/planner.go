@@ -25,8 +25,13 @@ type Result struct {
 }
 
 // Origin locates the schema a Build call analyzes within its source document: the JSON
-// Pointer diagnostics are reported relative to, and the position to fall back on when a
-// diagnostic names a location the registry cannot place.
+// Pointer diagnostics are reported relative to, and the position they carry.
+//
+// Position is the finest location a diagnostic can claim soundly (issues #36, #37): the
+// pointer a diagnostic carries extends Pointer with a planner breadcrumb, which is
+// neither escaped like a JSON Pointer nor unique once normalization has merged branches,
+// so resolving it against real source pointers would sometimes name an unrelated schema
+// — in another document, even. A coarser position beats a wrong one.
 type Origin struct {
 	Pointer  string
 	Position plan.Position
@@ -88,26 +93,14 @@ func newBuilder(reg *frontend.Registry) *builder {
 	return b
 }
 
-// diag records a diagnostic (design §25). path is relative to the origin schema.
+// diag records a diagnostic (issue #21). path is relative to the origin schema.
 func (b *builder) diag(path string, sev plan.Severity, msg string) {
-	pointer := b.origin.Pointer + path
 	b.diags = append(b.diags, plan.Diagnostic{
-		Pointer:  pointer,
-		Position: b.positionOf(pointer),
+		Pointer:  b.origin.Pointer + path,
+		Position: b.origin.Position,
 		Severity: sev,
 		Message:  msg,
 	})
-}
-
-// positionOf locates pointer in the source, falling back to the origin schema's position
-// when the pointer names a synthesized location (an ir.Expr keeps no pointer of its own).
-func (b *builder) positionOf(pointer string) plan.Position {
-	if b.reg != nil {
-		if pos, ok := b.reg.PositionOf(pointer); ok {
-			return pos
-		}
-	}
-	return b.origin.Position
 }
 
 // build is the main recursive entry point (design §21): it dispatches on the concrete

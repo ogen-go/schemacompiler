@@ -154,7 +154,9 @@ properties:
 
 	dyn, ok := byPointer["/properties/dyn"]
 	require.True(t, ok, "expected a diagnostic for the $dynamicRef: %+v", res.Diagnostics)
-	require.Equal(t, plan.Position{File: "schema.yml", Line: 6, Column: 5}, dyn.Position)
+	// Planner diagnostics carry the position of the schema being planned — here the
+	// document root — rather than a position guessed from their breadcrumb (issue #37).
+	require.Equal(t, plan.Position{File: "schema.yml", Line: 1, Column: 1}, dyn.Position)
 }
 
 func TestCompileDefinitionDiagnosticPointers(t *testing.T) {
@@ -175,8 +177,98 @@ $defs:
 	for _, d := range res.Diagnostics {
 		if d.Pointer == "/$defs/A/properties/dyn" {
 			found = true
-			require.Equal(t, plan.Position{File: baseURI, Line: 7, Column: 9}, d.Position)
+			require.Equal(t, plan.Position{File: baseURI, Line: 4, Column: 5}, d.Position)
 		}
 	}
 	require.True(t, found, "a definition's diagnostic should carry a document-absolute pointer: %+v", res.Diagnostics)
+}
+
+func TestCompileDiagnosticPositionsAcrossDocuments(t *testing.T) {
+	root := []byte(`{
+  "$defs": {
+    "Name": {"type": "string"}
+  },
+  "type": "object",
+  "properties": {"n": {"$ref": "other.json#/$defs/Name"}}
+}`)
+	other := []byte(`{
+  "$defs": {
+    "Name": {
+      "type": "object",
+      "unevaluatedProperties": false
+    }
+  }
+}`)
+	loader := func(context.Context, *url.URL) ([]byte, error) { return other, nil }
+
+	res, err := schemacompiler.Compile(context.Background(), root, schemacompiler.Options{
+		BaseURI: "https://ex.com/root.json",
+		Loader:  loader,
+	})
+	require.NoError(t, err)
+
+	var found bool
+	for _, d := range res.Diagnostics {
+		if !strings.Contains(d.Message, "unevaluatedProperties") {
+			continue
+		}
+		found = true
+		require.Equal(t, "/$defs/Name", d.Pointer)
+		require.Equal(t,
+			plan.Position{File: "https://ex.com/other.json", Line: 3, Column: 13},
+			d.Position,
+			"the diagnostic must name the document that actually declares the schema")
+	}
+	require.True(t, found, "expected an unevaluatedProperties diagnostic: %+v", res.Diagnostics)
+}
+
+func TestCompileDiagnosticPointerEscaping(t *testing.T) {
+	doc := []byte(`{
+  "type": "object",
+  "properties": {
+    "a/b": {"type": "object", "unevaluatedProperties": false},
+    "a~b": {"$dynamicRef": "#meta"}
+  }
+}`)
+	res, err := schemacompiler.Compile(context.Background(), doc,
+		schemacompiler.Options{BaseURI: "schema.json"})
+	require.NoError(t, err)
+
+	pointers := make(map[string]plan.Position, len(res.Diagnostics))
+	for _, d := range res.Diagnostics {
+		pointers[d.Pointer] = d.Position
+	}
+	rootPos := plan.Position{File: "schema.json", Line: 1, Column: 1}
+	require.Contains(t, pointers, "/properties/a~1b")
+	require.Contains(t, pointers, "/properties/a~0b")
+	require.Equal(t, rootPos, pointers["/properties/a~1b"])
+	require.Equal(t, rootPos, pointers["/properties/a~0b"])
+}
+
+func TestCompileDiagnosticPositionMergedBranch(t *testing.T) {
+	doc := []byte(`{
+  "type": "object",
+  "properties": {
+    "x": {"type": "object"}
+  },
+  "allOf": [
+    {"properties": {"x": {"type": "object", "unevaluatedProperties": false}}}
+  ]
+}`)
+	res, err := schemacompiler.Compile(context.Background(), doc,
+		schemacompiler.Options{BaseURI: "schema.json"})
+	require.NoError(t, err)
+
+	var found bool
+	for _, d := range res.Diagnostics {
+		if !strings.Contains(d.Message, "unevaluatedProperties") {
+			continue
+		}
+		found = true
+		// The finding belongs to the allOf branch, not to the sibling "/properties/x"
+		// the breadcrumb collides with: report the planned schema, never that line.
+		require.Equal(t, "/properties/x", d.Pointer)
+		require.Equal(t, plan.Position{File: "schema.json", Line: 1, Column: 1}, d.Position)
+	}
+	require.True(t, found, "expected an unevaluatedProperties diagnostic: %+v", res.Diagnostics)
 }

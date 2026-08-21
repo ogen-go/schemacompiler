@@ -352,6 +352,27 @@ func negatedRequiredSingle(e ir.Expr) (string, bool) {
 	return rd.Properties[0], true
 }
 
+// withoutNegations drops the `Not` operands of e, descending through nested [ir.All].
+// Callers must have proven that something else in the plan already enforces every
+// negation removed.
+func withoutNegations(e ir.Expr) ir.Expr {
+	all, ok := e.(ir.All)
+	if !ok {
+		if _, isNot := e.(ir.Not); isNot {
+			return ir.Any{}
+		}
+		return e
+	}
+	kept := make([]ir.Expr, 0, len(all.Operands))
+	for _, o := range all.Operands {
+		if _, isNot := o.(ir.Not); isNot {
+			continue
+		}
+		kept = append(kept, withoutNegations(o))
+	}
+	return ir.All{Operands: kept}
+}
+
 // requiredSingleHeld reports whether e's flattened predicates require name's presence.
 func requiredSingleHeld(e ir.Expr, name string) bool {
 	c := flattenAll([]ir.Expr{e})
@@ -380,7 +401,10 @@ func detectPresenceDispatch(branchExprs []ir.Expr) (name string, absent, present
 			continue
 		}
 		if requiredSingleHeld(branchExprs[presentIdx], n) {
-			return n, branchExprs[absentIdx], branchExprs[presentIdx], true
+			// The negation is exactly what [plan.PresenceDispatch] encodes, so the
+			// absent branch must not repeat it as a residual predicate: that would cost
+			// the union its static tier for a check the dispatch already makes.
+			return n, withoutNegations(branchExprs[absentIdx]), branchExprs[presentIdx], true
 		}
 	}
 	return "", nil, nil, false

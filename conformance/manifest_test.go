@@ -46,12 +46,8 @@ var manifest = map[string]caseExpectation{
 	// A string format against a number type: the guard never fires, so nothing survives
 	// onto the representation or into the validator.
 	"direct/format_inapplicable_kind.json": exact(plan.DirectGoType, plan.ExactPureRepresentation),
-	// `not` is representable structurally but the v1 validator does not enforce the
-	// residual negation (design's v1 scope); it still counts as DirectGoType and
-	// carries an informational diagnostic, not a capability downgrade.
-	"direct/not_keyword.json": withDiag(exact(plan.DirectGoType, plan.ExactPureRepresentation)),
-	"array/tuple.json":        exact(plan.DirectGoType, plan.ExactPureRepresentation),
-	"array/tuple_items.json":  exact(plan.DirectGoType, plan.ExactPureRepresentation),
+	"array/tuple.json":                     exact(plan.DirectGoType, plan.ExactPureRepresentation),
+	"array/tuple_items.json":               exact(plan.DirectGoType, plan.ExactPureRepresentation),
 
 	// --- GoTypeWithValidation: static representation, residual predicate(s) remain. ---
 	"validation/string_minlength.json":   exact(plan.GoTypeWithValidation, plan.ExactWithValidation),
@@ -104,6 +100,10 @@ var manifest = map[string]caseExpectation{
 	"dispatch/anyof_overlapping.json": withDiag(caseExpectation{Capability: plan.PredicateDispatch}),
 	"array/contains.json":             withDiag(caseExpectation{Capability: plan.PredicateDispatch}),
 	"conditional/if_then_else.json":   withDiag(caseExpectation{Capability: plan.PredicateDispatch}),
+	// A negation that survives normalization has no representation and no v1 validator
+	// predicate below PredicateDispatch: it is carried as a plan.NegationPredicate over a
+	// whole sub-schema, which a backend either runs or refuses (design §11.8, §24).
+	"direct/not_keyword.json": withDiag(caseExpectation{Capability: plan.PredicateDispatch}),
 
 	// --- EvaluationStateValidation: v1-Unsupported, no evaluated-annotation engine. ---
 	"unsupported/unevaluated_properties.json": withDiag(exact(plan.EvaluationStateValidation, plan.UnsupportedConversion)),

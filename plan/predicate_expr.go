@@ -62,6 +62,17 @@ type ContainsCountPredicate struct {
 	Max    *uint64
 }
 
+// NegationPredicate is a negation that survived normalization (design §11.8): the
+// instance is valid only if it does NOT satisfy Schema.
+//
+// Lowering contract. A backend runs Schema (a full [CompilationPlan]) against the whole
+// instance and inverts the outcome. Like [ContainsCountPredicate] this forces
+// CapabilityLevel PredicateDispatch: a backend either emits the sub-schema check or MUST
+// refuse and surface the diagnostic (docs/integration.md §4). Nothing about the stored
+// shape changes; the surrounding representation stays an over-approximation that only
+// this predicate narrows, which is what keeps the plan sound (design §24).
+type NegationPredicate struct{ Schema CompilationPlan }
+
 // RequiredPredicate is `required`: every listed property must be present.
 type RequiredPredicate struct{ Properties []string }
 
@@ -96,6 +107,7 @@ func (MinItemsPredicate) isPredicateExpr()          {}
 func (MaxItemsPredicate) isPredicateExpr()          {}
 func (UniqueItemsPredicate) isPredicateExpr()       {}
 func (ContainsCountPredicate) isPredicateExpr()     {}
+func (NegationPredicate) isPredicateExpr()          {}
 func (RequiredPredicate) isPredicateExpr()          {}
 func (MinPropertiesPredicate) isPredicateExpr()     {}
 func (MaxPropertiesPredicate) isPredicateExpr()     {}

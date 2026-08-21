@@ -171,13 +171,13 @@ type over the children would under-approximate it (design §24).
 
 ### PredicateDispatch lowering contract (runtime match-count)
 
-`PredicateCountDispatch` (overlapping `oneOf`/`anyOf`) and `ContainsCountPredicate`
-(`contains`/`minContains`/`maxContains`, §4) are the two `PredicateDispatch`-level
-constructs. Both are **representable** — the plan is emitted, never dropped — but neither
-has a static discriminator. A conforming backend has exactly two options for each: emit the
-runtime match-count described here, or refuse the schema and surface the plan's diagnostic.
-Silently narrowing to a static discriminator, or dropping the constraint, is unsound and
-not permitted (the "no silent caps" rule).
+`PredicateCountDispatch` (overlapping `oneOf`/`anyOf`), `ContainsCountPredicate`
+(`contains`/`minContains`/`maxContains`, §4) and `NegationPredicate` (a `not` that survived
+normalization, §4) are the `PredicateDispatch`-level constructs. All are **representable** —
+the plan is emitted, never dropped — but none has a static discriminator. A conforming
+backend has exactly two options for each: emit the runtime check described here, or refuse
+the schema and surface the plan's diagnostic. Silently narrowing to a static discriminator,
+or dropping the constraint, is unsound and not permitted (the "no silent caps" rule).
 
 **`PredicateCountDispatch{Branches, Minimum, Maximum}`.** Decode the instance into the
 enclosing `UnionRepresentation` over `Branches` (the sound over-approximation, §1). Then run
@@ -208,7 +208,14 @@ count; the instance is valid iff `Min <= n <= Max` (`Max == nil` ⇒ no upper bo
 already incorporates the `minContains` default of 1. This is the element-wise counterpart
 of the branch match-count above, and the same "emit or refuse" rule applies.
 
-**Representation.** In both cases the accepted value is stored via the plan's
+**`NegationPredicate{Schema}`.** Run `Schema` (a full `CompilationPlan`) against the whole
+instance and invert the outcome: the instance is valid iff `Schema` rejects it. It appears
+wherever normalization could not eliminate a complement, including the `All(A, Not(B))` form
+a `oneOf` with a subsumed branch rewrites to (design §15.2), where the negation is the only
+thing separating the schema from a plain union. Like the two counts above it forces
+`CapabilityLevel.PredicateDispatch`, so it arrives already flagged.
+
+**Representation.** In every case the accepted value is stored via the plan's
 `Representation` (a `UnionRepresentation` for dispatch; the array's own representation for
 `contains`). The match-count is a validation step layered on an already-decoded value — it
 accepts or rejects, it does not change the stored shape.
@@ -241,6 +248,7 @@ carry `plan.SetString`-applicable predicates. `plan.PredicateExpr` variant → t
 | `MinimumPredicate`, `MaximumPredicate`, `MultipleOfPredicate` | `Validators.Int` or `Validators.Float` (per `PrimitiveRepresentation.Numeric`) |
 | `MinItemsPredicate`, `MaxItemsPredicate`, `UniqueItemsPredicate` | `Validators.Array` |
 | `ContainsCountPredicate` | No direct `Validators.Array` field for match-counting; needs custom generated code (or `Validators.Ogen` custom-param escape hatch) per the **PredicateDispatch lowering contract** in §3. This predicate always also forces `CapabilityLevel.PredicateDispatch` (design's v1 scope), so it arrives already flagged. |
+| `NegationPredicate` | No `validate.*` field: generate a call to the nested plan's own validator and invert it, per the **PredicateDispatch lowering contract** in §3. Always also forces `CapabilityLevel.PredicateDispatch`. |
 | `RequiredPredicate`, `MinPropertiesPredicate`, `MaxPropertiesPredicate`, `DependentRequiredPredicate`, `PropertyNamesPredicate` | `Validators.Object` (or, for `PropertyNamesPredicate`, a per-key loop calling the nested plan's own validator — no existing single `validate.Object` field covers it, likely another `Ogen` custom-param case) |
 
 `Validators.Decimal` has no `plan.PredicateExpr` counterpart: it is selected from

@@ -58,6 +58,10 @@ to refuse to generate for these, which is acceptable:
   `oneOf`/`anyOf` requiring predicate-count dispatch** → keep the plan
   (`PredicateCountDispatch`) but classify as `PredicateDispatch`; a diagnostic notes the
   runtime match-count cost. (These are representable, just flagged — do not drop them.)
+- **a negation normalization could not eliminate** (§11.8) → keep it as a
+  `plan.NegationPredicate` over the negated sub-schema and classify as `PredicateDispatch`.
+  No representation can express a complement, so dropping it would silently accept more
+  (invariant 4); a diagnostic notes the runtime sub-schema check.
 
 Everything that normalizes to `DirectGoType`, `GoTypeWithValidation`, or `StaticDispatch`
 is fully supported and is the primary target. The point of the capability ladder is to

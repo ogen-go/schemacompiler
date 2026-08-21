@@ -141,6 +141,17 @@ func TestBuild_DeclaredDiscriminatorLooksThroughNestedCombinators(t *testing.T) 
 			warn: true,
 		},
 		{
+			// Issue #71: branch 1's accepted set is a strict *subset* of branch 0's, so
+			// `oneOf` accepts neither. The declaration must not paper over it.
+			name: "an alternative that is another branch collides",
+			catDef: `"Cat": {"anyOf": [
+				{"type": "object", "required": ["petType"], "properties": {"petType": {"const": "cat"}, "a": {"type": "string"}}},
+				{"$ref": "#/$defs/Dog"}
+			]}`,
+			disc: `"discriminator": {"propertyName": "petType"}`,
+			warn: true,
+		},
+		{
 			name: "an alternative reaching into another branch collides",
 			catDef: `"Cat": {"anyOf": [
 				{"type": "object", "required": ["petType"], "properties": {"petType": {"const": "cat"}, "a": {"type": "string"}}},

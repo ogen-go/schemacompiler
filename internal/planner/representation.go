@@ -88,7 +88,7 @@ func (b *builder) buildUnrestricted(c components, path string) plan.CompilationP
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}
 	if len(c.nots) > 0 {
-		b.diag(path, plan.SeverityInfo, "not: residual negation not enforced by the v1 validator")
+		b.diag(path, plan.SeverityInfo, "residual negation is not enforced by the v1 validator")
 	}
 
 	rep := plan.Representation(plan.AnyRepresentation{})
@@ -176,7 +176,7 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 	})
 	var disp plan.DispatchPlan = plan.NoDispatch{}
 	if len(c.nots) > 0 {
-		b.diag(path, plan.SeverityInfo, "not: residual negation not enforced by the v1 validator")
+		b.diag(path, plan.SeverityInfo, "residual negation is not enforced by the v1 validator")
 	}
 
 	res := mergeResolution(resParts...)

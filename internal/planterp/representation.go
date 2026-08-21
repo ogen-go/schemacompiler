@@ -3,8 +3,7 @@ package planterp
 import (
 	"strconv"
 
-	"github.com/go-faster/errors"
-
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -20,256 +19,269 @@ func (in *interp) representation(r plan.Representation, value any, f frame) (Ver
 
 	switch r := r.(type) {
 	case plan.AnyRepresentation:
-		var t struct{} = r
-		_ = t
 		return accepted(), nil
-
 	case plan.NeverRepresentation:
-		var t struct{} = r
-		_ = t
-		return rejected("never: no instance is valid"), nil
-
+		return rejected(f, "never", "no instance is valid"), nil
 	case plan.PrimitiveRepresentation:
-		var t struct {
-			Kind    plan.JSONKind
-			Numeric plan.NumericDomain
-			Format  string
-		} = r
-		return in.primitive(t.Kind, t.Numeric, value)
-
+		return in.primitive(r, value, f)
 	case plan.ObjectRepresentation:
-		var t struct {
-			Fields       map[string]plan.FieldRepresentation
-			Additional   plan.Representation
-			PatternRules []plan.PatternFieldRepresentation
-		} = r
-		return in.object(t.Fields, t.Additional, t.PatternRules, value, f)
-
+		return in.object(r, value, f)
 	case plan.ArrayRepresentation:
-		var t struct {
-			Prefix []plan.ItemRepresentation
-			Rest   plan.ItemRepresentation
-		} = r
-		return in.array(t.Prefix, t.Rest, value, f)
-
+		return in.array(r, value, f)
 	case plan.UnionRepresentation:
-		var t struct {
-			Alternatives []plan.Representation
-		} = r
-		for _, alt := range t.Alternatives {
-			v, err := in.representation(alt, value, f)
-			if err != nil {
-				return Verdict{}, err
-			}
-			if v.Accepted {
-				return accepted(), nil
-			}
-		}
-		return rejected("union: no alternative can hold the value"), nil
-
+		return in.union(r, value, f)
 	case plan.RecursiveRepresentation:
-		var t struct {
-			Name string
-			Body plan.Representation
-		} = r
-		return in.representation(t.Body, value, f.bind(t.Name, t.Body))
-
+		return in.recursive(r, value, f)
 	case plan.ReferenceRepresentation:
-		var t struct {
-			Name string
-		} = r
-		return in.reference(t.Name, value, f)
-
+		return in.reference(r.Name, value, f)
 	default:
-		return Verdict{}, errors.Errorf("planterp: unhandled plan.Representation variant %T", r)
+		return Verdict{}, internalf("unhandled plan.Representation variant %T", r)
 	}
 }
 
-func (in *interp) primitive(kind plan.JSONKind, numeric plan.NumericDomain, value any) (Verdict, error) {
+func (in *interp) primitive(r plan.PrimitiveRepresentation, value any, f frame) (Verdict, error) {
 	k, err := kindOf(value)
 	if err != nil {
-		return Verdict{}, err
+		return Verdict{}, withPath(f.path, err)
 	}
-	if k != kind {
-		return rejected("primitive: value is " + kindName(k) + ", representation is " + kindName(kind)), nil
+	if k != r.Kind {
+		return rejected(f, "primitive", "value is "+kindName(k)+", representation is "+kindName(r.Kind)), nil
 	}
-	if kind != plan.KindNumber {
+	if r.Kind != plan.KindNumber {
 		return accepted(), nil
 	}
 
 	integral, err := isInteger(value)
 	if err != nil {
-		return Verdict{}, err
+		return Verdict{}, withPath(f.path, err)
 	}
-	switch numeric {
+	switch r.Numeric {
 	case plan.AnyNumber:
 		return accepted(), nil
 	case plan.IntegerOnly:
 		if !integral {
-			return rejected("primitive: number is not an integer"), nil
+			return rejected(f, "primitive", "number is not an integer"), nil
 		}
 		return accepted(), nil
 	case plan.NonIntegerOnly:
 		if integral {
-			return rejected("primitive: number is an integer"), nil
+			return rejected(f, "primitive", "number is an integer"), nil
 		}
 		return accepted(), nil
 	default:
-		return Verdict{}, errors.Errorf("planterp: unhandled plan.NumericDomain %d", numeric)
+		return Verdict{}, internalf("unhandled plan.NumericDomain %d", r.Numeric)
 	}
+}
+
+// objectShape is an [plan.ObjectRepresentation] as the instance-directed pass needs it:
+// the declared fields by name, the shape covering everything else, and the pattern rules
+// in plan order. It is assembled from the representation's [planwalk.Edge]-labeled
+// children rather than from its fields.
+type objectShape struct {
+	fields     map[string]objectField
+	additional plan.Representation
+	patterns   []patternRule
+}
+
+type objectField struct {
+	representation plan.Representation
+	presence       plan.PresenceMode
+	nullable       bool
+}
+
+type patternRule struct {
+	pattern        string
+	representation plan.Representation
+}
+
+func objectShapeOf(r plan.ObjectRepresentation) (objectShape, error) {
+	shape := objectShape{fields: map[string]objectField{}}
+	for c := range planwalk.Children(planwalk.RepresentationNode(r)) {
+		switch c.Edge.Kind {
+		case planwalk.EdgeField:
+			shape.fields[c.Edge.Name] = objectField{
+				representation: c.Representation,
+				presence:       c.Edge.Presence,
+				nullable:       c.Edge.Nullable,
+			}
+		case planwalk.EdgeAdditional:
+			shape.additional = c.Representation
+		case planwalk.EdgePatternRule:
+			shape.patterns = append(shape.patterns, patternRule{
+				pattern:        c.Edge.Name,
+				representation: c.Representation,
+			})
+		default:
+			return objectShape{}, internalf("unhandled object representation child edge %s", c.Edge.Kind)
+		}
+	}
+	return shape, nil
 }
 
 // object checks an ObjectRepresentation (design §7, §12). Declared fields own their
 // property name; pattern rules and Additional cover the rest. A property covered by a
 // field is not also run through a matching pattern rule: the plan states one storage
 // slot per property, and it is the field.
-func (in *interp) object(
-	fields map[string]plan.FieldRepresentation,
-	additional plan.Representation,
-	patternRules []plan.PatternFieldRepresentation,
-	value any,
-	f frame,
-) (Verdict, error) {
+func (in *interp) object(r plan.ObjectRepresentation, value any, f frame) (Verdict, error) {
+	shape, err := objectShapeOf(r)
+	if err != nil {
+		return Verdict{}, err
+	}
+
 	obj, ok := value.(map[string]any)
 	if !ok {
 		k, err := kindOf(value)
 		if err != nil {
-			return Verdict{}, err
+			return Verdict{}, withPath(f.path, err)
 		}
-		return rejected("object: value is " + kindName(k)), nil
+		return rejected(f, "object", "value is "+kindName(k)), nil
 	}
 
-	for name, fr := range fields {
-		v, err := in.field(name, fr, obj, f)
+	for name, field := range shape.fields {
+		v, err := in.field(name, field, obj, f)
 		if err != nil || !v.Accepted {
 			return v, err
 		}
 	}
 
 	for name, pv := range obj {
-		if _, declared := fields[name]; declared {
+		if _, declared := shape.fields[name]; declared {
 			continue
 		}
-		matched, v, err := in.patternRules(patternRules, name, pv, f)
+		matched, v, err := in.patternRules(shape.patterns, name, pv, f)
 		if err != nil || !v.Accepted {
 			return v, err
 		}
 		if matched {
 			continue
 		}
-		if additional == nil {
+		if shape.additional == nil {
 			// A nil Additional means additional properties are not representable as a
 			// field (plan.ObjectRepresentation's contract). That is a statement about
 			// storage, not about validity, so it cannot reject on its own.
 			continue
 		}
-		v, err = in.representation(additional, pv, f.descend())
+		v, err = in.representation(shape.additional, pv, f.descend(name))
 		if err != nil {
 			return Verdict{}, err
 		}
 		if !v.Accepted {
-			return rejected("additionalProperties[" + strconv.Quote(name) + "]: " + v.Reason), nil
+			return rejectedBy(f, "additionalProperties", strconv.Quote(name), v.Reason), nil
 		}
 	}
 	return accepted(), nil
 }
 
-func (in *interp) field(name string, fr plan.FieldRepresentation, obj map[string]any, f frame) (Verdict, error) {
-	var t struct {
-		Representation plan.Representation
-		Presence       plan.PresenceMode
-		Nullable       bool
-		Metadata       plan.Metadata
-	} = fr
+func (in *interp) field(name string, field objectField, obj map[string]any, f frame) (Verdict, error) {
+	at := f.descend(name)
 
 	fv, present := obj[name]
 	if !present {
-		switch t.Presence {
+		switch field.presence {
 		case plan.PresenceRequired:
-			return rejected("field " + strconv.Quote(name) + ": required but absent"), nil
+			return rejected(at, "field", "required but absent"), nil
 		case plan.PresenceOptional:
 			return accepted(), nil
 		default:
-			return Verdict{}, errors.Errorf("planterp: unhandled plan.PresenceMode %d", t.Presence)
+			return Verdict{}, internalf("unhandled plan.PresenceMode %d", field.presence)
 		}
 	}
-	if fv == nil && t.Nullable {
+	if fv == nil && field.nullable {
 		return accepted(), nil
 	}
-	v, err := in.representation(t.Representation, fv, f.descend())
+	v, err := in.representation(field.representation, fv, at)
 	if err != nil {
 		return Verdict{}, err
 	}
 	if !v.Accepted {
-		return rejected("field " + strconv.Quote(name) + ": " + v.Reason), nil
+		return rejectedBy(f, "field", strconv.Quote(name), v.Reason), nil
 	}
 	return accepted(), nil
 }
 
 // patternRules runs every pattern rule whose pattern matches name. It reports whether
 // any rule matched, so the caller knows not to fall through to Additional.
-func (in *interp) patternRules(rules []plan.PatternFieldRepresentation, name string, value any, f frame) (bool, Verdict, error) {
+func (in *interp) patternRules(rules []patternRule, name string, value any, f frame) (bool, Verdict, error) {
 	matched := false
 	for _, rule := range rules {
-		var t struct {
-			Pattern        string
-			Representation plan.Representation
-			Metadata       plan.Metadata
-		} = rule
-
-		if !in.matchPattern(t.Pattern, name) {
+		if !in.matchPattern(rule.pattern, name) {
 			continue
 		}
 		matched = true
-		v, err := in.representation(t.Representation, value, f.descend())
+		v, err := in.representation(rule.representation, value, f.descend(name))
 		if err != nil {
 			return false, Verdict{}, err
 		}
 		if !v.Accepted {
-			return true, rejected("patternProperties[" + strconv.Quote(t.Pattern) + "][" +
-				strconv.Quote(name) + "]: " + v.Reason), nil
+			return true, rejectedBy(f, "patternProperties["+strconv.Quote(rule.pattern)+"]",
+				strconv.Quote(name), v.Reason), nil
 		}
 	}
 	return matched, accepted(), nil
 }
 
-func (in *interp) array(prefix []plan.ItemRepresentation, rest plan.ItemRepresentation, value any, f frame) (Verdict, error) {
+// array stays on the representation's own fields rather than on [planwalk.Children]:
+// the traversal drops a slot whose Representation is nil, which would hide both the
+// tuple's length and the malformed-prefix check below.
+func (in *interp) array(r plan.ArrayRepresentation, value any, f frame) (Verdict, error) {
 	items, ok := value.([]any)
 	if !ok {
 		k, err := kindOf(value)
 		if err != nil {
-			return Verdict{}, err
+			return Verdict{}, withPath(f.path, err)
 		}
-		return rejected("array: value is " + kindName(k)), nil
+		return rejected(f, "array", "value is "+kindName(k)), nil
 	}
 
 	for i, item := range items {
-		var slot plan.ItemRepresentation
-		switch {
-		case i < len(prefix):
-			slot = prefix[i]
-		default:
-			slot = rest
+		slot := r.Rest
+		if i < len(r.Prefix) {
+			slot = r.Prefix[i]
 		}
-		var t struct {
-			Representation plan.Representation
-			Metadata       plan.Metadata
-		} = slot
-		if t.Representation == nil {
-			if i < len(prefix) {
-				return Verdict{}, errors.Errorf("planterp: prefix item %d has no representation", i)
+		at := f.descend(strconv.Itoa(i))
+		if slot.Representation == nil {
+			if i < len(r.Prefix) {
+				return Verdict{}, internalf("prefix item %d has no representation", i)
 			}
 			// A nil Rest.Representation means there are no items past the prefix
 			// (plan.ArrayRepresentation's contract).
-			return rejected("array: item " + strconv.Itoa(i) + " is past the tuple prefix"), nil
+			return rejected(at, "array", "item is past the tuple prefix"), nil
 		}
-		v, err := in.representation(t.Representation, item, f.descend())
+		v, err := in.representation(slot.Representation, item, at)
 		if err != nil {
 			return Verdict{}, err
 		}
 		if !v.Accepted {
-			return rejected("array[" + strconv.Itoa(i) + "]: " + v.Reason), nil
+			return rejectedBy(f, "array item", strconv.Itoa(i), v.Reason), nil
 		}
+	}
+	return accepted(), nil
+}
+
+func (in *interp) union(r plan.UnionRepresentation, value any, f frame) (Verdict, error) {
+	var last *ValidateError
+	for c := range planwalk.Children(planwalk.RepresentationNode(r)) {
+		if c.Edge.Kind != planwalk.EdgeAlternative {
+			return Verdict{}, internalf("unhandled union representation child edge %s", c.Edge.Kind)
+		}
+		v, err := in.representation(c.Representation, value, f)
+		if err != nil {
+			return Verdict{}, err
+		}
+		if v.Accepted {
+			return accepted(), nil
+		}
+		last = v.Reason
+	}
+	return rejectedBy(f, "union", "no alternative can hold the value", last), nil
+}
+
+func (in *interp) recursive(r plan.RecursiveRepresentation, value any, f frame) (Verdict, error) {
+	for c := range planwalk.Children(planwalk.RepresentationNode(r)) {
+		if c.Edge.Kind != planwalk.EdgeRecursiveBody {
+			return Verdict{}, internalf("unhandled recursive representation child edge %s", c.Edge.Kind)
+		}
+		return in.representation(c.Representation, value, f.bind(c.Edge.Name, c.Representation))
 	}
 	return accepted(), nil
 }
@@ -280,7 +292,7 @@ func (in *interp) reference(name string, value any, f frame) (Verdict, error) {
 	if f.active[name] {
 		// Following the same reference twice at one instance node cannot terminate and
 		// cannot be given a verdict; a silent accept would hide an unguarded cycle.
-		return Verdict{}, errors.Errorf("planterp: reference cycle at %q with no instance descent", name)
+		return Verdict{}, internalf("reference cycle at %q with no instance descent", name)
 	}
 	next := f.follow(name)
 
@@ -289,7 +301,7 @@ func (in *interp) reference(name string, value any, f frame) (Verdict, error) {
 	}
 	def, ok := in.defs[plan.SchemaID(name)]
 	if !ok {
-		return Verdict{}, errors.Errorf("planterp: reference %q resolves to no definition in the plan", name)
+		return Verdict{}, internalf("reference %q resolves to no definition in the plan", name)
 	}
 	return in.plan(def, value, next)
 }

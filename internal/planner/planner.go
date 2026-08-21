@@ -54,7 +54,7 @@ func BuildAt(e ir.Expr, reg *frontend.Registry, origin Origin) Result {
 	return Result{
 		Plan:        p,
 		Diagnostics: b.diags,
-		Exactness:   exactnessOf(p, b.asserted || b.overApproximate),
+		Exactness:   exactnessOf(p, b.gaps),
 	}
 }
 
@@ -66,15 +66,7 @@ type builder struct {
 	recur    map[plan.SchemaID]frontend.RecursionClass
 	refCache map[string]*frontend.Node
 	diags    []plan.Diagnostic
-	// asserted records that some dispatch anywhere in the plan trusts a declared
-	// discriminator instead of proving disjointness, which costs the whole plan its
-	// exactness (design §24). Capability rolls up on its own; Exactness has no
-	// per-plan field to roll up through, so it is tracked here.
-	asserted bool
-	// overApproximate records that a constraint was deliberately dropped somewhere in the
-	// plan because enforcing it was not sound — today, a negation over an inexactly
-	// modeled sub-schema (issue #82). It reaches Exactness the same way asserted does.
-	overApproximate bool
+	gaps
 }
 
 // refTargets returns the registry's static-$ref target index, built once per Build call.

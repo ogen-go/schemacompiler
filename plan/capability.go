@@ -41,6 +41,12 @@ const (
 	ExactWithValidation
 	// SoundOverApproximation means the Go type admits extra values that the validator rejects.
 	SoundOverApproximation
+	// DeclaredIncomplete means the plan admits extra values and nothing in it closes the
+	// gap: a constraint was dropped because enforcing it would not have been sound, and no
+	// residual validation catches the instances it would have rejected. Still lowerable —
+	// the backend decides whether to generate a type that accepts more than the schema or
+	// to refuse (issue #84).
+	DeclaredIncomplete
 	// UnsupportedConversion means no sound conversion is available.
 	UnsupportedConversion
 )

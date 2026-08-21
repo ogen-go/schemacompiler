@@ -56,6 +56,8 @@ func exactnessName(e plan.Exactness) string {
 		return "ExactWithValidation"
 	case plan.SoundOverApproximation:
 		return "SoundOverApproximation"
+	case plan.DeclaredIncomplete:
+		return "DeclaredIncomplete"
 	case plan.UnsupportedConversion:
 		return "UnsupportedConversion"
 	default:

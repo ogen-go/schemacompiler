@@ -7,17 +7,24 @@ import "github.com/ogen-go/schemacompiler/plan"
 // composite plans (objects, arrays, unions) additionally roll up the capability of every
 // part via maxCapability before calling classify on the local contribution, so the
 // overall result is never lower than any nested part (design §22's recursive rule).
+//
+// Both variant switches are whitelists whose unknown arm returns [plan.Unsupported]:
+// design §24 forbids under-approximating cost, so a variant this function has not been
+// taught about must fail toward "too expensive to lower" rather than toward a plain Go
+// type that would silently drop the machinery the plan needs.
 func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.DispatchPlan, res plan.ResolutionPlan) plan.CapabilityLevel {
 	if _, ok := res.(plan.DynamicReferenceGraph); ok {
 		return plan.DynamicSchemaResolution
 	}
 
-	switch d := disp.(type) {
+	switch disp.(type) {
+	case plan.NoDispatch:
 	case plan.PredicateCountDispatch:
-		_ = d
 		return plan.PredicateDispatch
 	case plan.KindDispatch, plan.LiteralDispatch, plan.PropertyDispatch, plan.PresenceDispatch:
 		return plan.StaticDispatch
+	default:
+		return plan.Unsupported
 	}
 
 	if !val.Empty() {
@@ -39,8 +46,7 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 // dispatch trusts a declared discriminator instead of proving it ([plan.TagAsserted]),
 // which makes the plan an over-approximation however exact its parts are.
 func exactnessOf(p plan.CompilationPlan, asserted bool) plan.Exactness {
-	switch p.Capability {
-	case plan.EvaluationStateValidation, plan.DynamicSchemaResolution, plan.Unsupported:
+	if p.Capability >= plan.EvaluationStateValidation {
 		return plan.UnsupportedConversion
 	}
 	if _, never := p.Representation.(plan.NeverRepresentation); never {

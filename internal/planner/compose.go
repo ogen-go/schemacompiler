@@ -2,7 +2,6 @@ package planner
 
 import (
 	"github.com/ogen-go/schemacompiler/internal/ir"
-	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -52,7 +51,7 @@ func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, pa
 	for _, n := range nots {
 		before := b.gaps
 		sub := b.build(n.Operand, path+"/negated")
-		if !exactlyModeled(exactnessOf(sub, b.since(before))) || !negatable(sub, n.Operand) {
+		if !exactlyModeled(exactnessOf(sub, b.since(before))) || !b.negatable(sub, n.Operand) {
 			dropped = true
 			continue
 		}
@@ -87,27 +86,19 @@ func exactlyModeled(e plan.Exactness) bool {
 // negatable reports whether p can be trusted to accept exactly what its schema accepts,
 // which is stricter than p's own [plan.Exactness] and is what negating it requires.
 //
-// [buildRef] plans a reference from its identity alone — the target's plan is assembled by
-// a separate [BuildAt] call, so its exactness never reaches this one and a reference reads
-// as ExactPureRepresentation whatever its target turns out to be. Everywhere else that is a
-// harmless over-approximation; under a negation it rejects valid instances (#82), so a
-// reference anywhere in p disqualifies it.
+// The gap [plan.Exactness] leaves is references: [buildRef] plans one from its identity
+// alone, so p reports the exactness of everything *except* its reference leaves. Each of
+// those is resolved and judged on its target here (see [refsTrusted]).
 //
-// Object and array representations used to be excluded for the same reason and no longer
-// are: they carry the whole sub-plan of a field or an item (#68), keep the shape when there
-// is no sibling `type` (#72), and scope `additionalProperties`/`items` to the names and
-// indexes their own schema object declared (#94), so their exactness is now what it says.
-func negatable(p plan.CompilationPlan, operand ir.Expr) bool {
+// Object and array representations used to be excluded outright and no longer are: they
+// carry the whole sub-plan of a field or an item (#68), keep the shape when there is no
+// sibling `type` (#72), and scope `additionalProperties`/`items` to the names and indexes
+// their own schema object declared (#94), so their exactness is now what it says.
+func (b *builder) negatable(p plan.CompilationPlan, operand ir.Expr) bool {
 	if vacuous(p, operand) {
 		return false
 	}
-	trusted := true
-	planwalk.Plan(p, func(r plan.Representation) {
-		if _, isRef := r.(plan.ReferenceRepresentation); isRef {
-			trusted = false
-		}
-	})
-	return trusted
+	return b.refsTrusted(p, nil)
 }
 
 // vacuous reports whether p accepts every instance while operand does not, which proves

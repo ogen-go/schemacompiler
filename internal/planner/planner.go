@@ -65,6 +65,7 @@ type builder struct {
 	origin   Origin
 	recur    map[plan.SchemaID]frontend.RecursionClass
 	refCache map[string]*frontend.Node
+	refTrust map[plan.SchemaID]bool
 	diags    []plan.Diagnostic
 	gaps
 }

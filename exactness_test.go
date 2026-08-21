@@ -113,8 +113,14 @@ func TestCompileDeclaredIncompleteIsGeneratable(t *testing.T) {
 			exactness:  plan.ExactWithValidation,
 		},
 		{
-			name:       "negation over a reference operand is dropped and nothing closes the gap",
+			name:       "negation over a reference to an exact target keeps its residual check",
 			schema:     `{"not":{"$ref":"#/$defs/S"},"$defs":{"S":{"type":"string"}}}`,
+			capability: plan.PredicateDispatch,
+			exactness:  plan.ExactWithValidation,
+		},
+		{
+			name:       "negation over an unmodeled operand is dropped and nothing closes the gap",
+			schema:     `{"not":{"anyOf":[true,{"properties":{"foo":true}}],"unevaluatedProperties":false}}`,
 			capability: plan.DirectGoType,
 			exactness:  plan.DeclaredIncomplete,
 		},
@@ -180,8 +186,14 @@ func TestCompileExactnessTracksTheAcceptedSet(t *testing.T) {
 			why:       "nothing proved the branches disjoint, so a mis-tagged instance is accepted",
 		},
 		{
-			name:      "a dropped negation is closed by nothing",
+			name:      "a negation over a reference to an exact target is exact",
 			schema:    `{"not":{"$ref":"#/$defs/S"},"$defs":{"S":{"type":"string"}}}`,
+			exactness: plan.ExactWithValidation,
+			why:       "the target is resolved and its plan reproduces its schema (issue #108)",
+		},
+		{
+			name:      "a dropped negation is closed by nothing",
+			schema:    `{"not":{"anyOf":[true,{"properties":{"foo":true}}],"unevaluatedProperties":false}}`,
 			exactness: plan.DeclaredIncomplete,
 			why:       "the negation was dropped and no residual check replaces it (issue #84)",
 		},

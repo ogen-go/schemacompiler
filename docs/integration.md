@@ -212,15 +212,17 @@ numeric domain — `plan.NumericDomain` still only distinguishes
 
 | `plan.ResolutionPlan` | Generator behavior |
 |---|---|
-| `FullyResolved` | Normal lowering, no residual reference machinery. |
-| `StaticReferenceGraph{Definitions}` | Each `SchemaID → CompilationPlan` entry becomes one named type generated once and referenced elsewhere (`ReferenceRepresentation`/`KindAlias`, §1), matching ogen's existing "one Go type per resolved schema" pass. |
+| `FullyResolved` | Normal lowering, no residual reference machinery. Every plan `CompileDocument` returns carries this: the document's graph is `DocumentResult.Plans`, not a per-plan copy (§8). |
+| `StaticReferenceGraph{Definitions}` | Each `SchemaID → CompilationPlan` entry becomes one named type generated once and referenced elsewhere (`ReferenceRepresentation`/`KindAlias`, §1), matching ogen's existing "one Go type per resolved schema" pass. `Compile`/`CompileSchema` attach it to the root plan; `CompileDocument` hands back the equivalent map as `DocumentResult.Plans` (§8). |
 | `DynamicReferenceGraph{StaticDefinitions, DynamicAnchors}` | **Not representable.** `$dynamicRef` resolution depends on the runtime dynamic-scope stack (design §10.2, §19); ogen has no runtime schema-resolution engine (`gen` never references `unevaluatedProperties` or `dynamicRef` — confirmed by source search) and no typed error exists for it yet. The generator must refuse and surface the plan's diagnostic, following the same clean-failure pattern ogen already uses for other unsupported constructs (`ErrNotImplemented` in `gen/schema_gen_sum.go:341`, `gen/gen_security.go:111`; `ErrUnsupportedContentTypes` in `gen/errors.go:60,133`) rather than attempting a partial/unsound lowering. |
 
 ## 6. Capability gate
 
 The generator should switch on `plan.CompilationPlan.Capability` before attempting to
 lower anything, and refuse — surfacing `Result.Diagnostics` to the user — for anything
-past `PredicateDispatch`:
+past `PredicateDispatch`. The gate is per plan and sound to use that way: a plan's
+capability is rolled up to at least that of every plan it references (design §22), so a
+generatable plan never points at a refused one.
 
 | `CapabilityLevel` | ogen generation | Rationale |
 |---|---|---|
@@ -273,8 +275,19 @@ boundaries. `DocumentResult.Plans` is keyed by that pointer — the same `plan.S
 `ReferenceRepresentation.Name` carries — which gives a generator a stable type-naming key
 and the graph to resolve references against.
 
+`Plans` is the whole graph: a `ReferenceRepresentation.Name` is a key into it, and each
+plan's own `Resolution` is `FullyResolved` rather than a second copy of the graph. Every
+plan's `Capability` already accounts for what it references (design §22), so §6's per-plan
+gate holds without falling back on `DocumentResult.Capability` — the document-wide worst
+case, which would refuse a whole document over one bad component.
+
 `schemacompiler.CompileSchema` compiles a single already-parsed `*base.SchemaProxy` (no
 re-serialization); references to sibling components stay unresolved and are reported as
 `SeverityError` diagnostics, so prefer `CompileDocument` when the whole set is available.
 `schemacompiler.Compile` (raw bytes) keeps resolving a self-contained document's own
-`$defs`/`$ref` into `plan.StaticReferenceGraph.Definitions`.
+`$defs`/`$ref` into `plan.StaticReferenceGraph.Definitions` on the root plan.
+
+All three honour `Options.Loader` for external `$ref` documents and `Options.BaseURI`
+(`Document.BaseURI` overrides it) for the retrieval URI; a relative base URI is normalized
+once on entry, so in-document references resolve against the key their targets were
+registered under.

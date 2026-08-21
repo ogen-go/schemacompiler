@@ -26,17 +26,29 @@ package conformance
 // holds instance data — a `properties`/`patternProperties`/`$defs`/`dependentSchemas` key,
 // or anywhere inside a `const`/`enum` value — stays data.
 //
+// #95 added four entries: a plan whose representation is `any` and a plan classified
+// PredicateDispatch both used to report SoundOverApproximation, which the oracle exempts,
+// so nothing held them to anything. They report ExactWithValidation now, which made the
+// `min*` half of #74 visible — nine disagreements in all, of which #98 and #99 fixed five
+// outright before they could be quarantined.
+//
 // Counts at the time of writing:
 //
-//	#74    4 instances
+//	#74    8 instances
 //	#75    2 instances
 //	#92    1 instances
 var diffSkips = map[string]string{
-	// #74 an integer keyword spelled as a decimal becomes 0
-	"maxContains.json :: maxContains with contains, value with a decimal :: one element matches, valid maxContains": "#74",
-	"maxItems.json :: maxItems validation with a decimal :: shorter is valid":                                       "#74",
-	"maxLength.json :: maxLength validation with a decimal :: shorter is valid":                                     "#74",
-	"maxProperties.json :: maxProperties validation with a decimal :: shorter is valid":                             "#74",
+	// #74 an integer keyword spelled as a decimal becomes 0. A `max*` bound of 0 rejects
+	// valid instances; the `min*` spelling of the same bug accepts invalid ones, and only
+	// became visible once #95 stopped exempting these plans.
+	"maxContains.json :: maxContains with contains, value with a decimal :: one element matches, valid maxContains":    "#74",
+	"maxItems.json :: maxItems validation with a decimal :: shorter is valid":                                          "#74",
+	"maxLength.json :: maxLength validation with a decimal :: shorter is valid":                                        "#74",
+	"maxProperties.json :: maxProperties validation with a decimal :: shorter is valid":                                "#74",
+	"minContains.json :: minContains=2 with contains with a decimal value :: one element matches, invalid minContains": "#74",
+	"minItems.json :: minItems validation with a decimal :: too short is invalid":                                      "#74",
+	"minLength.json :: minLength validation with a decimal :: too short is invalid":                                    "#74",
+	"minProperties.json :: minProperties validation with a decimal :: too short is invalid":                            "#74",
 
 	// #75 minContains/maxContains without `contains` synthesize a match-count
 	"maxContains.json :: maxContains without contains is ignored :: two items still valid against lone maxContains":  "#75",

@@ -66,6 +66,11 @@ const (
 	// interpreter itself could not enforce (an RE2-incompatible pattern, an unasserted
 	// `format`), so it is not evidence against the plan.
 	verdictApproximated
+	// verdictDeclaredInexact is verdictAcceptedInvalid reached through a plan that says it
+	// accepts more than its schema — [plan.SoundOverApproximation] and above. The oracle
+	// cannot hold a plan to a claim it does not make, so this is permitted; it is counted
+	// on its own line so the price of permitting it is a number rather than an assumption.
+	verdictDeclaredInexact
 	// verdictInvalidValue is the interpreter refusing the instance itself: the corpus
 	// decoded into something [encoding/json] does not produce. That is a harness bug.
 	verdictInvalidValue
@@ -86,6 +91,8 @@ func (k verdictKind) String() string {
 		return "accepted-invalid-while-exact"
 	case verdictApproximated:
 		return "accepted-invalid-via-unenforceable-constraint"
+	case verdictDeclaredInexact:
+		return "accepted-invalid-while-declaring-inexactness"
 	case verdictInvalidValue:
 		return "invalid-instance-value"
 	case verdictInternalError:
@@ -188,9 +195,9 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 				tally.instances++
 				key := rel + " :: " + c.Description + " :: " + inst.Description
 				kind, detail := judge(t, res, inst)
-				if kind == verdictOK || kind == verdictApproximated {
-					if kind == verdictApproximated {
-						tally.failures[verdictApproximated]++
+				if permitted(kind) {
+					if kind != verdictOK {
+						tally.failures[kind]++
 					}
 					continue
 				}
@@ -253,8 +260,15 @@ func judge(t *testing.T, res *schemacompiler.Result, inst diffInstance) (kind ve
 		// Under-approximation: no exactness level licenses it (design §24).
 		return verdictRejectedValid, detail
 	case !inst.Valid && verdict.Accepted:
+		// The exemption starts at SoundOverApproximation, not at DeclaredIncomplete: both
+		// rungs mean the plan's accepted set is a strict superset of its schema's, so
+		// neither can be held to the schema. What #95 fixed is which plans reach those
+		// rungs — a representation wider than the schema is not itself inexactness when
+		// the residual validator closes the gap (internal/planner/classify.go). Since that
+		// fix nothing in the suite reaches them, which the tally line proves rather than
+		// assumes.
 		if res.Exactness >= plan.SoundOverApproximation {
-			return verdictOK, detail
+			return verdictDeclaredInexact, detail
 		}
 		if len(verdict.Approximated) > 0 {
 			return verdictApproximated, detail + ", unenforceable: " + strings.Join(verdict.Approximated, "; ")
@@ -333,8 +347,16 @@ var reportedKinds = []verdictKind{
 	verdictRejectedValid,
 	verdictAcceptedInvalid,
 	verdictApproximated,
+	verdictDeclaredInexact,
 	verdictInvalidValue,
 	verdictInternalError,
+}
+
+// permitted reports whether the asymmetric oracle lets k pass. The three permitted kinds
+// are counted, never failed on: verdictOK is agreement, and the other two are
+// disagreements the plan or the interpreter declared in advance.
+func permitted(k verdictKind) bool {
+	return k == verdictOK || k == verdictApproximated || k == verdictDeclaredInexact
 }
 
 func reportTally(t *testing.T, tally diffTally) {
@@ -355,7 +377,7 @@ func reportTally(t *testing.T, tally diffTally) {
 	t.Logf("quarantined by diffSkips: %d (entries %d)", tally.quarantined, len(diffSkips))
 	t.Logf("disagreements inside the skipped exactness=UnsupportedConversion band (reported, not failures):")
 	for _, kind := range reportedKinds {
-		if kind == verdictApproximated {
+		if kind == verdictApproximated || kind == verdictDeclaredInexact {
 			continue
 		}
 		t.Logf("  %-48s %d", kind, tally.bandFailures[kind])
@@ -369,7 +391,7 @@ func bandCost(t *testing.T, res *schemacompiler.Result, instances []diffInstance
 	t.Helper()
 
 	for _, inst := range instances {
-		if kind, _ := judge(t, res, inst); kind != verdictOK && kind != verdictApproximated {
+		if kind, _ := judge(t, res, inst); !permitted(kind) {
 			into[kind]++
 		}
 	}

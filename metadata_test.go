@@ -22,7 +22,31 @@ func objectFields(t *testing.T, p plan.CompilationPlan) map[string]plan.FieldRep
 	t.Helper()
 	obj, ok := p.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "expected object representation, got %T", p.Representation)
-	return obj.Fields
+	byName := make(map[string]plan.FieldRepresentation, len(obj.Fields))
+	for _, f := range obj.Fields {
+		byName[f.Name] = f
+	}
+	return byName
+}
+
+// fieldByName looks one field up by property name. plan.ObjectRepresentation.Fields is
+// ordered (issue #89), so a test that wants one field scans for it.
+func fieldByName(t *testing.T, obj plan.ObjectRepresentation, name string) (plan.FieldRepresentation, bool) {
+	t.Helper()
+	for _, f := range obj.Fields {
+		if f.Name == name {
+			return f, true
+		}
+	}
+	return plan.FieldRepresentation{}, false
+}
+
+// mustField is [fieldByName] for a field the test knows is there.
+func mustField(t *testing.T, obj plan.ObjectRepresentation, name string) plan.FieldRepresentation {
+	t.Helper()
+	f, ok := fieldByName(t, obj, name)
+	require.True(t, ok, "no field %q", name)
+	return f
 }
 
 func TestCompile_NodeMetadata(t *testing.T) {
@@ -86,7 +110,7 @@ func TestCompile_NestedFieldMetadata(t *testing.T) {
 
 	nested, ok := fields["nested"].Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok)
-	require.Equal(t, "Inner", nested.Fields["inner"].Metadata.Title)
+	require.Equal(t, "Inner", mustField(t, nested, "inner").Metadata.Title)
 }
 
 func TestCompile_AllOfBranchFieldMetadata(t *testing.T) {
@@ -112,7 +136,7 @@ func TestCompile_ArrayItemMetadata(t *testing.T) {
 	require.True(t, ok, "got %T", p.Representation)
 	obj, ok := arr.Rest.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", arr.Rest.Plan.Representation)
-	require.Equal(t, map[string]any{"x-tag": "t"}, obj.Fields["a"].Metadata.Extensions)
+	require.Equal(t, map[string]any{"x-tag": "t"}, mustField(t, obj, "a").Metadata.Extensions)
 }
 
 func TestCompile_DefinitionMetadata(t *testing.T) {

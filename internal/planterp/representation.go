@@ -74,16 +74,22 @@ func (in *interp) primitive(r plan.PrimitiveRepresentation, value any, f frame) 
 }
 
 // objectShape is an [plan.ObjectRepresentation] as the instance-directed pass needs it:
-// the declared fields by name, the plan covering everything else, and the pattern rules
-// in plan order. It is assembled from the representation's [planwalk.Edge]-labeled
+// the declared fields in plan order, the plan covering everything else, and the pattern
+// rules in plan order. It is assembled from the representation's [planwalk.Edge]-labeled
 // children rather than from its fields.
+//
+// declared is built once per object rather than per property: the uncovered-property scan
+// below asks "is this name a field?" for every property of the instance, and a linear scan
+// of fields per property would make that quadratic (issue #89).
 type objectShape struct {
-	fields     map[string]objectField
+	fields     []objectField
+	declared   map[string]struct{}
 	additional *plan.CompilationPlan
 	patterns   []patternRule
 }
 
 type objectField struct {
+	name     string
 	plan     plan.CompilationPlan
 	presence plan.PresenceMode
 	nullable bool
@@ -100,10 +106,10 @@ type patternRule struct {
 // it would constrain nothing - widening the accepted set silently, where design §24 wants
 // a loud failure.
 func objectShapeOf(r plan.ObjectRepresentation, f frame) (objectShape, error) {
-	for name, field := range r.Fields {
+	for _, field := range r.Fields {
 		if field.Plan.Representation == nil {
 			return objectShape{}, internalf("field %q at %s has no representation",
-				name, instanceLocation(f))
+				field.Name, instanceLocation(f))
 		}
 	}
 	for i, rule := range r.PatternRules {
@@ -113,15 +119,17 @@ func objectShapeOf(r plan.ObjectRepresentation, f frame) (objectShape, error) {
 		}
 	}
 
-	shape := objectShape{fields: map[string]objectField{}}
+	shape := objectShape{declared: make(map[string]struct{}, len(r.Fields))}
 	for c := range planwalk.Children(planwalk.RepresentationNode(r)) {
 		switch c.Edge.Kind {
 		case planwalk.EdgeField:
-			shape.fields[c.Edge.Name] = objectField{
+			shape.fields = append(shape.fields, objectField{
+				name:     c.Edge.Name,
 				plan:     c.Plan,
 				presence: c.Edge.Presence,
 				nullable: c.Edge.Nullable,
-			}
+			})
+			shape.declared[c.Edge.Name] = struct{}{}
 		case planwalk.EdgeAdditional:
 			additional := c.Plan
 			shape.additional = &additional
@@ -156,15 +164,15 @@ func (in *interp) object(r plan.ObjectRepresentation, value any, f frame) (Verdi
 		return rejected(f, "object", "value is "+kindName(k)), nil
 	}
 
-	for name, field := range shape.fields {
-		v, err := in.field(name, field, obj, f)
+	for _, field := range shape.fields {
+		v, err := in.field(field, obj, f)
 		if err != nil || !v.Accepted {
 			return v, err
 		}
 	}
 
 	for name, pv := range obj {
-		if _, declared := shape.fields[name]; declared {
+		if _, declared := shape.declared[name]; declared {
 			continue
 		}
 		matched, v, err := in.patternRules(shape.patterns, name, pv, f)
@@ -191,10 +199,10 @@ func (in *interp) object(r plan.ObjectRepresentation, value any, f frame) (Verdi
 	return accepted(), nil
 }
 
-func (in *interp) field(name string, field objectField, obj map[string]any, f frame) (Verdict, error) {
-	at := f.descend(name)
+func (in *interp) field(field objectField, obj map[string]any, f frame) (Verdict, error) {
+	at := f.descend(field.name)
 
-	fv, present := obj[name]
+	fv, present := obj[field.name]
 	if !present {
 		switch field.presence {
 		case plan.PresenceRequired:
@@ -217,7 +225,7 @@ func (in *interp) field(name string, field objectField, obj map[string]any, f fr
 		return Verdict{}, err
 	}
 	if !v.Accepted {
-		return rejectedBy(f, "field", strconv.Quote(name), v.Reason), nil
+		return rejectedBy(f, "field", strconv.Quote(field.name), v.Reason), nil
 	}
 	return accepted(), nil
 }

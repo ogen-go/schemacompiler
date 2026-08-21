@@ -38,7 +38,7 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 			sub: func(t *testing.T, p plan.CompilationPlan) plan.CompilationPlan {
 				obj, ok := p.Representation.(plan.ObjectRepresentation)
 				require.True(t, ok, "got %T", p.Representation)
-				return obj.Fields["a"].Plan
+				return plannerField(t, obj, "a").Plan
 			},
 		},
 		{
@@ -127,7 +127,7 @@ func TestBuild_SubSchemaDispatchSurvives(t *testing.T) {
 
 	obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", got.Plan.Representation)
-	field := obj.Fields["a"]
+	field := plannerField(t, obj, "a")
 	require.True(t, field.Nullable, "null is carried by the field, not by its plan")
 
 	disp, ok := field.Plan.Dispatch.(plan.KindDispatch)

@@ -26,7 +26,9 @@ type PrimitiveRepresentation struct {
 
 // ObjectRepresentation is a struct/map-like shape (design §7, §12).
 type ObjectRepresentation struct {
-	Fields map[string]FieldRepresentation
+	// Fields are the declared properties in source order, the order a backend should
+	// generate struct fields in (issue #89). Names are unique within one object.
+	Fields []FieldRepresentation
 	// Additional is the plan for every property no field and no pattern rule covers.
 	// nil means additional properties are not representable as a field.
 	Additional   *CompilationPlan
@@ -58,6 +60,8 @@ const (
 // validation and dispatch belong to the property they were written on, and a slot that
 // could only hold a [Representation] would drop them (issue #68).
 type FieldRepresentation struct {
+	// Name is the property name this field stores.
+	Name     string
 	Plan     CompilationPlan
 	Presence PresenceMode
 	Nullable bool

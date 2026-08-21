@@ -98,7 +98,7 @@ func TestNullablePlan_Property(t *testing.T) {
 	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok)
 
-	field := obj.Fields["a"]
+	field := mustField(t, obj, "a")
 	require.Equal(t, plan.PresenceRequired, field.Presence)
 	require.True(t, field.Nullable)
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Plan.Representation)
@@ -217,7 +217,7 @@ func TestNullablePlan_MatchesTypeArraySpelling(t *testing.T) {
 			obj, ok := nullable.Plan.Representation.(plan.ObjectRepresentation)
 			require.True(t, ok)
 
-			field := obj.Fields["a"]
+			field := mustField(t, obj, "a")
 			require.True(t, field.Nullable)
 			require.Equal(t, "T", field.Metadata.Title)
 			require.Equal(t, "D", field.Metadata.Description)
@@ -255,7 +255,7 @@ func TestNullablePlan_ArrayItself(t *testing.T) {
 	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok)
 
-	field := obj.Fields["a"]
+	field := mustField(t, obj, "a")
 	require.True(t, field.Nullable)
 	require.Equal(t, "A", field.Metadata.Title)
 	require.IsType(t, plan.ArrayRepresentation{}, field.Plan.Representation)
@@ -405,7 +405,7 @@ func holderField(t *testing.T, node string) (field plan.FieldRepresentation, war
 			warns++
 		}
 	}
-	return obj.Fields["a"], warns
+	return mustField(t, obj, "a"), warns
 }
 
 // The repo stops at `$ref` (#23) rather than intersecting a sibling kind set into the

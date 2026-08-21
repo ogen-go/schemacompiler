@@ -35,7 +35,7 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 		{
 			name: "object field",
 			p: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-				Fields: map[string]plan.FieldRepresentation{"a": {Plan: plan.CompilationPlan{Representation: refRep("A")}}},
+				Fields: []plan.FieldRepresentation{{Name: "a", Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 			}},
 		},
 		{
@@ -104,7 +104,7 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 				Representation: plan.AnyRepresentation{},
 				Dispatch: plan.PredicateCountDispatch{
 					Branches: []plan.CompilationPlan{{Representation: plan.ObjectRepresentation{
-						Fields: map[string]plan.FieldRepresentation{"a": {Plan: plan.CompilationPlan{Representation: refRep("A")}}},
+						Fields: []plan.FieldRepresentation{{Name: "a", Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 					}}},
 					Minimum: 1,
 					Maximum: 1,
@@ -128,11 +128,11 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 
 func TestPlanDOTNestedReferenceIsStableAndDeduplicated(t *testing.T) {
 	p := plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-		Fields: map[string]plan.FieldRepresentation{
-			"a": {Plan: plan.CompilationPlan{Representation: refRep("A")}},
-			"b": {Plan: plan.CompilationPlan{Representation: refRep("B")}},
-			"c": {Plan: plan.CompilationPlan{Representation: refRep("A")}},
-			"d": {Plan: plan.CompilationPlan{Representation: refRep("C")}},
+		Fields: []plan.FieldRepresentation{
+			{Name: "a", Plan: plan.CompilationPlan{Representation: refRep("A")}},
+			{Name: "b", Plan: plan.CompilationPlan{Representation: refRep("B")}},
+			{Name: "c", Plan: plan.CompilationPlan{Representation: refRep("A")}},
+			{Name: "d", Plan: plan.CompilationPlan{Representation: refRep("C")}},
 		},
 	}}
 	defs := targetDefs("A", "B", "C")

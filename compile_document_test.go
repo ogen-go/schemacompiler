@@ -67,7 +67,7 @@ func TestCompileDocument(t *testing.T) {
 
 	obj, ok := node.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "Node should be an object, got %T", node.Representation)
-	field, ok := obj.Fields["pet"]
+	field, ok := fieldByName(t, obj, "pet")
 	require.True(t, ok)
 	ref, ok := field.Plan.Representation.(plan.ReferenceRepresentation)
 	require.True(t, ok, "pet should be a reference, got %T", field.Plan.Representation)
@@ -88,7 +88,7 @@ func TestCompileDocumentMetadata(t *testing.T) {
 
 	obj, ok := pet.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok)
-	require.Equal(t, "pet name", obj.Fields["name"].Metadata.Description)
+	require.Equal(t, "pet name", mustField(t, obj, "name").Metadata.Description)
 }
 
 func TestCompileDocumentEmpty(t *testing.T) {
@@ -108,7 +108,8 @@ func TestCompileSchema(t *testing.T) {
 
 	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "Pet should be an object, got %T", res.Plan.Representation)
-	require.Contains(t, obj.Fields, "name")
+	_, ok = fieldByName(t, obj, "name")
+	require.True(t, ok, "Pet should have a name field")
 }
 
 func TestCompileSchemaNil(t *testing.T) {

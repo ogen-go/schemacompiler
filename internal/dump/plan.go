@@ -92,19 +92,16 @@ func writeRepresentation(t *tw, r plan.Representation, visiting map[plan.SchemaI
 		t.line("%s", line)
 	case plan.ObjectRepresentation:
 		var g struct {
-			Fields       map[string]plan.FieldRepresentation
+			Fields       []plan.FieldRepresentation
 			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
 		} = r
 		t.line("Object")
 		t.enter(func() {
-			names := make([]string, 0, len(g.Fields))
-			for name := range g.Fields {
-				names = append(names, name)
-			}
-			sort.Strings(names)
-			for _, name := range names {
-				writeField(t, name, g.Fields[name], visiting)
+			// Source order, not sorted: Fields is ordered now (issue #89), and sorting
+			// would hide the very thing a reader dumps a plan to see.
+			for _, f := range g.Fields {
+				writeField(t, f, visiting)
 			}
 			if g.Additional != nil {
 				t.line("additional")
@@ -158,14 +155,15 @@ func writeRepresentation(t *tw, r plan.Representation, visiting map[plan.SchemaI
 	}
 }
 
-func writeField(t *tw, name string, f plan.FieldRepresentation, visiting map[plan.SchemaID]bool) {
+func writeField(t *tw, f plan.FieldRepresentation, visiting map[plan.SchemaID]bool) {
 	var g struct {
+		Name     string
 		Plan     plan.CompilationPlan
 		Presence plan.PresenceMode
 		Nullable bool
 		Metadata plan.Metadata
 	} = f
-	t.line("field %q presence=%s nullable=%v", name, presenceString(g.Presence), g.Nullable)
+	t.line("field %q presence=%s nullable=%v", g.Name, presenceString(g.Presence), g.Nullable)
 	t.enter(func() {
 		writeMetadata(t, g.Metadata)
 		writePlan(t, g.Plan, visiting)

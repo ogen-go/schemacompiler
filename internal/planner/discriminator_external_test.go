@@ -118,8 +118,8 @@ func branchID(t *testing.T, p plan.CompilationPlan) string {
 		return r.Name
 	case plan.ObjectRepresentation:
 		names := make([]string, 0, len(r.Fields))
-		for name := range r.Fields {
-			names = append(names, name)
+		for _, f := range r.Fields {
+			names = append(names, f.Name)
 		}
 		sort.Strings(names)
 		return strings.Join(names, "+")

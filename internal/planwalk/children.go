@@ -90,12 +90,13 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 		_ = t
 	case plan.ObjectRepresentation:
 		var t struct {
-			Fields       map[string]plan.FieldRepresentation
+			Fields       []plan.FieldRepresentation
 			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
 		} = r
-		for name, f := range t.Fields {
+		for i, f := range t.Fields {
 			var g struct {
+				Name     string
 				Plan     plan.CompilationPlan
 				Presence plan.PresenceMode
 				Nullable bool
@@ -103,7 +104,8 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 			} = f
 			if !yield(Node{Kind: NodePlan, Edge: Edge{
 				Kind:     EdgeField,
-				Name:     name,
+				Name:     g.Name,
+				Index:    i,
 				Presence: g.Presence,
 				Nullable: g.Nullable,
 			}, Plan: g.Plan}) {

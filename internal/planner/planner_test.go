@@ -14,6 +14,19 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
+// plannerField looks one field up by property name: plan.ObjectRepresentation.Fields is
+// ordered rather than keyed (issue #89).
+func plannerField(t *testing.T, obj plan.ObjectRepresentation, name string) plan.FieldRepresentation {
+	t.Helper()
+	for _, f := range obj.Fields {
+		if f.Name == name {
+			return f
+		}
+	}
+	t.Fatalf("no field %q", name)
+	return plan.FieldRepresentation{}
+}
+
 func TestBuild_DirectGoType(t *testing.T) {
 	// {"type": "string"}
 	e := ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}
@@ -238,12 +251,12 @@ func TestBuild_ThreeStatePresenceAndNullable(t *testing.T) {
 	obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "expected ObjectRepresentation, got %T", got.Plan.Representation)
 
-	a := obj.Fields["a"]
+	a := plannerField(t, obj, "a")
 	require.Equal(t, plan.PresenceRequired, a.Presence)
 	require.True(t, a.Nullable)
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, a.Plan.Representation)
 
-	b := obj.Fields["b"]
+	b := plannerField(t, obj, "b")
 	require.Equal(t, plan.PresenceOptional, b.Presence)
 	require.False(t, b.Nullable)
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, b.Plan.Representation)

@@ -61,7 +61,7 @@ func TestFoldOrderAndEdges(t *testing.T) {
 		{
 			name: "representation tree",
 			plan: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
-				Fields:       map[string]plan.FieldRepresentation{"f": {Plan: plan.CompilationPlan{Representation: ref("field")}}},
+				Fields:       []plan.FieldRepresentation{{Name: "f", Plan: plan.CompilationPlan{Representation: ref("field")}}},
 				Additional:   &plan.CompilationPlan{Representation: ref("additional")},
 				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("pattern")}}},
 			}},
@@ -220,8 +220,8 @@ func TestFoldOrderAndEdges(t *testing.T) {
 func TestFoldEdgePayload(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.ObjectRepresentation{
-			Fields: map[string]plan.FieldRepresentation{
-				"f": {Plan: plan.CompilationPlan{Representation: ref("field")}, Presence: plan.PresenceRequired, Nullable: true},
+			Fields: []plan.FieldRepresentation{
+				{Name: "f", Plan: plan.CompilationPlan{Representation: ref("field")}, Presence: plan.PresenceRequired, Nullable: true},
 			},
 			PatternRules: []plan.PatternFieldRepresentation{
 				{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("p0")}},
@@ -276,7 +276,7 @@ func TestFoldEveryEdgeKindIsReachable(t *testing.T) {
 	plans := []plan.CompilationPlan{
 		{
 			Representation: plan.ObjectRepresentation{
-				Fields:       map[string]plan.FieldRepresentation{"f": {Plan: plan.CompilationPlan{Representation: ref("f")}}},
+				Fields:       []plan.FieldRepresentation{{Name: "f", Plan: plan.CompilationPlan{Representation: ref("f")}}},
 				Additional:   &plan.CompilationPlan{Representation: ref("a")},
 				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("p")}}},
 			},
@@ -331,8 +331,8 @@ func TestFoldThreadsAccumulator(t *testing.T) {
 func TestFoldSkipOmitsExactlyTheSubtree(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{
-			plan.ObjectRepresentation{Fields: map[string]plan.FieldRepresentation{
-				"deep": {Plan: plan.CompilationPlan{Representation: ref("deep")}},
+			plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{
+				{Name: "deep", Plan: plan.CompilationPlan{Representation: ref("deep")}},
 			}},
 			ref("sibling"),
 		}},
@@ -360,8 +360,8 @@ func TestFoldSkipOmitsExactlyTheSubtree(t *testing.T) {
 func TestFoldStopEndsTheWalkImmediately(t *testing.T) {
 	p := plan.CompilationPlan{
 		Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{
-			plan.ObjectRepresentation{Fields: map[string]plan.FieldRepresentation{
-				"stop": {Plan: plan.CompilationPlan{Representation: ref("stop-here")}},
+			plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{
+				{Name: "stop", Plan: plan.CompilationPlan{Representation: ref("stop-here")}},
 			}},
 			ref("never-1"),
 		}},
@@ -407,8 +407,8 @@ func TestFoldStopAtRoot(t *testing.T) {
 
 func TestChildrenIsOneLevel(t *testing.T) {
 	obj := plan.ObjectRepresentation{
-		Fields: map[string]plan.FieldRepresentation{
-			"f": {Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{ref("nested")}}}},
+		Fields: []plan.FieldRepresentation{
+			{Name: "f", Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{ref("nested")}}}},
 		},
 		Additional: &plan.CompilationPlan{Representation: ref("additional")},
 	}

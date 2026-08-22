@@ -3,6 +3,7 @@ package planterp_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,8 +26,66 @@ func guarded(guard plan.KindSet, e plan.PredicateExpr) plan.ValidationPlan {
 	return plan.ValidationPlan{Predicates: []plan.GuardedPredicate{{Applicability: guard, Expression: e}}}
 }
 
+// leaf builds the plan the compiler emits for a representation: the same shape stated on
+// the validation side, where design §4.1 puts acceptance (issue #115). The interpreter no
+// longer reads representations at all, so a test about instance-directed behavior has to
+// reach it this way. It mirrors internal/planner's assertKind, objectStructure and
+// arrayStructure.
+//
+// [plan.UnionRepresentation] and [plan.RecursiveRepresentation] have no counterpart and so
+// cannot appear here: a union of kinds is a [plan.KindDispatch] on the validation side, and
+// the planner never emits a recursive binder.
 func leaf(r plan.Representation) plan.CompilationPlan {
-	return plan.CompilationPlan{Representation: r}
+	p := plan.CompilationPlan{Representation: r}
+	switch r := r.(type) {
+	case plan.AnyRepresentation:
+	case plan.NeverRepresentation:
+		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{{Applicability: 0, Assert: true}}}
+	case plan.PrimitiveRepresentation:
+		guard := plan.KindSet(1) << r.Kind
+		preds := []plan.GuardedPredicate{{Applicability: guard, Assert: true}}
+		if r.Kind == plan.KindNumber && r.Numeric != plan.AnyNumber {
+			preds = append(preds, plan.GuardedPredicate{
+				Applicability: guard,
+				Expression:    plan.NumericDomainPredicate{Domain: r.Numeric},
+			})
+		}
+		p.Validation = plan.ValidationPlan{Predicates: preds}
+	case plan.ObjectRepresentation:
+		e := plan.ObjectStructurePredicate{Additional: r.Additional}
+		for _, f := range r.Fields {
+			e.Properties = append(e.Properties, plan.PropertyCheck{
+				Name: f.Name, Plan: f.Plan, Presence: f.Presence, Nullable: f.Nullable,
+			})
+		}
+		for _, rule := range r.PatternRules {
+			e.Patterns = append(e.Patterns, plan.PatternCheck{Pattern: rule.Pattern, Plan: rule.Plan})
+		}
+		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+			{Applicability: plan.SetObject, Assert: true},
+			{Applicability: plan.SetObject, Expression: e},
+		}}
+	case plan.ArrayRepresentation:
+		e := plan.ArrayStructurePredicate{}
+		for _, item := range r.Prefix {
+			e.Prefix = append(e.Prefix, item.Plan)
+		}
+		if r.Rest.Plan.Representation != nil {
+			rest := r.Rest.Plan
+			e.Rest = &rest
+		}
+		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+			{Applicability: plan.SetArray, Assert: true},
+			{Applicability: plan.SetArray, Expression: e},
+		}}
+	case plan.ReferenceRepresentation:
+		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+			{Applicability: plan.SetAny, Expression: plan.ReferencePredicate(r)},
+		}}
+	default:
+		panic(fmt.Sprintf("leaf: no validation-side counterpart for %T", r))
+	}
+	return p
 }
 
 type interpCase struct {
@@ -51,16 +110,16 @@ func runCases(t *testing.T, cases []interpCase) {
 func TestRepresentation(t *testing.T) {
 	object := plan.ObjectRepresentation{
 		Fields: []plan.FieldRepresentation{
-			{Name: "req", Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}, Presence: plan.PresenceRequired},
-			{Name: "opt", Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}, Presence: plan.PresenceOptional},
-			{Name: "null", Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}, Nullable: true, Presence: plan.PresenceOptional},
+			{Name: "req", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), Presence: plan.PresenceRequired},
+			{Name: "opt", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), Presence: plan.PresenceOptional},
+			{Name: "null", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), Nullable: true, Presence: plan.PresenceOptional},
 		},
-		Additional:   &plan.CompilationPlan{Representation: plan.NeverRepresentation{}},
-		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x-", Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindNumber}}}},
+		Additional:   &[]plan.CompilationPlan{leaf(plan.NeverRepresentation{})}[0],
+		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x-", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindNumber})}},
 	}
 	array := plan.ArrayRepresentation{
-		Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindBoolean}}}},
-		Rest:   plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}}},
+		Prefix: []plan.ItemRepresentation{{Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindBoolean})}},
+		Rest:   plan.ItemRepresentation{Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString})},
 	}
 
 	runCases(t, []interpCase{
@@ -99,37 +158,14 @@ func TestRepresentation(t *testing.T) {
 		{
 			name: "array with no rest rejects items past the prefix",
 			plan: leaf(plan.ArrayRepresentation{
-				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.AnyRepresentation{}}}},
+				Prefix: []plan.ItemRepresentation{{Plan: leaf(plan.AnyRepresentation{})}},
 			}),
 			value: `[1,2]`,
 		},
-		{
-			name: "union accepts any alternative",
-			plan: leaf(plan.UnionRepresentation{Alternatives: []plan.Representation{
-				plan.PrimitiveRepresentation{Kind: plan.KindString},
-				plan.PrimitiveRepresentation{Kind: plan.KindNumber},
-			}}),
-			value:  `1`,
-			accept: true,
-		},
-		{
-			name: "union rejects when no alternative holds",
-			plan: leaf(plan.UnionRepresentation{Alternatives: []plan.Representation{
-				plan.PrimitiveRepresentation{Kind: plan.KindString},
-			}}),
-			value: `1`,
-		},
-		{
-			name: "recursive binder resolves its own name",
-			plan: leaf(plan.RecursiveRepresentation{
-				Name: "node",
-				Body: plan.ArrayRepresentation{
-					Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "node"}}},
-				},
-			}),
-			value:  `[[[]]]`,
-			accept: true,
-		},
+		// UnionRepresentation and RecursiveRepresentation are deliberately absent: the
+		// interpreter decides from the checks alone (design §4.1), and neither has a
+		// counterpart there. A union of kinds arrives as a [plan.KindDispatch], covered by
+		// TestDispatch; the planner never emits a recursive binder.
 	})
 }
 
@@ -137,10 +173,8 @@ func TestReference(t *testing.T) {
 	definitions := map[plan.SchemaID]plan.CompilationPlan{
 		"#/$defs/s": leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
 	}
-	referring := plan.CompilationPlan{
-		Representation: plan.ReferenceRepresentation{Name: "#/$defs/s"},
-		Resolution:     plan.StaticReferenceGraph{Definitions: definitions},
-	}
+	referring := leaf(plan.ReferenceRepresentation{Name: "#/$defs/s"})
+	referring.Resolution = plan.StaticReferenceGraph{Definitions: definitions}
 
 	runCases(t, []interpCase{
 		{name: "static graph resolves the target", plan: referring, value: `"a"`, accept: true},
@@ -148,10 +182,8 @@ func TestReference(t *testing.T) {
 	})
 
 	t.Run("dynamic graph reuses its static definitions", func(t *testing.T) {
-		p := plan.CompilationPlan{
-			Representation: plan.ReferenceRepresentation{Name: "#/$defs/s"},
-			Resolution:     plan.DynamicReferenceGraph{StaticDefinitions: definitions},
-		}
+		p := leaf(plan.ReferenceRepresentation{Name: "#/$defs/s"})
+		p.Resolution = plan.DynamicReferenceGraph{StaticDefinitions: definitions}
 		verdict, err := planterp.Interpret(p, "a")
 		require.NoError(t, err)
 		require.True(t, verdict.Accepted)
@@ -163,25 +195,21 @@ func TestReference(t *testing.T) {
 	})
 
 	t.Run("a cycle with no instance descent fails loudly", func(t *testing.T) {
-		p := plan.CompilationPlan{
-			Representation: plan.ReferenceRepresentation{Name: "#/$defs/loop"},
-			Resolution: plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
-				"#/$defs/loop": leaf(plan.ReferenceRepresentation{Name: "#/$defs/loop"}),
-			}},
-		}
+		p := leaf(plan.ReferenceRepresentation{Name: "#/$defs/loop"})
+		p.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+			"#/$defs/loop": leaf(plan.ReferenceRepresentation{Name: "#/$defs/loop"}),
+		}}
 		_, err := planterp.Interpret(p, "a")
 		require.ErrorContains(t, err, "reference cycle")
 	})
 
 	t.Run("recursion through an instance descent terminates", func(t *testing.T) {
-		p := plan.CompilationPlan{
-			Representation: plan.ReferenceRepresentation{Name: "#/$defs/list"},
-			Resolution: plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
-				"#/$defs/list": leaf(plan.ArrayRepresentation{
-					Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "#/$defs/list"}}},
-				}),
-			}},
-		}
+		p := leaf(plan.ReferenceRepresentation{Name: "#/$defs/list"})
+		p.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+			"#/$defs/list": leaf(plan.ArrayRepresentation{
+				Rest: plan.ItemRepresentation{Plan: leaf(plan.ReferenceRepresentation{Name: "#/$defs/list"})},
+			}),
+		}}
 		verdict, err := planterp.Interpret(p, decode(t, `[[],[[]]]`))
 		require.NoError(t, err)
 		require.True(t, verdict.Accepted)
@@ -208,14 +236,14 @@ func TestDispatch(t *testing.T) {
 		Cases: []plan.LiteralCase{{
 			Value: "cat",
 			Plan: leaf(plan.ObjectRepresentation{
-				Fields:     []plan.FieldRepresentation{{Name: "purrs", Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindBoolean}}}},
-				Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
+				Fields:     []plan.FieldRepresentation{{Name: "purrs", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindBoolean})}},
+				Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
 			}),
 		}},
 	})
 	presenceDispatch := withDispatch(plan.PresenceDispatch{
 		Property: "a",
-		Present:  leaf(plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{{Name: "b", Presence: plan.PresenceRequired, Plan: plan.CompilationPlan{Representation: plan.AnyRepresentation{}}}}, Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}}}),
+		Present:  leaf(plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{{Name: "b", Presence: plan.PresenceRequired, Plan: leaf(plan.AnyRepresentation{})}}, Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0]}),
 		Absent:   leaf(plan.AnyRepresentation{}),
 	})
 	countDispatch := func(minimum, maximum int) plan.CompilationPlan {

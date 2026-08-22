@@ -74,12 +74,10 @@ func TestUncompilablePatternAccepts(t *testing.T) {
 // `patternProperties` side, where both booleans can reject: running the rule's plan on a
 // name it may not cover, or falling through to an `additionalProperties: false`.
 func TestUncompilablePatternRuleClaimsTheProperty(t *testing.T) {
-	p := plan.CompilationPlan{
-		Representation: plan.ObjectRepresentation{
-			Additional:   &plan.CompilationPlan{Representation: plan.NeverRepresentation{}},
-			PatternRules: []plan.PatternFieldRepresentation{{Pattern: "(", Plan: leaf(plan.NeverRepresentation{})}},
-		},
-	}
+	p := leaf(plan.ObjectRepresentation{
+		Additional:   &[]plan.CompilationPlan{leaf(plan.NeverRepresentation{})}[0],
+		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "(", Plan: leaf(plan.NeverRepresentation{})}},
+	})
 
 	verdict, err := planterp.Interpret(p, decode(t, `{"x": 1}`))
 	require.NoError(t, err)

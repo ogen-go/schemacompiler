@@ -157,6 +157,18 @@ type ArrayStructurePredicate struct {
 	Rest   *CompilationPlan
 }
 
+// ReferencePredicate is a `$ref` as a check: the instance must satisfy the plan Name
+// resolves to. It is [ReferenceRepresentation]'s counterpart in the validation plan, for
+// the reason [ObjectStructurePredicate] is [ObjectRepresentation]'s — design §4.1 puts
+// acceptance in the validation plan, and a reference's target is where the accepted set
+// of a `$ref` comes from.
+//
+// The target is not inline. Name is resolved against the whole-document graph the root
+// plan's [ResolutionPlan] carries (docs/integration.md §5), exactly as the representation
+// of the same name is, so a reference cycle stays a cycle in the graph rather than an
+// infinite plan.
+type ReferencePredicate struct{ Name string }
+
 // RequiredPredicate is `required`: every listed property must be present.
 type RequiredPredicate struct{ Properties []string }
 
@@ -187,6 +199,7 @@ func (FormatPredicate) isPredicateExpr()            {}
 func (MinimumPredicate) isPredicateExpr()           {}
 func (MaximumPredicate) isPredicateExpr()           {}
 func (NumericDomainPredicate) isPredicateExpr()     {}
+func (ReferencePredicate) isPredicateExpr()         {}
 func (ObjectStructurePredicate) isPredicateExpr()   {}
 func (ArrayStructurePredicate) isPredicateExpr()    {}
 func (MultipleOfPredicate) isPredicateExpr()        {}

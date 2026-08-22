@@ -16,7 +16,9 @@ package plan
 //   - a bare kind assertion, against the kind the representation holds;
 //   - a [NumericDomainPredicate] agreeing with a [PrimitiveRepresentation]'s own domain;
 //   - an [ObjectStructurePredicate] or [ArrayStructurePredicate] describing the same
-//     shape as the [ObjectRepresentation] or [ArrayRepresentation] beside it.
+//     shape as the [ObjectRepresentation] or [ArrayRepresentation] beside it;
+//   - a [ReferencePredicate] naming the same target as the [ReferenceRepresentation]
+//     beside it.
 //
 // A structural predicate that does *not* describe the representation beside it is real
 // work — a residual conjunct over a `$ref`, say, whose shape the reference's own type
@@ -44,6 +46,9 @@ func dischargedBy(rep Representation, e PredicateExpr) bool {
 	case NumericDomainPredicate:
 		prim, ok := rep.(PrimitiveRepresentation)
 		return ok && prim.Numeric == e.Domain
+	case ReferencePredicate:
+		ref, ok := rep.(ReferenceRepresentation)
+		return ok && ref.Name == e.Name
 	case ObjectStructurePredicate:
 		obj, ok := rep.(ObjectRepresentation)
 		return ok && objectRestates(obj, e)

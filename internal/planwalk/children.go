@@ -372,6 +372,11 @@ func predicateChildren(e plan.PredicateExpr, yield func(Node) bool) {
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeShapeSchema}, Plan: t.Schema}) {
 			return
 		}
+	case plan.ReferencePredicate:
+		// A leaf here, as ReferenceRepresentation is: the target lives in the document's
+		// resolution graph, which planwalk deliberately does not descend.
+		var t struct{ Name string } = e
+		_ = t
 	case plan.ObjectStructurePredicate:
 		// The same edges an ObjectRepresentation uses: the relation "this plan governs
 		// the property named N" is the same one, so a generic consumer needs no new case.

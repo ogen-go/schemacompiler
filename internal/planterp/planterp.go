@@ -58,24 +58,7 @@ func rejectedBy(f frame, constraint, detail string, cause *ValidateError) Verdic
 // [InvalidValueError] when value is not a decoded JSON document. Neither is a verdict:
 // callers must not read either as acceptance.
 func Interpret(p plan.CompilationPlan, value any) (Verdict, error) {
-	return interpret(p, value, false)
-}
-
-// InterpretChecks is [Interpret] with the representation ignored: acceptance comes from
-// the validation plan and the dispatch alone, which design §4.1 says is the whole of a
-// plan's contract.
-//
-// It exists to be run beside [Interpret] over the corpus. Agreement on every instance is
-// the evidence that acceptance really is independent of storage — a claim the design
-// makes and that nothing else re-checks, so a plan that quietly moves a constraint back
-// into its Go shape shows up as a disagreement rather than as prose going stale
-// (issue #115).
-func InterpretChecks(p plan.CompilationPlan, value any) (Verdict, error) {
-	return interpret(p, value, true)
-}
-
-func interpret(p plan.CompilationPlan, value any, ignoreRepresentation bool) (Verdict, error) {
-	in := &interp{ignoreRepresentation: ignoreRepresentation}
+	in := &interp{}
 	if err := in.loadDefinitions(p.Resolution); err != nil {
 		return Verdict{}, err
 	}
@@ -91,9 +74,6 @@ func interpret(p plan.CompilationPlan, value any, ignoreRepresentation bool) (Ve
 // carries (docs/integration.md §5, §8).
 type interp struct {
 	defs map[plan.SchemaID]plan.CompilationPlan
-	// ignoreRepresentation drops the representation from the acceptance decision, leaving
-	// only the checks design §4.1 makes the plan's contract. See [InterpretChecks].
-	ignoreRepresentation bool
 	// approx accumulates the constraints the interpreter could not enforce.
 	approx []string
 }
@@ -130,40 +110,29 @@ func (in *interp) loadDefinitions(r plan.ResolutionPlan) error {
 	}
 }
 
-// frame is the interpreter state at one instance node: where in the instance it is, the
-// recursion binders in scope, and the reference names already being followed without
-// descending into a sub-value.
+// frame is the interpreter state at one instance node: where in the instance it is, and
+// the reference names already being followed without descending into a sub-value.
 type frame struct {
-	path    string
-	binders map[string]plan.Representation
-	active  map[string]bool
+	path   string
+	active map[string]bool
 }
 
 func newFrame() frame {
-	return frame{binders: map[string]plan.Representation{}, active: map[string]bool{}}
+	return frame{active: map[string]bool{}}
 }
 
 // descend returns the frame for the sub-value at token: the path grows by one JSON
 // Pointer reference token, and reference following starts over, since following a
 // reference across an instance descent is ordinary recursion, not a cycle.
 func (f frame) descend(token string) frame {
-	return frame{path: pointerAppend(f.path, token), binders: f.binders, active: map[string]bool{}}
+	return frame{path: pointerAppend(f.path, token), active: map[string]bool{}}
 }
 
 // here is [frame.descend] for a sub-plan run against the same instance node, as `not`
 // and `propertyNames` are: the location does not move, but reference following starts
 // over just the same.
 func (f frame) here() frame {
-	return frame{path: f.path, binders: f.binders, active: map[string]bool{}}
-}
-
-func (f frame) bind(name string, body plan.Representation) frame {
-	binders := make(map[string]plan.Representation, len(f.binders)+1)
-	for k, v := range f.binders {
-		binders[k] = v
-	}
-	binders[name] = body
-	return frame{path: f.path, binders: binders, active: f.active}
+	return frame{path: f.path, active: map[string]bool{}}
 }
 
 func (f frame) follow(name string) frame {
@@ -172,43 +141,59 @@ func (f frame) follow(name string) frame {
 		active[k] = true
 	}
 	active[name] = true
-	return frame{path: f.path, binders: f.binders, active: active}
+	return frame{path: f.path, active: active}
 }
 
-// plan interprets one CompilationPlan: the representation must be able to hold the
-// value, the residual validation must pass, and the dispatch must select a branch that
-// accepts it (design §4).
+// checks is the part of a plan the interpreter is allowed to see.
 //
-// Resolution is not consulted here: only the root plan carries a populated graph
+// Design §4.1 makes the validation plan and the dispatch the whole of what a plan
+// accepts; the representation is where a value is stored, not what is admitted. That is
+// enforced here by construction rather than by discipline: the evaluator below is handed
+// a checks, so a representation is not something it declines to read, it is something it
+// never holds. [checksOf] is the one place a [plan.CompilationPlan] is narrowed to one.
+type checks struct {
+	validation plan.ValidationPlan
+	dispatch   plan.DispatchPlan
+}
+
+// checksOf drops a plan to the part that decides acceptance.
+//
+// Resolution is not carried: only the root plan has a populated graph
 // (docs/integration.md §5), and [interp.defs] already holds it.
-func (in *interp) plan(p plan.CompilationPlan, value any, f frame) (Verdict, error) {
-	var (
-		representation plan.Representation
-		validation     plan.ValidationPlan
-		dispatch       plan.DispatchPlan
-	)
-	for c := range planwalk.Children(planwalk.PlanNode(p)) {
-		switch c.Edge.Kind {
+func checksOf(p plan.CompilationPlan) (checks, error) {
+	var c checks
+	for child := range planwalk.Children(planwalk.PlanNode(p)) {
+		switch child.Edge.Kind {
 		case planwalk.EdgeRepresentation:
-			representation = c.Representation
+			// Storage, not acceptance.
 		case planwalk.EdgeValidation:
-			validation = c.Validation
+			c.validation = child.Validation
 		case planwalk.EdgeDispatch:
-			dispatch = c.Dispatch
+			c.dispatch = child.Dispatch
 		default:
-			return Verdict{}, internalf("unhandled plan child edge %s", c.Edge.Kind)
+			return checks{}, internalf("unhandled plan child edge %s", child.Edge.Kind)
 		}
 	}
+	return c, nil
+}
 
-	v, err := in.representation(representation, value, f)
+// plan narrows p and interprets it.
+func (in *interp) plan(p plan.CompilationPlan, value any, f frame) (Verdict, error) {
+	c, err := checksOf(p)
+	if err != nil {
+		return Verdict{}, err
+	}
+	return in.accept(c, value, f)
+}
+
+// accept decides one instance: the checks must pass, and the dispatch must select a
+// branch that accepts it (design §4.1).
+func (in *interp) accept(c checks, value any, f frame) (Verdict, error) {
+	v, err := in.validation(c.validation, value, f)
 	if err != nil || !v.Accepted {
 		return v, err
 	}
-	v, err = in.validation(validation, value, f)
-	if err != nil || !v.Accepted {
-		return v, err
-	}
-	return in.dispatch(dispatch, value, f)
+	return in.dispatch(c.dispatch, value, f)
 }
 
 func (in *interp) approximate(what string) {

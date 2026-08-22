@@ -10,75 +10,74 @@ import (
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
-// TestNilRepresentationSlots pins what a nil Representation means in each slot.
-// plan/representation.go documents exactly two of them — ObjectRepresentation.Additional
-// and ArrayRepresentation.Rest — and those keep their documented meaning. Everywhere
-// else a nil is malformed plan data: planwalk.Children drops such a slot, and dropping
-// it silently would narrow the accepted set, the one direction design §24 forbids. So it
-// is an InternalError, which fails loudly instead of moving a verdict.
-func TestNilRepresentationSlots(t *testing.T) {
-	strRep := plan.PrimitiveRepresentation{Kind: plan.KindString}
+// TestUnfilledSlots pins what an unpopulated slot means in each structural predicate.
+//
+// Two slots express absence deliberately, and both are pointers:
+// [plan.ObjectStructurePredicate.Additional] nil means anything is admitted, and
+// [plan.ArrayStructurePredicate.Rest] nil means nothing past the prefix is. Everywhere
+// else a slot the planner never filled in would evaluate as a zero plan, which accepts
+// every instance — a silent widening where design §24 wants a loud failure. So it is an
+// [planterp.InternalError], which cannot be mistaken for a verdict.
+func TestUnfilledSlots(t *testing.T) {
+	str := leaf(plan.PrimitiveRepresentation{Kind: plan.KindString})
+	anything := leaf(plan.AnyRepresentation{})
 
 	tests := []struct {
 		name string
-		rep  plan.Representation
-		// internal is the expected InternalError, empty when the nil is documented and
-		// the plan still reaches a verdict.
+		pred plan.PredicateExpr
+		// internal is the expected InternalError, empty when the absence is deliberate
+		// and the plan still reaches a verdict.
 		internal string
 		value    any
 		accept   bool
 	}{
 		{
-			name: "documented nil Additional cannot reject",
-			rep: plan.ObjectRepresentation{
-				Fields: []plan.FieldRepresentation{
-					{Name: "a", Plan: plan.CompilationPlan{Representation: strRep}, Presence: plan.PresenceOptional},
-				},
-			},
+			name: "a nil Additional cannot reject",
+			pred: plan.ObjectStructurePredicate{Properties: []plan.PropertyCheck{
+				{Name: "a", Plan: str, Presence: plan.PresenceOptional},
+			}},
 			value:  map[string]any{"b": 1.0},
 			accept: true,
 		},
 		{
-			name:   "documented nil Rest rejects items past the prefix",
-			rep:    plan.ArrayRepresentation{Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: strRep}}}},
+			name:   "a nil Rest rejects items past the prefix",
+			pred:   plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{str}},
 			value:  []any{"a", "b"},
 			accept: false,
 		},
 		{
-			name:     "nil union alternative",
-			rep:      plan.UnionRepresentation{Alternatives: []plan.Representation{strRep, nil}},
-			value:    1.0,
-			internal: "planterp: union alternative 1 at the instance root has no representation",
-		},
-		{
-			name: "nil field representation",
-			rep: plan.ObjectRepresentation{
-				Fields:     []plan.FieldRepresentation{{Name: "a", Presence: plan.PresenceRequired}},
-				Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
+			name: "an unfilled property plan",
+			pred: plan.ObjectStructurePredicate{
+				Properties: []plan.PropertyCheck{{Name: "a", Presence: plan.PresenceRequired}},
+				Additional: &anything,
 			},
 			value:    map[string]any{},
-			internal: `planterp: field "a" at the instance root has no representation`,
+			internal: `planterp: property check "a" at the instance root has no plan`,
 		},
 		{
-			name: "nil pattern rule representation",
-			rep: plan.ObjectRepresentation{
-				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^a"}},
-				Additional:   &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
+			name: "an unfilled pattern plan",
+			pred: plan.ObjectStructurePredicate{
+				Patterns:   []plan.PatternCheck{{Pattern: "^a"}},
+				Additional: &anything,
 			},
 			value:    map[string]any{"ab": 1.0},
-			internal: `planterp: pattern rule 0 ("^a") at the instance root has no representation`,
+			internal: `planterp: pattern check 0 ("^a") at the instance root has no plan`,
 		},
 		{
-			name:     "nil prefix item representation",
-			rep:      plan.ArrayRepresentation{Prefix: []plan.ItemRepresentation{{}}},
+			name:     "an unfilled prefix plan",
+			pred:     plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{{}}},
 			value:    []any{"a"},
-			internal: "planterp: prefix item 0 at the instance root has no representation",
+			internal: "planterp: prefix check 0 at the instance root has no plan",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v, err := planterp.Interpret(plan.CompilationPlan{Representation: tt.rep}, tt.value)
+			guard := plan.SetObject
+			if _, isArray := tt.pred.(plan.ArrayStructurePredicate); isArray {
+				guard = plan.SetArray
+			}
+			v, err := planterp.Interpret(checking(tt.pred, guard), tt.value)
 			if tt.internal == "" {
 				require.NoError(t, err)
 				require.Equal(t, tt.accept, v.Accepted)
@@ -97,17 +96,17 @@ func TestNilRepresentationSlots(t *testing.T) {
 	}
 }
 
-// TestNilSlotLocationIsReported keeps the instance location on a malformed slot: one
+// TestUnfilledSlotLocationIsReported keeps the instance location on a malformed slot: one
 // plan node is reached once per sub-value, so the path is what makes it findable.
-func TestNilSlotLocationIsReported(t *testing.T) {
-	p := plan.CompilationPlan{Representation: plan.ArrayRepresentation{
-		Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{
-			Alternatives: []plan.Representation{nil},
-		}}},
-	}}
-	_, err := planterp.Interpret(p, []any{"a", "b"})
+func TestUnfilledSlotLocationIsReported(t *testing.T) {
+	inner := checking(plan.ObjectStructurePredicate{
+		Properties: []plan.PropertyCheck{{Name: "a", Presence: plan.PresenceRequired}},
+	}, plan.SetObject)
+	p := checking(plan.ArrayStructurePredicate{Rest: &inner}, plan.SetArray)
+
+	_, err := planterp.Interpret(p, []any{map[string]any{}})
 
 	var internal *planterp.InternalError
 	require.ErrorAs(t, err, &internal)
-	require.Equal(t, "planterp: union alternative 0 at /0 has no representation", internal.Error())
+	require.Equal(t, `planterp: property check "a" at /0 has no plan`, internal.Error())
 }

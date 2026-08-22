@@ -18,26 +18,24 @@ func nestedRejectionPlan() plan.CompilationPlan {
 		Fields: []plan.FieldRepresentation{
 			{
 				Name:     "name",
-				Plan:     plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
+				Plan:     leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
 				Presence: plan.PresenceRequired,
 			},
 		},
-		Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
+		Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
 	}
-	branch := plan.CompilationPlan{
-		Representation: plan.ObjectRepresentation{
-			Fields: []plan.FieldRepresentation{
-				{
-					Name: "items",
-					Plan: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
-						Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: element}},
-					}},
-					Presence: plan.PresenceRequired,
-				},
+	branch := leaf(plan.ObjectRepresentation{
+		Fields: []plan.FieldRepresentation{
+			{
+				Name: "items",
+				Plan: leaf(plan.ArrayRepresentation{
+					Rest: plan.ItemRepresentation{Plan: leaf(element)},
+				}),
+				Presence: plan.PresenceRequired,
 			},
-			Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
 		},
-	}
+		Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
+	})
 	return plan.CompilationPlan{Dispatch: plan.PredicateCountDispatch{
 		Branches: []plan.CompilationPlan{branch},
 		Minimum:  1,
@@ -59,9 +57,9 @@ func TestNestedValidateErrorRenders(t *testing.T) {
 	require.False(t, v.Accepted)
 	require.Equal(t, "predicate-count dispatch", v.Reason.Constraint)
 	require.Equal(t, "/items/2/name", v.Reason.Leaf().Path)
-	require.Equal(t, "primitive", v.Reason.Leaf().Constraint)
+	require.Equal(t, "type", v.Reason.Leaf().Constraint)
 
-	const want = `/items/2/name: primitive: value is number, representation is string
+	const want = `/items/2/name: type: value is number, schema asserts string
   via: /items/2: field: "name"
   via: /items: array item: 2
   via: field: "items"
@@ -104,10 +102,10 @@ func TestErrorKindsAreDiscriminated(t *testing.T) {
 	t.Run("InternalError", func(t *testing.T) {
 		// plan.Representation's method set is unexported, so no test outside package
 		// plan can add a variant; an out-of-range enum reaches the same defaults.
-		broken := plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{
+		broken := leaf(plan.PrimitiveRepresentation{
 			Kind:    plan.KindNumber,
 			Numeric: plan.NumericDomain(99),
-		}}
+		})
 		_, err := planterp.Interpret(broken, 1.0)
 
 		var internal *planterp.InternalError
@@ -119,9 +117,7 @@ func TestErrorKindsAreDiscriminated(t *testing.T) {
 	})
 
 	t.Run("InternalErrorFromUnresolvableReference", func(t *testing.T) {
-		_, err := planterp.Interpret(plan.CompilationPlan{
-			Representation: plan.ReferenceRepresentation{Name: "#/$defs/missing"},
-		}, 1.0)
+		_, err := planterp.Interpret(leaf(plan.ReferenceRepresentation{Name: "#/$defs/missing"}), 1.0)
 
 		var internal *planterp.InternalError
 		require.ErrorAs(t, err, &internal)
@@ -132,11 +128,11 @@ func TestErrorKindsAreDiscriminated(t *testing.T) {
 // TestInvalidValueErrorCarriesLocation keeps the offending value's position, so a bad
 // fixture points at the sub-value that is wrong rather than at the whole document.
 func TestInvalidValueErrorCarriesLocation(t *testing.T) {
-	p := plan.CompilationPlan{Representation: plan.ArrayRepresentation{
+	p := leaf(plan.ArrayRepresentation{
 		Rest: plan.ItemRepresentation{
-			Plan: plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
+			Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
 		},
-	}}
+	})
 	_, err := planterp.Interpret(p, []any{"ok", int32(1)})
 
 	var invalid *planterp.InvalidValueError
@@ -145,16 +141,16 @@ func TestInvalidValueErrorCarriesLocation(t *testing.T) {
 }
 
 func TestPointerTokensAreEscaped(t *testing.T) {
-	p := plan.CompilationPlan{Representation: plan.ObjectRepresentation{
+	p := leaf(plan.ObjectRepresentation{
 		Fields: []plan.FieldRepresentation{
 			{
 				Name:     "a/b~c",
-				Plan:     plan.CompilationPlan{Representation: plan.PrimitiveRepresentation{Kind: plan.KindString}},
+				Plan:     leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
 				Presence: plan.PresenceRequired,
 			},
 		},
-		Additional: &plan.CompilationPlan{Representation: plan.AnyRepresentation{}},
-	}}
+		Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
+	})
 	v, err := planterp.Interpret(p, map[string]any{"a/b~c": 1.0})
 	require.NoError(t, err)
 	require.False(t, v.Accepted)

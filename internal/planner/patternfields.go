@@ -35,6 +35,7 @@ func (b *builder) constraintsFor(name string, os ir.ObjectShape, path string) []
 		}
 	}
 	for _, pp := range os.PatternProperties {
+		b.requireECMARegex(pp.Pattern, path, "patternProperties")
 		switch res, err := ecmaregex.MatchString(pp.Pattern, name); res {
 		case ecmaregex.Match:
 			operands = append(operands, pp.Schema)

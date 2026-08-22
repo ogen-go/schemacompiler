@@ -49,6 +49,8 @@ type Result struct {
 	Capability plan.CapabilityLevel
 	// Exactness reports how faithfully the representation reproduces the schema.
 	Exactness plan.Exactness
+	// Requirements is what the plan asks of whatever lowers it (design §25).
+	Requirements plan.Requirements
 	// Diagnostics explain capability or exactness downgrades.
 	Diagnostics []plan.Diagnostic
 }
@@ -125,9 +127,10 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	diags = append(diags, invalidKeywordDiagnostics(schema.InvalidKeyword)...)
 
 	return &Result{
-		Plan:        root.Plan,
-		Capability:  capLevel,
-		Exactness:   exactnessFor(capLevel, maxExactness(root.Exactness, defs.exactness)),
-		Diagnostics: dedupeDiagnostics(diags),
+		Plan:         root.Plan,
+		Capability:   capLevel,
+		Exactness:    exactnessFor(capLevel, maxExactness(root.Exactness, defs.exactness)),
+		Requirements: sortRequirements(mergeRequirements(root.Requirements, defs.reqs)),
+		Diagnostics:  dedupeDiagnostics(diags),
 	}
 }

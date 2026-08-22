@@ -41,8 +41,8 @@ func TestBuild_ShapeWithoutTypeIsKindGuarded(t *testing.T) {
 
 			require.IsType(t, plan.AnyRepresentation{}, got.Representation,
 				"a shape keyword must not assert its own type")
-			require.Len(t, got.Validation.Predicates, 1)
-			gp := got.Validation.Predicates[0]
+			require.Len(t, checks(got.Validation), 1)
+			gp := checks(got.Validation)[0]
 			require.Equal(t, tt.guard, gp.Applicability)
 			require.IsType(t, plan.ShapePredicate{}, gp.Expression)
 		})
@@ -69,8 +69,8 @@ func TestBuild_ShapeAgreesWithTypedSpelling(t *testing.T) {
 				tt.shape,
 			}}, nil).Plan
 
-			require.Len(t, untyped.Validation.Predicates, 1)
-			shape, ok := untyped.Validation.Predicates[0].Expression.(plan.ShapePredicate)
+			require.Len(t, checks(untyped.Validation), 1)
+			shape, ok := checks(untyped.Validation)[0].Expression.(plan.ShapePredicate)
 			require.True(t, ok)
 			require.Equal(t, typed, shape.Schema)
 		})
@@ -98,12 +98,12 @@ func TestBuild_PatternPropertiesIntersectDeclaredFields(t *testing.T) {
 	obj, ok := got.Representation.(plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", got.Representation)
 	require.Equal(t,
-		plan.ValidationPlan{Predicates: []plan.GuardedPredicate{{
-			Applicability: plan.SetArray,
-			Expression:    plan.MinItemsPredicate{Value: 2},
-		}}},
+		plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+			{Applicability: plan.SetArray, Assert: true},
+			{Applicability: plan.SetArray, Expression: plan.MinItemsPredicate{Value: 2}},
+		}},
 		plannerField(t, obj, "foo").Plan.Validation,
 		"a matching pattern must be intersected into the declared field")
-	require.True(t, plannerField(t, obj, "bar").Plan.Validation.Empty(),
+	require.Empty(t, checks(plannerField(t, obj, "bar").Plan.Validation),
 		"a non-matching pattern must not reach the field")
 }

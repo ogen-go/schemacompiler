@@ -34,7 +34,7 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 	t.Helper()
 
 	n := 0
-	for _, gp := range p.Validation.Predicates {
+	for _, gp := range checks(p.Validation) {
 		if _, ok := gp.Expression.(plan.NegationPredicate); ok {
 			n++
 		}

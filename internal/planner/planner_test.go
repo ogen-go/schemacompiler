@@ -34,7 +34,11 @@ func TestBuild_DirectGoType(t *testing.T) {
 	got := planner.Build(e, nil)
 
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
-	require.True(t, got.Plan.Validation.Empty())
+	// The plan still carries the kind assertion §4.1 requires; DirectGoType now means the
+	// representation discharges every check, not that there are none (§22, issue #115).
+	require.Equal(t, []plan.GuardedPredicate{{Applicability: plan.SetString, Assert: true}},
+		got.Plan.Validation.Predicates)
+	require.Empty(t, checks(got.Plan.Validation))
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
 	require.Equal(t, plan.ExactPureRepresentation, got.Exactness)
 	require.Empty(t, got.Diagnostics)
@@ -52,9 +56,9 @@ func TestBuild_GoTypeWithValidation(t *testing.T) {
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
 	require.Equal(t, plan.GoTypeWithValidation, got.Plan.Capability)
 	require.Equal(t, plan.ExactWithValidation, got.Exactness)
-	require.Len(t, got.Plan.Validation.Predicates, 1)
-	require.Equal(t, plan.MinLengthPredicate{Value: 3}, got.Plan.Validation.Predicates[0].Expression)
-	require.Equal(t, plan.SetString, got.Plan.Validation.Predicates[0].Applicability)
+	require.Len(t, checks(got.Plan.Validation), 1)
+	require.Equal(t, plan.MinLengthPredicate{Value: 3}, checks(got.Plan.Validation)[0].Expression)
+	require.Equal(t, plan.SetString, checks(got.Plan.Validation)[0].Applicability)
 }
 
 func TestBuild_BarePredicateWidensToAny(t *testing.T) {
@@ -601,8 +605,8 @@ func TestBuild_ContainsCount_PredicateDispatchWarning(t *testing.T) {
 		}
 	}
 	require.True(t, found)
-	require.Len(t, got.Plan.Validation.Predicates, 1)
-	cc, ok := got.Plan.Validation.Predicates[0].Expression.(plan.ContainsCountPredicate)
+	require.Len(t, checks(got.Plan.Validation), 1)
+	cc, ok := checks(got.Plan.Validation)[0].Expression.(plan.ContainsCountPredicate)
 	require.True(t, ok)
 	require.Equal(t, uint64(2), cc.Min)
 }
@@ -649,4 +653,17 @@ func TestBuildAt_DiagnosticPointerEscaping(t *testing.T) {
 
 	require.NotEmpty(t, got.Diagnostics)
 	require.Equal(t, "/$defs/A/properties/a~1b", got.Diagnostics[0].Pointer)
+}
+
+// checks is the validation plan's real runtime checks: everything except the bare kind
+// assertions design §4.1 requires every plan to carry (issue #115). Tests about what a
+// keyword lowers to want the checks; the assertion is pinned separately.
+func checks(vp plan.ValidationPlan) []plan.GuardedPredicate {
+	var out []plan.GuardedPredicate
+	for _, gp := range vp.Predicates {
+		if gp.Expression != nil {
+			out = append(out, gp)
+		}
+	}
+	return out
 }

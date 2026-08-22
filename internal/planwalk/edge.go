@@ -138,4 +138,7 @@ type Edge struct {
 	// Applicability is the kind guard the predicate applies under
 	// (EdgeGuardedPredicate).
 	Applicability plan.KindSet
+	// Assert distinguishes an assertion from a guard (EdgeGuardedPredicate): an
+	// assertion rejects an instance outside Applicability, a guard excuses it.
+	Assert bool
 }

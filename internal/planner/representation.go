@@ -118,7 +118,20 @@ func (b *builder) buildLeaf(kind plan.JSONKind, c components, path string) plan.
 	default:
 		p = b.buildScalar(kind, c, path)
 	}
-	return pinLiteral(p, kind, c.literal)
+	return assertKind(pinLiteral(p, kind, c.literal), kind)
+}
+
+// assertKind states the decided kind in the validation plan, where design §4.1 says
+// acceptance lives. The representation says the same thing, but as storage: a consumer
+// that validates from the plan's checks alone must still reject an instance of the wrong
+// kind, and before this the only thing rejecting it was the Go shape.
+//
+// It is prepended so the kind is checked before the predicates guarded on it, which makes
+// a rejection report the type failure rather than a vacuously-passing bound.
+func assertKind(p plan.CompilationPlan, kind plan.JSONKind) plan.CompilationPlan {
+	assertion := plan.GuardedPredicate{Applicability: kindBit(kind), Assert: true}
+	p.Validation.Predicates = append([]plan.GuardedPredicate{assertion}, p.Validation.Predicates...)
+	return p
 }
 
 // pinLiteral enforces a sibling `const`/`enum` literal that survived alongside a `type`

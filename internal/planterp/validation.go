@@ -73,6 +73,12 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 	case plan.MaximumPredicate:
 		return numericBound(f, value, e.Value, e.Exclusive, false)
 
+	case plan.ObjectStructurePredicate:
+		return in.objectStructure(e, value, f)
+
+	case plan.ArrayStructurePredicate:
+		return in.arrayStructure(e, value, f)
+
 	case plan.NumericDomainPredicate:
 		integral, err := isInteger(value)
 		if err != nil {

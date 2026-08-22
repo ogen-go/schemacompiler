@@ -27,7 +27,7 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 		return plan.Unsupported
 	}
 
-	if !dischargedByRepresentation(rep, val) {
+	if len(plan.ResidualChecks(rep, val)) > 0 {
 		return plan.GoTypeWithValidation
 	}
 
@@ -39,36 +39,6 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 	default:
 		return plan.Unsupported
 	}
-}
-
-// dischargedByRepresentation reports whether every check in val is already implied by rep.
-//
-// Under design §4.1 the validation plan is total, so it is never empty once a `type` is
-// stated and the old "no residual validation" test would make [plan.DirectGoType]
-// unreachable. §22 amends it: DirectGoType means every check is discharged by the chosen
-// representation. Two checks qualify, and both restate what the representation was built
-// from rather than adding to it:
-//
-//   - a bare kind assertion, against the kind the representation holds;
-//   - a [plan.NumericDomainPredicate] matching the representation's own
-//     [plan.NumericDomain], so `{"type":"integer"}` still lowers to an integer type with
-//     nothing left to check at runtime.
-//
-// Anything else is a real runtime check.
-func dischargedByRepresentation(rep plan.Representation, val plan.ValidationPlan) bool {
-	prim, isPrim := rep.(plan.PrimitiveRepresentation)
-	for _, p := range val.Predicates {
-		switch e := p.Expression.(type) {
-		case nil:
-		case plan.NumericDomainPredicate:
-			if !isPrim || prim.Numeric != e.Domain {
-				return false
-			}
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 // exactnessOf derives the top-level Exactness from a finished plan's capability and
@@ -107,7 +77,7 @@ func exactnessOf(p plan.CompilationPlan, g gaps) plan.Exactness {
 	if g.asserted {
 		return plan.SoundOverApproximation
 	}
-	if dischargedByRepresentation(p.Representation, p.Validation) && p.Capability == plan.DirectGoType {
+	if len(plan.ResidualChecks(p.Representation, p.Validation)) == 0 && p.Capability == plan.DirectGoType {
 		return plan.ExactPureRepresentation
 	}
 	return plan.ExactWithValidation

@@ -104,9 +104,9 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 
 			sub := tt.sub(t, got.Plan)
 			require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, sub.Representation)
-			require.Len(t, checks(sub), 1)
-			require.Equal(t, plan.MinLengthPredicate{Value: 1}, checks(sub)[0].Expression)
-			require.Equal(t, plan.SetString, checks(sub)[0].Applicability)
+			require.Len(t, sub.ResidualChecks(), 1)
+			require.Equal(t, plan.MinLengthPredicate{Value: 1}, sub.ResidualChecks()[0].Expression)
+			require.Equal(t, plan.SetString, sub.ResidualChecks()[0].Applicability)
 		})
 	}
 }

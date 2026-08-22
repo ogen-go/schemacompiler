@@ -60,7 +60,7 @@ func TestFormatApplicability(t *testing.T) {
 							Kind:   k.kind,
 							Format: name,
 						}, res.Plan.Representation, "format must not reach an inapplicable kind")
-						require.Empty(t, checks(res.Plan))
+						require.Empty(t, res.Plan.ResidualChecks())
 						return
 					}
 
@@ -69,11 +69,11 @@ func TestFormatApplicability(t *testing.T) {
 						Numeric: group.numericKind,
 						Format:  name,
 					}, res.Plan.Representation)
-					require.Len(t, checks(res.Plan), 1)
+					require.Len(t, res.Plan.ResidualChecks(), 1)
 					require.Equal(t, plan.GuardedPredicate{
 						Applicability: kindSet(k.kind),
 						Expression:    plan.FormatPredicate{Format: name},
-					}, checks(res.Plan)[0])
+					}, res.Plan.ResidualChecks()[0])
 				})
 			}
 		}
@@ -110,11 +110,11 @@ func TestFormatWithoutType(t *testing.T) {
 			res := compileString(t, `{"format":"`+tt.format+`"}`)
 
 			require.Equal(t, plan.AnyRepresentation{}, res.Plan.Representation)
-			require.Len(t, checks(res.Plan), 1)
+			require.Len(t, res.Plan.ResidualChecks(), 1)
 			require.Equal(t, plan.GuardedPredicate{
 				Applicability: tt.guard,
 				Expression:    plan.FormatPredicate{Format: tt.format},
-			}, checks(res.Plan)[0])
+			}, res.Plan.ResidualChecks()[0])
 		})
 	}
 }
@@ -131,10 +131,10 @@ func TestFormatOnTypeArray(t *testing.T) {
 			require.Equal(t, []plan.GuardedPredicate{{
 				Applicability: plan.SetString,
 				Expression:    plan.FormatPredicate{Format: "uuid"},
-			}}, checks(c))
+			}}, c.ResidualChecks())
 			continue
 		}
-		require.Empty(t, checks(c), "format is vacuous for kind %d", kind)
+		require.Empty(t, c.ResidualChecks(), "format is vacuous for kind %d", kind)
 	}
 
 	union, ok := res.Plan.Representation.(plan.UnionRepresentation)
@@ -159,7 +159,7 @@ func TestFormatAllOfOrderIndependent(t *testing.T) {
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, forward.Plan.Representation)
 
 	for _, res := range []*schemacompiler.Result{forward, reverse} {
-		require.Len(t, checks(res.Plan), 2, "both formats stay in the validation plan")
+		require.Len(t, res.Plan.ResidualChecks(), 2, "both formats stay in the validation plan")
 		require.Len(t, res.Diagnostics, 1)
 		require.Equal(t, plan.SeverityInfo, res.Diagnostics[0].Severity)
 		require.NotEmpty(t, res.Diagnostics[0].Pointer)
@@ -176,7 +176,7 @@ func TestFormatAllOfDisjointKinds(t *testing.T) {
 
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindNumber, Format: "int32"},
 		res.Plan.Representation)
-	require.Len(t, checks(res.Plan), 1)
+	require.Len(t, res.Plan.ResidualChecks(), 1)
 	require.Empty(t, res.Diagnostics)
 }
 
@@ -188,26 +188,4 @@ func TestFormatSameNameTwice(t *testing.T) {
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString, Format: "uuid"},
 		res.Plan.Representation)
 	require.Empty(t, res.Diagnostics)
-}
-
-// checks is the plan's real runtime work: every predicate NOT already discharged by the
-// chosen representation. That is the same test [plan.DirectGoType] is decided by
-// (design §22), so it drops the bare kind assertions design §4.1 requires every plan to
-// carry, and a numeric-domain check the representation's own domain already implies
-// (issue #115). Tests about what a keyword lowers to want what is left.
-func checks(p plan.CompilationPlan) []plan.GuardedPredicate {
-	prim, isPrim := p.Representation.(plan.PrimitiveRepresentation)
-	var out []plan.GuardedPredicate
-	for _, gp := range p.Validation.Predicates {
-		switch e := gp.Expression.(type) {
-		case nil:
-			continue
-		case plan.NumericDomainPredicate:
-			if isPrim && prim.Numeric == e.Domain {
-				continue
-			}
-		}
-		out = append(out, gp)
-	}
-	return out
 }

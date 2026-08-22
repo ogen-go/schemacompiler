@@ -18,9 +18,15 @@ func anyPlan() plan.CompilationPlan {
 func (b *builder) neverPlanAt(_ string) plan.CompilationPlan {
 	return plan.CompilationPlan{
 		Representation: plan.NeverRepresentation{},
-		Dispatch:       plan.NoDispatch{},
-		Resolution:     plan.FullyResolved{},
-		Capability:     plan.DirectGoType,
+		// An assertion over the empty kind set: no instance's kind is in it, so every
+		// instance is rejected. Design §4.1 puts that in the validation plan rather than
+		// leaving it to a Go type nothing can be stored in.
+		Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+			{Applicability: 0, Assert: true},
+		}},
+		Dispatch:   plan.NoDispatch{},
+		Resolution: plan.FullyResolved{},
+		Capability: plan.DirectGoType,
 	}
 }
 

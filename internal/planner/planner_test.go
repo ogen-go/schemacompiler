@@ -38,7 +38,7 @@ func TestBuild_DirectGoType(t *testing.T) {
 	// representation discharges every check, not that there are none (§22, issue #115).
 	require.Equal(t, []plan.GuardedPredicate{{Applicability: plan.SetString, Assert: true}},
 		got.Plan.Validation.Predicates)
-	require.Empty(t, checks(got.Plan))
+	require.Empty(t, got.Plan.ResidualChecks())
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
 	require.Equal(t, plan.ExactPureRepresentation, got.Exactness)
 	require.Empty(t, got.Diagnostics)
@@ -56,9 +56,9 @@ func TestBuild_GoTypeWithValidation(t *testing.T) {
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
 	require.Equal(t, plan.GoTypeWithValidation, got.Plan.Capability)
 	require.Equal(t, plan.ExactWithValidation, got.Exactness)
-	require.Len(t, checks(got.Plan), 1)
-	require.Equal(t, plan.MinLengthPredicate{Value: 3}, checks(got.Plan)[0].Expression)
-	require.Equal(t, plan.SetString, checks(got.Plan)[0].Applicability)
+	require.Len(t, got.Plan.ResidualChecks(), 1)
+	require.Equal(t, plan.MinLengthPredicate{Value: 3}, got.Plan.ResidualChecks()[0].Expression)
+	require.Equal(t, plan.SetString, got.Plan.ResidualChecks()[0].Applicability)
 }
 
 func TestBuild_BarePredicateWidensToAny(t *testing.T) {
@@ -605,8 +605,8 @@ func TestBuild_ContainsCount_PredicateDispatchWarning(t *testing.T) {
 		}
 	}
 	require.True(t, found)
-	require.Len(t, checks(got.Plan), 1)
-	cc, ok := checks(got.Plan)[0].Expression.(plan.ContainsCountPredicate)
+	require.Len(t, got.Plan.ResidualChecks(), 1)
+	cc, ok := got.Plan.ResidualChecks()[0].Expression.(plan.ContainsCountPredicate)
 	require.True(t, ok)
 	require.Equal(t, uint64(2), cc.Min)
 }
@@ -655,28 +655,6 @@ func TestBuildAt_DiagnosticPointerEscaping(t *testing.T) {
 	require.Equal(t, "/$defs/A/properties/a~1b", got.Diagnostics[0].Pointer)
 }
 
-// checks is the plan's real runtime work: every predicate NOT already discharged by the
-// chosen representation. That is the same test [plan.DirectGoType] is decided by
-// (design §22), so it drops the bare kind assertions design §4.1 requires every plan to
-// carry, and a numeric-domain check the representation's own domain already implies
-// (issue #115). Tests about what a keyword lowers to want what is left.
-func checks(p plan.CompilationPlan) []plan.GuardedPredicate {
-	prim, isPrim := p.Representation.(plan.PrimitiveRepresentation)
-	var out []plan.GuardedPredicate
-	for _, gp := range p.Validation.Predicates {
-		switch e := gp.Expression.(type) {
-		case nil:
-			continue
-		case plan.NumericDomainPredicate:
-			if isPrim && prim.Numeric == e.Domain {
-				continue
-			}
-		}
-		out = append(out, gp)
-	}
-	return out
-}
-
 // TestBuild_IntegerCarriesItsDomain pins that `type: "integer"` states both of its axes
 // in the validation plan — the kind and the numeric domain (design §6, issue #115) —
 // while staying DirectGoType, since the representation's own domain discharges the
@@ -691,7 +669,7 @@ func TestBuild_IntegerCarriesItsDomain(t *testing.T) {
 		{Applicability: plan.SetNumber, Assert: true},
 		{Applicability: plan.SetNumber, Expression: plan.NumericDomainPredicate{Domain: plan.IntegerOnly}},
 	}, got.Plan.Validation.Predicates)
-	require.Empty(t, checks(got.Plan))
+	require.Empty(t, got.Plan.ResidualChecks())
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
 	require.Equal(t, plan.ExactPureRepresentation, got.Exactness)
 }

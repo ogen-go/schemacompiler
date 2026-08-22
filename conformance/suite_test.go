@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -46,6 +48,10 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 	files := suiteFiles(t)
 
 	dist := make(map[distKey]int)
+	reqs := map[string]int{
+		"RawEvaluation": 0, "UnboundedNumeric": 0, "JSONEquality": 0,
+		"ECMARegex": 0, "EvaluationTracking": 0,
+	}
 	var attempted, errored, panicked int
 	var errSamples []string
 	for _, f := range files {
@@ -89,6 +95,11 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 					return
 				}
 				dist[distKey{res.Capability, res.Exactness}]++
+				reqs["RawEvaluation"] += len(res.Requirements.RawEvaluation)
+				reqs["UnboundedNumeric"] += len(res.Requirements.UnboundedNumeric)
+				reqs["JSONEquality"] += len(res.Requirements.JSONEquality)
+				reqs["ECMARegex"] += len(res.Requirements.ECMARegex)
+				reqs["EvaluationTracking"] += len(res.Requirements.EvaluationTracking)
 			}()
 		}
 	}
@@ -101,9 +112,37 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 		}
 	}
 	logDistribution(t, dist)
+	reportRequirements(t, reqs)
+
+	// Every slot is populated by some suite schema. An empty one means the rule stopped
+	// firing, and a Requirements field that silently reports nothing is worse than no
+	// field at all: a consumer cannot tell "nothing to discharge" from "not implemented"
+	// (design §25).
+	for slot, n := range reqs {
+		require.NotZero(t, n, "no suite schema reports %s; the rule has stopped firing", slot)
+	}
 
 	// Hard guards: never panic, and the error rate must stay well under a ceiling so a
 	// broad regression (a change that breaks Compile on many schemas) still fails loudly.
 	require.Zero(t, panicked, "Compile must never panic on a suite schema")
 	require.Less(t, errored*5, attempted, "suite error rate exceeded 20%%; likely a regression, not a library gap")
+}
+
+// reportRequirements logs what the suite's schemas ask of a consumer (design §25), so the
+// numbers are visible rather than assumed.
+func reportRequirements(t *testing.T, reqs map[string]int) {
+	t.Helper()
+
+	slots := make([]string, 0, len(reqs))
+	for slot := range reqs {
+		slots = append(slots, slot)
+	}
+	sort.Strings(slots)
+
+	var b strings.Builder
+	b.WriteString("requirements reported over the suite:\n")
+	for _, slot := range slots {
+		fmt.Fprintf(&b, "  %-20s %d\n", slot, reqs[slot])
+	}
+	t.Log(b.String())
 }

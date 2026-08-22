@@ -31,6 +31,7 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 	case ir.MaxLengthDetail:
 		return mappedPredicate{Expr: plan.MaxLengthPredicate{Value: d.Value}}
 	case ir.PatternDetail:
+		b.requireECMARegex(d.Regex, path, "pattern")
 		return mappedPredicate{Expr: plan.PatternPredicate{Regex: d.Regex}}
 	case ir.FormatDetail:
 		return mappedPredicate{Expr: plan.FormatPredicate{Format: d.Format}}
@@ -49,6 +50,11 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 	case ir.MaxItemsDetail:
 		return mappedPredicate{Expr: plan.MaxItemsPredicate{Value: d.Value}}
 	case ir.UniqueItemsDetail:
+		// Distinctness is defined on JSON values, so it is decided before decoding or not
+		// at all: two JSON-distinct items that decode to the same Go value would make this
+		// reject an array the schema accepts (design §24.3).
+		b.require(&b.reqs.JSONEquality, path, "uniqueItems")
+		b.require(&b.reqs.RawEvaluation, path, "uniqueItems")
 		return mappedPredicate{Expr: plan.UniqueItemsPredicate{}}
 	case ir.ContainsDetail:
 		sub := b.build(d.Schema, path+"/contains")
@@ -68,8 +74,10 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 	case ir.RequiredDetail:
 		return mappedPredicate{Expr: plan.RequiredPredicate{Properties: d.Properties}}
 	case ir.MinPropertiesDetail:
+		b.require(&b.reqs.RawEvaluation, path, "minProperties counts undeclared properties")
 		return mappedPredicate{Expr: plan.MinPropertiesPredicate{Value: d.Value}}
 	case ir.MaxPropertiesDetail:
+		b.require(&b.reqs.RawEvaluation, path, "maxProperties counts undeclared properties")
 		return mappedPredicate{Expr: plan.MaxPropertiesPredicate{Value: d.Value}}
 	case ir.DependentRequiredDetail:
 		entries := make([]plan.DependentRequiredEntry, len(d.Entries))
@@ -78,6 +86,7 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 		}
 		return mappedPredicate{Expr: plan.DependentRequiredPredicate{Entries: entries}}
 	case ir.PropertyNamesDetail:
+		b.require(&b.reqs.RawEvaluation, path, "propertyNames sees undeclared property names")
 		sub := b.build(d.Schema, path+"/propertyNames")
 		return mappedPredicate{
 			Expr:       plan.PropertyNamesPredicate{Schema: sub},

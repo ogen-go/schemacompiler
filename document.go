@@ -1,6 +1,7 @@
 package schemacompiler
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/ogen-go/schemacompiler/internal/frontend"
@@ -39,6 +40,36 @@ type definitions struct {
 	plans     map[plan.SchemaID]plan.CompilationPlan
 	diags     []plan.Diagnostic
 	exactness plan.Exactness
+	reqs      plan.Requirements
+}
+
+// mergeRequirements unions two requirement sets. A document's demands on its consumer are
+// the demands of every schema in it: a backend has to satisfy all of them, not the root's
+// (design §25).
+func mergeRequirements(a, b plan.Requirements) plan.Requirements {
+	a.RawEvaluation = append(a.RawEvaluation, b.RawEvaluation...)
+	a.UnboundedNumeric = append(a.UnboundedNumeric, b.UnboundedNumeric...)
+	a.JSONEquality = append(a.JSONEquality, b.JSONEquality...)
+	a.ECMARegex = append(a.ECMARegex, b.ECMARegex...)
+	a.EvaluationTracking = append(a.EvaluationTracking, b.EvaluationTracking...)
+	return a
+}
+
+// sortRequirements orders every slot by pointer then detail, so the field is stable across
+// runs: definitions are compiled by ranging a map.
+func sortRequirements(r plan.Requirements) plan.Requirements {
+	for _, slot := range []*[]plan.Location{
+		&r.RawEvaluation, &r.UnboundedNumeric, &r.JSONEquality, &r.ECMARegex, &r.EvaluationTracking,
+	} {
+		sort.Slice(*slot, func(i, j int) bool {
+			a, b := (*slot)[i], (*slot)[j]
+			if a.Pointer != b.Pointer {
+				return a.Pointer < b.Pointer
+			}
+			return a.Detail < b.Detail
+		})
+	}
+	return r
 }
 
 // buildDefinitions compiles every static $ref target in the document into its own plan,
@@ -64,6 +95,7 @@ func buildDefinitionsExcept(reg *frontend.Registry, budget int, have map[plan.Sc
 		out.plans[plan.SchemaID(id)] = res.Plan
 		out.diags = append(out.diags, res.Diagnostics...)
 		out.exactness = maxExactness(out.exactness, res.Exactness)
+		out.reqs = mergeRequirements(out.reqs, res.Requirements)
 	}
 	return out
 }

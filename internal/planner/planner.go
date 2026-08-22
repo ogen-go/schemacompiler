@@ -19,9 +19,10 @@ import (
 // Result is the planner's output for one schema: the analyzed plan plus the
 // diagnostics collected while building it and the top-level exactness (design §25).
 type Result struct {
-	Plan        plan.CompilationPlan
-	Diagnostics []plan.Diagnostic
-	Exactness   plan.Exactness
+	Plan         plan.CompilationPlan
+	Diagnostics  []plan.Diagnostic
+	Requirements plan.Requirements
+	Exactness    plan.Exactness
 }
 
 // Origin locates the schema a Build call analyzes within its source document: the JSON
@@ -52,9 +53,10 @@ func BuildAt(e ir.Expr, reg *frontend.Registry, origin Origin) Result {
 	b.origin = origin
 	p := b.build(e, "")
 	return Result{
-		Plan:        p,
-		Diagnostics: b.diags,
-		Exactness:   exactnessOf(p, b.gaps),
+		Plan:         p,
+		Diagnostics:  b.diags,
+		Requirements: b.reqs,
+		Exactness:    exactnessOf(p, b.gaps),
 	}
 }
 
@@ -67,6 +69,7 @@ type builder struct {
 	refCache map[string]*frontend.Node
 	refTrust map[plan.SchemaID]bool
 	diags    []plan.Diagnostic
+	reqs     plan.Requirements
 	gaps
 }
 
@@ -103,6 +106,27 @@ func (b *builder) diag(path string, sev plan.Severity, msg string) {
 		Severity: sev,
 		Message:  msg,
 	})
+}
+
+// require records a demand the plan makes of whatever lowers it (design §25). The slot
+// is chosen by the caller, since the five are not interchangeable: each names a different
+// failure of §24.3's isomorphism condition and each has its own remedy.
+// A requirement is recorded once per location and detail. Several callers are reached
+// more than once for one keyword — [builder.constraintsFor] runs a `patternProperties`
+// pattern against every declared name — and a consumer reading the list wants the places,
+// not how often the planner passed through them.
+func (b *builder) require(slot *[]plan.Location, path, detail string) {
+	loc := plan.Location{
+		Pointer:  b.origin.Pointer + path,
+		Position: b.origin.Position,
+		Detail:   detail,
+	}
+	for _, seen := range *slot {
+		if seen == loc {
+			return
+		}
+	}
+	*slot = append(*slot, loc)
 }
 
 // build is the main recursive entry point (design §21): it dispatches on the concrete

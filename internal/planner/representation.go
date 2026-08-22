@@ -196,6 +196,9 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 		}
 	}
 
+	if kind == plan.KindNumber {
+		b.requireNumericBound(val, path)
+	}
 	rep := plan.Representation(plan.PrimitiveRepresentation{
 		Kind:    kind,
 		Numeric: c.numeric,
@@ -291,6 +294,10 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 			Capability:     plan.DirectGoType,
 		}
 	case isNever(merged.additional):
+		// additionalProperties: false rejects a name the object does not declare, and a
+		// struct has nowhere to put one: decoding discards it, and the check cannot fire
+		// against the decoded value (design §24.3).
+		b.require(&b.reqs.RawEvaluation, path, "additionalProperties: false rejects undeclared names")
 		never := b.neverPlanAt(path + "/additionalProperties") // additionalProperties: false
 		additional = &never
 	default:
@@ -314,6 +321,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 
 	if merged.unevaluated {
 		// v1 scope (docs/implementation.md): no evaluated-annotation tracking engine.
+		b.require(&b.reqs.EvaluationTracking, path, "unevaluatedProperties")
 		b.diag(path, plan.SeverityError, "unevaluatedProperties requires evaluated-property tracking")
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}
@@ -374,6 +382,7 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	}
 
 	if merged.unevaluated {
+		b.require(&b.reqs.EvaluationTracking, path, "unevaluatedItems")
 		b.diag(path, plan.SeverityError, "unevaluatedItems requires evaluated-item tracking")
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}

@@ -291,12 +291,8 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 			Capability:     plan.DirectGoType,
 		}
 	case isNever(merged.additional):
-		additional = &plan.CompilationPlan{ // additionalProperties: false
-			Representation: plan.NeverRepresentation{},
-			Dispatch:       plan.NoDispatch{},
-			Resolution:     plan.FullyResolved{},
-			Capability:     plan.DirectGoType,
-		}
+		never := b.neverPlanAt(path + "/additionalProperties") // additionalProperties: false
+		additional = &never
 	default:
 		sub := b.build(merged.additional, path+"/additionalProperties")
 		additional = &sub
@@ -323,6 +319,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 	}
 
 	rep := plan.ObjectRepresentation{Fields: fields, Additional: additional, PatternRules: patternRules}
+	val.Predicates = append([]plan.GuardedPredicate{objectStructure(rep)}, val.Predicates...)
 	var disp plan.DispatchPlan = plan.NoDispatch{}
 	res := mergeResolution(resParts...)
 	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))
@@ -382,6 +379,7 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	}
 
 	rep := plan.ArrayRepresentation{Prefix: prefix, Rest: rest}
+	val.Predicates = append([]plan.GuardedPredicate{arrayStructure(rep)}, val.Predicates...)
 	var disp plan.DispatchPlan = plan.NoDispatch{}
 	res := mergeResolution(resParts...)
 	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))

@@ -336,7 +336,7 @@ func TestCompileConstEnum(t *testing.T) {
 			require.Equal(t, tt.literals, literalCaseValues(res.Plan.Dispatch), "literal cases")
 			require.Equal(t, tt.capability, res.Capability, "capability")
 			require.Equal(t, tt.exactness, res.Exactness, "exactness")
-			require.Empty(t, checks(res.Plan), "residual validation")
+			require.Empty(t, res.Plan.ResidualChecks(), "residual validation")
 			for _, d := range res.Diagnostics {
 				require.NotEqual(t, plan.SeverityWarning, d.Severity, "unexpected diagnostic: %s", d.Message)
 				require.NotEqual(t, plan.SeverityError, d.Severity, "unexpected diagnostic: %s", d.Message)

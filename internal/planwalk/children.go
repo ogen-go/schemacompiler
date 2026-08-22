@@ -372,6 +372,62 @@ func predicateChildren(e plan.PredicateExpr, yield func(Node) bool) {
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeShapeSchema}, Plan: t.Schema}) {
 			return
 		}
+	case plan.ObjectStructurePredicate:
+		// The same edges an ObjectRepresentation uses: the relation "this plan governs
+		// the property named N" is the same one, so a generic consumer needs no new case.
+		var t struct {
+			Properties []plan.PropertyCheck
+			Patterns   []plan.PatternCheck
+			Additional *plan.CompilationPlan
+		} = e
+		for i, pc := range t.Properties {
+			var c struct {
+				Name     string
+				Plan     plan.CompilationPlan
+				Presence plan.PresenceMode
+				Nullable bool
+			} = pc
+			if !yield(Node{
+				Kind: NodePlan,
+				Edge: Edge{Kind: EdgeField, Index: i, Name: c.Name, Presence: c.Presence, Nullable: c.Nullable},
+				Plan: c.Plan,
+			}) {
+				return
+			}
+		}
+		for i, pc := range t.Patterns {
+			var c struct {
+				Pattern string
+				Plan    plan.CompilationPlan
+			} = pc
+			if !yield(Node{
+				Kind: NodePlan,
+				Edge: Edge{Kind: EdgePatternRule, Index: i, Name: c.Pattern},
+				Plan: c.Plan,
+			}) {
+				return
+			}
+		}
+		if t.Additional != nil {
+			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeAdditional}, Plan: *t.Additional}) {
+				return
+			}
+		}
+	case plan.ArrayStructurePredicate:
+		var t struct {
+			Prefix []plan.CompilationPlan
+			Rest   *plan.CompilationPlan
+		} = e
+		for i, sub := range t.Prefix {
+			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePrefixItem, Index: i}, Plan: sub}) {
+				return
+			}
+		}
+		if t.Rest != nil {
+			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeRestItem}, Plan: *t.Rest}) {
+				return
+			}
+		}
 	default:
 		panic(fmt.Sprintf("planwalk: unhandled plan.PredicateExpr variant %T", e))
 	}

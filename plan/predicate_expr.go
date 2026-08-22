@@ -108,6 +108,55 @@ type NegationPredicate struct{ Schema CompilationPlan }
 // shape is ordinary validation, so Schema's own capability is all it costs.
 type ShapePredicate struct{ Schema CompilationPlan }
 
+// PropertyCheck is one declared property of an [ObjectStructurePredicate]: the plan its
+// value must satisfy, whether it may be absent, and whether an explicit null is admitted
+// beside it (design §7.1).
+type PropertyCheck struct {
+	Name     string
+	Plan     CompilationPlan
+	Presence PresenceMode
+	Nullable bool
+}
+
+// PatternCheck is one `patternProperties` rule of an [ObjectStructurePredicate]. Pattern
+// is the raw ECMA-262 source, as [PatternPredicate.Regex] is.
+type PatternCheck struct {
+	Pattern string
+	Plan    CompilationPlan
+}
+
+// ObjectStructurePredicate is `properties`, `patternProperties` and `additionalProperties`
+// as a check rather than as storage. It is [ObjectRepresentation]'s counterpart in the
+// validation plan, and the two are emitted together and describe the same shape.
+//
+// It exists because design §4.1 makes acceptance the validation plan's job alone. It
+// cannot be expressed as a [ShapePredicate] over an object plan: that plan's own
+// acceptance would live in *its* representation, so the check would be circular rather
+// than independent.
+//
+// Lowering contract. A property is governed by the first [PropertyCheck] whose Name it
+// equals; failing that, by every [PatternCheck] whose Pattern it matches; failing that, by
+// Additional. A nil Additional admits any value, matching `additionalProperties` absent.
+// Declared names are not also run through a matching pattern: the planner has already
+// intersected every matching pattern schema into the property's own plan (design §12.3).
+type ObjectStructurePredicate struct {
+	Properties []PropertyCheck
+	Patterns   []PatternCheck
+	Additional *CompilationPlan
+}
+
+// ArrayStructurePredicate is `prefixItems` and `items` as a check rather than as storage,
+// and is [ArrayRepresentation]'s counterpart for the same reason
+// [ObjectStructurePredicate] is [ObjectRepresentation]'s.
+//
+// Lowering contract. Element i is governed by Prefix[i] where one exists and by Rest
+// otherwise. A nil Rest rejects every element past the prefix, matching `items: false`;
+// `items` absent is a Rest admitting any value.
+type ArrayStructurePredicate struct {
+	Prefix []CompilationPlan
+	Rest   *CompilationPlan
+}
+
 // RequiredPredicate is `required`: every listed property must be present.
 type RequiredPredicate struct{ Properties []string }
 
@@ -138,6 +187,8 @@ func (FormatPredicate) isPredicateExpr()            {}
 func (MinimumPredicate) isPredicateExpr()           {}
 func (MaximumPredicate) isPredicateExpr()           {}
 func (NumericDomainPredicate) isPredicateExpr()     {}
+func (ObjectStructurePredicate) isPredicateExpr()   {}
+func (ArrayStructurePredicate) isPredicateExpr()    {}
 func (MultipleOfPredicate) isPredicateExpr()        {}
 func (MinItemsPredicate) isPredicateExpr()          {}
 func (MaxItemsPredicate) isPredicateExpr()          {}

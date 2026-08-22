@@ -255,6 +255,43 @@ func writePredicateExpr(t *tw, e plan.PredicateExpr) {
 	case plan.NumericDomainPredicate:
 		var g struct{ Domain plan.NumericDomain } = e
 		t.line("NumericDomain %v", g.Domain)
+	case plan.ObjectStructurePredicate:
+		var g struct {
+			Properties []plan.PropertyCheck
+			Patterns   []plan.PatternCheck
+			Additional *plan.CompilationPlan
+		} = e
+		t.line("ObjectStructure")
+		t.enter(func() {
+			for _, pc := range g.Properties {
+				t.line("property %q presence=%v nullable=%v", pc.Name, pc.Presence, pc.Nullable)
+				t.enter(func() { writePlan(t, pc.Plan, map[plan.SchemaID]bool{}) })
+			}
+			for _, pc := range g.Patterns {
+				t.line("pattern %q", pc.Pattern)
+				t.enter(func() { writePlan(t, pc.Plan, map[plan.SchemaID]bool{}) })
+			}
+			if g.Additional != nil {
+				t.line("additional")
+				t.enter(func() { writePlan(t, *g.Additional, map[plan.SchemaID]bool{}) })
+			}
+		})
+	case plan.ArrayStructurePredicate:
+		var g struct {
+			Prefix []plan.CompilationPlan
+			Rest   *plan.CompilationPlan
+		} = e
+		t.line("ArrayStructure")
+		t.enter(func() {
+			for i, sub := range g.Prefix {
+				t.line("prefix %d", i)
+				t.enter(func() { writePlan(t, sub, map[plan.SchemaID]bool{}) })
+			}
+			if g.Rest != nil {
+				t.line("rest")
+				t.enter(func() { writePlan(t, *g.Rest, map[plan.SchemaID]bool{}) })
+			}
+		})
 	case plan.MultipleOfPredicate:
 		var g struct{ Value float64 } = e
 		t.line("MultipleOf %v", g.Value)

@@ -164,7 +164,13 @@ func (in *interp) object(r plan.ObjectRepresentation, value any, f frame) (Verdi
 		}
 		return rejected(f, "object", "value is "+kindName(k)), nil
 	}
+	return in.objectAgainst(shape, obj, f)
+}
 
+// objectAgainst is the instance-directed half of an object check, shared by the
+// [plan.ObjectRepresentation] reading above and the [plan.ObjectStructurePredicate]
+// reading in structure.go. Both describe the same shape; only the source differs.
+func (in *interp) objectAgainst(shape objectShape, obj map[string]any, f frame) (Verdict, error) {
 	for _, field := range shape.fields {
 		v, err := in.field(field, obj, f)
 		if err != nil || !v.Accepted {

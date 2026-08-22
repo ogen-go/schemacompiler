@@ -73,6 +73,28 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 	case plan.MaximumPredicate:
 		return numericBound(f, value, e.Value, e.Exclusive, false)
 
+	case plan.NumericDomainPredicate:
+		integral, err := isInteger(value)
+		if err != nil {
+			return Verdict{}, withPath(f.path, err)
+		}
+		switch e.Domain {
+		case plan.AnyNumber:
+			return accepted(), nil
+		case plan.IntegerOnly:
+			if !integral {
+				return rejected(f, "type", "number is not an integer"), nil
+			}
+			return accepted(), nil
+		case plan.NonIntegerOnly:
+			if integral {
+				return rejected(f, "type", "number is an integer"), nil
+			}
+			return accepted(), nil
+		default:
+			return Verdict{}, internalf("unhandled plan.NumericDomain %d", e.Domain)
+		}
+
 	case plan.MultipleOfPredicate:
 		return multipleOf(f, value, e.Value)
 

@@ -321,6 +321,9 @@ func predicateChildren(e plan.PredicateExpr, yield func(Node) bool) {
 			Exclusive bool
 		} = e
 		_ = t
+	case plan.NumericDomainPredicate:
+		var t struct{ Domain plan.NumericDomain } = e
+		_ = t
 	case plan.MultipleOfPredicate:
 		var t struct{ Value float64 } = e
 		_ = t

@@ -118,7 +118,7 @@ func (b *builder) buildLeaf(kind plan.JSONKind, c components, path string) plan.
 	default:
 		p = b.buildScalar(kind, c, path)
 	}
-	return assertKind(pinLiteral(p, kind, c.literal), kind)
+	return assertKind(pinLiteral(p, kind, c.literal), kind, c.numeric)
 }
 
 // assertKind states the decided kind in the validation plan, where design §4.1 says
@@ -126,11 +126,23 @@ func (b *builder) buildLeaf(kind plan.JSONKind, c components, path string) plan.
 // that validates from the plan's checks alone must still reject an instance of the wrong
 // kind, and before this the only thing rejecting it was the Go shape.
 //
-// It is prepended so the kind is checked before the predicates guarded on it, which makes
-// a rejection report the type failure rather than a vacuously-passing bound.
-func assertKind(p plan.CompilationPlan, kind plan.JSONKind) plan.CompilationPlan {
-	assertion := plan.GuardedPredicate{Applicability: kindBit(kind), Assert: true}
-	p.Validation.Predicates = append([]plan.GuardedPredicate{assertion}, p.Validation.Predicates...)
+// `type: "integer"` needs two checks, because kind and numeric domain are two axes
+// (design §6): the assertion says the instance is a number, and a guarded
+// [plan.NumericDomainPredicate] says which numbers. The domain is a guard rather than an
+// assertion since the assertion beside it has already rejected every non-number.
+//
+// Both are prepended so the kind is checked before the predicates guarded on it, which
+// makes a rejection report the type failure rather than a vacuously-passing bound.
+func assertKind(p plan.CompilationPlan, kind plan.JSONKind, numeric plan.NumericDomain) plan.CompilationPlan {
+	guard := kindBit(kind)
+	head := []plan.GuardedPredicate{{Applicability: guard, Assert: true}}
+	if kind == plan.KindNumber && numeric != plan.AnyNumber {
+		head = append(head, plan.GuardedPredicate{
+			Applicability: guard,
+			Expression:    plan.NumericDomainPredicate{Domain: numeric},
+		})
+	}
+	p.Validation.Predicates = append(head, p.Validation.Predicates...)
 	return p
 }
 

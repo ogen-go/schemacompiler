@@ -47,8 +47,8 @@ func TestBuild_FormatOnRepresentation(t *testing.T) {
 
 			// The residual assertion survives onto the representation: a backend may
 			// ignore Format and still validate.
-			require.Len(t, checks(got.Plan.Validation), 1)
-			require.Equal(t, plan.FormatPredicate{Format: tt.name}, checks(got.Plan.Validation)[0].Expression)
+			require.Len(t, checks(got.Plan), 1)
+			require.Equal(t, plan.FormatPredicate{Format: tt.name}, checks(got.Plan)[0].Expression)
 			require.Empty(t, got.Diagnostics)
 		})
 	}
@@ -72,7 +72,7 @@ func TestBuild_FormatVacuousForKind(t *testing.T) {
 			got := planner.Build(formatExpr(tt.set, tt.format), nil)
 
 			require.Equal(t, plan.PrimitiveRepresentation{Kind: tt.kind}, got.Plan.Representation)
-			require.Empty(t, checks(got.Plan.Validation))
+			require.Empty(t, checks(got.Plan))
 			require.Empty(t, got.Diagnostics)
 		})
 	}
@@ -86,8 +86,8 @@ func TestBuild_FormatWithoutTypeStaysValidationOnly(t *testing.T) {
 	}}, nil)
 
 	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
-	require.Len(t, checks(got.Plan.Validation), 1)
-	require.Equal(t, plan.SetString, checks(got.Plan.Validation)[0].Applicability)
+	require.Len(t, checks(got.Plan), 1)
+	require.Equal(t, plan.SetString, checks(got.Plan)[0].Applicability)
 }
 
 func TestBuild_ConflictingFormatsCarryNone(t *testing.T) {
@@ -100,7 +100,7 @@ func TestBuild_ConflictingFormatsCarryNone(t *testing.T) {
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, forward.Plan.Representation)
 
 	for _, got := range []planner.Result{forward, reverse} {
-		require.Len(t, checks(got.Plan.Validation), 2)
+		require.Len(t, checks(got.Plan), 2)
 		require.Len(t, got.Diagnostics, 1)
 		require.Equal(t, plan.SeverityInfo, got.Diagnostics[0].Severity)
 		require.NotEmpty(t, got.Diagnostics[0].Pointer)

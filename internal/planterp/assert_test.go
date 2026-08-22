@@ -75,3 +75,41 @@ func TestAssertVsGuard(t *testing.T) {
 		})
 	}
 }
+
+// TestNumericDomainFromValidation pins the integrality half of `type: "integer"`
+// (issue #115). The representation is Any, so a rejection here proves the check reached
+// the validation plan rather than staying in the Go shape.
+func TestNumericDomainFromValidation(t *testing.T) {
+	planFor := func(d plan.NumericDomain) plan.CompilationPlan {
+		return plan.CompilationPlan{
+			Representation: plan.AnyRepresentation{},
+			Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+				{Applicability: plan.SetNumber, Assert: true},
+				{Applicability: plan.SetNumber, Expression: plan.NumericDomainPredicate{Domain: d}},
+			}},
+			Dispatch:   plan.NoDispatch{},
+			Resolution: plan.FullyResolved{},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		domain   plan.NumericDomain
+		value    any
+		accepted bool
+	}{
+		{name: "integer admits an integer", domain: plan.IntegerOnly, value: float64(2), accepted: true},
+		{name: "integer rejects a fraction", domain: plan.IntegerOnly, value: 1.5, accepted: false},
+		{name: "non-integer rejects an integer", domain: plan.NonIntegerOnly, value: float64(2), accepted: false},
+		{name: "non-integer admits a fraction", domain: plan.NonIntegerOnly, value: 1.5, accepted: true},
+		{name: "the kind assertion still rejects a string", domain: plan.IntegerOnly, value: "2", accepted: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, err := planterp.Interpret(planFor(tt.domain), tt.value)
+			require.NoError(t, err)
+			require.Equal(t, tt.accepted, v.Accepted, "reason: %v", v.Reason)
+		})
+	}
+}

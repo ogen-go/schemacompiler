@@ -27,7 +27,7 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 		return plan.Unsupported
 	}
 
-	if !onlyKindAssertions(val) {
+	if !dischargedByRepresentation(rep, val) {
 		return plan.GoTypeWithValidation
 	}
 
@@ -41,17 +41,30 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 	}
 }
 
-// onlyKindAssertions reports whether every check in val is a bare kind assertion.
+// dischargedByRepresentation reports whether every check in val is already implied by rep.
 //
 // Under design §4.1 the validation plan is total, so it is never empty once a `type` is
 // stated and the old "no residual validation" test would make [plan.DirectGoType]
 // unreachable. §22 amends it: DirectGoType means every check is discharged by the chosen
-// representation, and a kind assertion is exactly that — the representation was built for
-// that kind, so a value the Go type can hold has already satisfied it. Anything with an
-// Expression is a real runtime check and is not discharged.
-func onlyKindAssertions(val plan.ValidationPlan) bool {
+// representation. Two checks qualify, and both restate what the representation was built
+// from rather than adding to it:
+//
+//   - a bare kind assertion, against the kind the representation holds;
+//   - a [plan.NumericDomainPredicate] matching the representation's own
+//     [plan.NumericDomain], so `{"type":"integer"}` still lowers to an integer type with
+//     nothing left to check at runtime.
+//
+// Anything else is a real runtime check.
+func dischargedByRepresentation(rep plan.Representation, val plan.ValidationPlan) bool {
+	prim, isPrim := rep.(plan.PrimitiveRepresentation)
 	for _, p := range val.Predicates {
-		if p.Expression != nil {
+		switch e := p.Expression.(type) {
+		case nil:
+		case plan.NumericDomainPredicate:
+			if !isPrim || prim.Numeric != e.Domain {
+				return false
+			}
+		default:
 			return false
 		}
 	}
@@ -94,7 +107,7 @@ func exactnessOf(p plan.CompilationPlan, g gaps) plan.Exactness {
 	if g.asserted {
 		return plan.SoundOverApproximation
 	}
-	if onlyKindAssertions(p.Validation) && p.Capability == plan.DirectGoType {
+	if dischargedByRepresentation(p.Representation, p.Validation) && p.Capability == plan.DirectGoType {
 		return plan.ExactPureRepresentation
 	}
 	return plan.ExactWithValidation

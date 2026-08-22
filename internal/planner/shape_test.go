@@ -41,8 +41,8 @@ func TestBuild_ShapeWithoutTypeIsKindGuarded(t *testing.T) {
 
 			require.IsType(t, plan.AnyRepresentation{}, got.Representation,
 				"a shape keyword must not assert its own type")
-			require.Len(t, checks(got.Validation), 1)
-			gp := checks(got.Validation)[0]
+			require.Len(t, checks(got), 1)
+			gp := checks(got)[0]
 			require.Equal(t, tt.guard, gp.Applicability)
 			require.IsType(t, plan.ShapePredicate{}, gp.Expression)
 		})
@@ -69,8 +69,8 @@ func TestBuild_ShapeAgreesWithTypedSpelling(t *testing.T) {
 				tt.shape,
 			}}, nil).Plan
 
-			require.Len(t, checks(untyped.Validation), 1)
-			shape, ok := checks(untyped.Validation)[0].Expression.(plan.ShapePredicate)
+			require.Len(t, checks(untyped), 1)
+			shape, ok := checks(untyped)[0].Expression.(plan.ShapePredicate)
 			require.True(t, ok)
 			require.Equal(t, typed, shape.Schema)
 		})
@@ -104,6 +104,6 @@ func TestBuild_PatternPropertiesIntersectDeclaredFields(t *testing.T) {
 		}},
 		plannerField(t, obj, "foo").Plan.Validation,
 		"a matching pattern must be intersected into the declared field")
-	require.Empty(t, checks(plannerField(t, obj, "bar").Plan.Validation),
+	require.Empty(t, checks(plannerField(t, obj, "bar").Plan),
 		"a non-matching pattern must not reach the field")
 }

@@ -29,6 +29,15 @@ type MaximumPredicate struct {
 	Exclusive bool
 }
 
+// NumericDomainPredicate is the integrality half of `type: "integer"`: the value must lie
+// in Domain. It is guarded on numbers, since a non-number is rejected by the kind
+// assertion beside it rather than by this.
+//
+// `type` splits into two checks because [KindNumber] and [NumericDomain] are two axes
+// (design §6): the kind assertion states that the instance is a number, this states which
+// numbers. [AnyNumber] imposes nothing and is never emitted.
+type NumericDomainPredicate struct{ Domain NumericDomain }
+
 // MultipleOfPredicate is `multipleOf`.
 type MultipleOfPredicate struct{ Value float64 }
 
@@ -128,6 +137,7 @@ func (PatternPredicate) isPredicateExpr()           {}
 func (FormatPredicate) isPredicateExpr()            {}
 func (MinimumPredicate) isPredicateExpr()           {}
 func (MaximumPredicate) isPredicateExpr()           {}
+func (NumericDomainPredicate) isPredicateExpr()     {}
 func (MultipleOfPredicate) isPredicateExpr()        {}
 func (MinItemsPredicate) isPredicateExpr()          {}
 func (MaxItemsPredicate) isPredicateExpr()          {}

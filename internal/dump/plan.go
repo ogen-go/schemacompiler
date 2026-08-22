@@ -252,6 +252,9 @@ func writePredicateExpr(t *tw, e plan.PredicateExpr) {
 			Exclusive bool
 		} = e
 		t.line("Maximum %v exclusive=%v", g.Value, g.Exclusive)
+	case plan.NumericDomainPredicate:
+		var g struct{ Domain plan.NumericDomain } = e
+		t.line("NumericDomain %v", g.Domain)
 	case plan.MultipleOfPredicate:
 		var g struct{ Value float64 } = e
 		t.line("MultipleOf %v", g.Value)

@@ -27,7 +27,7 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 		return plan.Unsupported
 	}
 
-	if !val.Empty() {
+	if !onlyKindAssertions(val) {
 		return plan.GoTypeWithValidation
 	}
 
@@ -39,6 +39,23 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 	default:
 		return plan.Unsupported
 	}
+}
+
+// onlyKindAssertions reports whether every check in val is a bare kind assertion.
+//
+// Under design §4.1 the validation plan is total, so it is never empty once a `type` is
+// stated and the old "no residual validation" test would make [plan.DirectGoType]
+// unreachable. §22 amends it: DirectGoType means every check is discharged by the chosen
+// representation, and a kind assertion is exactly that — the representation was built for
+// that kind, so a value the Go type can hold has already satisfied it. Anything with an
+// Expression is a real runtime check and is not discharged.
+func onlyKindAssertions(val plan.ValidationPlan) bool {
+	for _, p := range val.Predicates {
+		if p.Expression != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // exactnessOf derives the top-level Exactness from a finished plan's capability and
@@ -77,7 +94,7 @@ func exactnessOf(p plan.CompilationPlan, g gaps) plan.Exactness {
 	if g.asserted {
 		return plan.SoundOverApproximation
 	}
-	if p.Validation.Empty() && p.Capability == plan.DirectGoType {
+	if onlyKindAssertions(p.Validation) && p.Capability == plan.DirectGoType {
 		return plan.ExactPureRepresentation
 	}
 	return plan.ExactWithValidation

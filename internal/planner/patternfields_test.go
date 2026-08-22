@@ -59,9 +59,9 @@ func TestConstraintsFor_ECMASemantics(t *testing.T) {
 
 			field := plannerField(t, obj, tt.property).Plan
 			require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Representation)
-			require.Len(t, field.Validation.Predicates, 1,
+			require.Len(t, checks(field.Validation), 1,
 				"the pattern schema must be intersected into the field it covers")
-			require.Equal(t, plan.MinLengthPredicate{Value: 1}, field.Validation.Predicates[0].Expression)
+			require.Equal(t, plan.MinLengthPredicate{Value: 1}, checks(field.Validation)[0].Expression)
 
 			require.Equal(t, plan.ExactWithValidation, got.Exactness)
 			require.Empty(t, got.Diagnostics)
@@ -82,7 +82,7 @@ func TestConstraintsFor_UndecidablePatternDrops(t *testing.T) {
 	require.True(t, ok, "got %T", got.Plan.Representation)
 
 	field := plannerField(t, obj, "a").Plan
-	require.Empty(t, field.Validation.Predicates,
+	require.Empty(t, checks(field.Validation),
 		"an undecidable pattern must not be intersected in")
 
 	require.Equal(t, plan.DeclaredIncomplete, got.Exactness)

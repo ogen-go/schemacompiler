@@ -9,8 +9,9 @@ import (
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
-// validation runs the residual, kind-guarded predicates (design §8). A predicate whose
-// Applicability does not include the instance's kind passes vacuously.
+// validation runs the kind-scoped checks (design §8). A guard whose Applicability does
+// not include the instance's kind passes vacuously; an assertion rejects it instead
+// (design §3.1), and an assertion with no Expression is the kind check itself.
 func (in *interp) validation(vp plan.ValidationPlan, value any, f frame) (Verdict, error) {
 	kind, err := kindOf(value)
 	if err != nil {
@@ -22,6 +23,10 @@ func (in *interp) validation(vp plan.ValidationPlan, value any, f frame) (Verdic
 			return Verdict{}, internalf("unhandled validation child edge %s", c.Edge.Kind)
 		}
 		if !c.Edge.Applicability.Has(kind) {
+			if c.Edge.Assert {
+				return rejected(f, "type", "value is "+kindName(kind)+
+					", schema asserts "+kindSetName(c.Edge.Applicability)), nil
+			}
 			continue
 		}
 		out, err := in.predicate(c.Predicate, value, f)

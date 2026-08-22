@@ -8,11 +8,18 @@ type ValidationPlan struct {
 // Empty reports whether there is nothing to validate.
 func (p ValidationPlan) Empty() bool { return len(p.Predicates) == 0 }
 
-// GuardedPredicate is a predicate that applies only to values of the given kinds
-// (design §3, §8). A type-specific keyword such as minLength has Applicability
-// SetString: non-strings pass vacuously.
+// GuardedPredicate is a check scoped to a set of JSON kinds (design §3.1, §8).
+// Applicability is read one of two ways, and Assert says which:
+//
+//	Assert == false   guard      an instance outside the set contributes nothing
+//	Assert == true    assertion  an instance outside the set is rejected
+//
+// `minLength: 5` is a guard: a number is not a short string, it is simply not a string.
+// `type: "string"` is an assertion, and is the one case that carries no Expression — the
+// kind check is the whole of it. Every other predicate has one.
 type GuardedPredicate struct {
 	Applicability KindSet
+	Assert        bool
 	Expression    PredicateExpr
 }
 

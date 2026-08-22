@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
@@ -49,6 +50,20 @@ func kindName(k plan.JSONKind) string {
 	default:
 		return "kind(" + strconv.Itoa(int(k)) + ")"
 	}
+}
+
+// kindSetName names a KindSet for a rejection message, in JSON Schema's own `type` order.
+func kindSetName(s plan.KindSet) string {
+	var names []string
+	for k := plan.KindNull; k <= plan.KindObject; k++ {
+		if s.Has(k) {
+			names = append(names, kindName(k))
+		}
+	}
+	if len(names) == 0 {
+		return "no kind"
+	}
+	return strings.Join(names, "|")
 }
 
 // ratOf converts a decoded JSON number to an exact rational, so that comparisons and

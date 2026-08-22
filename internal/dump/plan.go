@@ -214,8 +214,13 @@ func writeValidation(t *tw, v plan.ValidationPlan) {
 	for _, gp := range g.Predicates {
 		var p struct {
 			Applicability plan.KindSet
+			Assert        bool
 			Expression    plan.PredicateExpr
 		} = gp
+		if p.Assert && p.Expression == nil {
+			t.line("assert=%s", kindSetString(p.Applicability))
+			continue
+		}
 		t.line("guard=%s", kindSetString(p.Applicability))
 		t.enter(func() { writePredicateExpr(t, p.Expression) })
 	}

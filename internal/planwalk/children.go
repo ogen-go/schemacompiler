@@ -272,14 +272,17 @@ func validationChildren(v plan.ValidationPlan, yield func(Node) bool) {
 	for i, gp := range t.Predicates {
 		var g struct {
 			Applicability plan.KindSet
+			Assert        bool
 			Expression    plan.PredicateExpr
 		} = gp
-		if g.Expression == nil {
+		// A kind assertion is the one predicate with no Expression, and it still has to
+		// be visited: dropping it would make the check invisible to every consumer.
+		if g.Expression == nil && !g.Assert {
 			continue
 		}
 		if !yield(Node{
 			Kind:      NodePredicate,
-			Edge:      Edge{Kind: EdgeGuardedPredicate, Index: i, Applicability: g.Applicability},
+			Edge:      Edge{Kind: EdgeGuardedPredicate, Index: i, Applicability: g.Applicability, Assert: g.Assert},
 			Predicate: g.Expression,
 		}) {
 			return

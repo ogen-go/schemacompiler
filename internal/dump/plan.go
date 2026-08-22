@@ -255,6 +255,9 @@ func writePredicateExpr(t *tw, e plan.PredicateExpr) {
 	case plan.NumericDomainPredicate:
 		var g struct{ Domain plan.NumericDomain } = e
 		t.line("NumericDomain %v", g.Domain)
+	case plan.ReferencePredicate:
+		var g struct{ Name string } = e
+		t.line("Reference %q", g.Name)
 	case plan.ObjectStructurePredicate:
 		var g struct {
 			Properties []plan.PropertyCheck

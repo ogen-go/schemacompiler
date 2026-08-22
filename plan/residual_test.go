@@ -107,6 +107,18 @@ func TestResidualChecks(t *testing.T) {
 			residual: true,
 		},
 		{
+			name:     "a reference naming the same target is discharged",
+			rep:      plan.ReferenceRepresentation{Name: "#/$defs/A"},
+			pred:     plan.GuardedPredicate{Applicability: plan.SetAny, Expression: plan.ReferencePredicate{Name: "#/$defs/A"}},
+			residual: false,
+		},
+		{
+			name:     "one naming a different target is not",
+			rep:      plan.ReferenceRepresentation{Name: "#/$defs/A"},
+			pred:     plan.GuardedPredicate{Applicability: plan.SetAny, Expression: plan.ReferencePredicate{Name: "#/$defs/B"}},
+			residual: true,
+		},
+		{
 			name:     "a structure predicate beside the wrong representation is not discharged",
 			rep:      stringRep,
 			pred:     plan.GuardedPredicate{Applicability: plan.SetObject, Expression: objCheck},

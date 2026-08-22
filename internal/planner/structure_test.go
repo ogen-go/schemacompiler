@@ -77,3 +77,18 @@ func TestBuild_NeverRejectsFromValidation(t *testing.T) {
 	require.Equal(t, []plan.GuardedPredicate{{Applicability: 0, Assert: true}}, got.Validation.Predicates)
 	require.Empty(t, got.ResidualChecks())
 }
+
+// TestBuild_RefRestatesItsTarget pins that a `$ref` plan names its target in the
+// validation plan as well as in the representation (design §4.1, issue #115), and that
+// the restatement is discharged so the reference stays DirectGoType.
+func TestBuild_RefRestatesItsTarget(t *testing.T) {
+	got := planner.Build(ir.Ref{Target: "#/$defs/A"}, nil).Plan
+
+	require.Equal(t, plan.ReferenceRepresentation{Name: "#/$defs/A"}, got.Representation)
+	require.Equal(t, []plan.GuardedPredicate{{
+		Applicability: plan.SetAny,
+		Expression:    plan.ReferencePredicate{Name: "#/$defs/A"},
+	}}, got.Validation.Predicates)
+	require.Empty(t, got.ResidualChecks())
+	require.Equal(t, plan.DirectGoType, got.Capability)
+}

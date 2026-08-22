@@ -58,7 +58,24 @@ func rejectedBy(f frame, constraint, detail string, cause *ValidateError) Verdic
 // [InvalidValueError] when value is not a decoded JSON document. Neither is a verdict:
 // callers must not read either as acceptance.
 func Interpret(p plan.CompilationPlan, value any) (Verdict, error) {
-	in := &interp{}
+	return interpret(p, value, false)
+}
+
+// InterpretChecks is [Interpret] with the representation ignored: acceptance comes from
+// the validation plan and the dispatch alone, which design §4.1 says is the whole of a
+// plan's contract.
+//
+// It exists to be run beside [Interpret] over the corpus. Agreement on every instance is
+// the evidence that acceptance really is independent of storage — a claim the design
+// makes and that nothing else re-checks, so a plan that quietly moves a constraint back
+// into its Go shape shows up as a disagreement rather than as prose going stale
+// (issue #115).
+func InterpretChecks(p plan.CompilationPlan, value any) (Verdict, error) {
+	return interpret(p, value, true)
+}
+
+func interpret(p plan.CompilationPlan, value any, ignoreRepresentation bool) (Verdict, error) {
+	in := &interp{ignoreRepresentation: ignoreRepresentation}
 	if err := in.loadDefinitions(p.Resolution); err != nil {
 		return Verdict{}, err
 	}
@@ -74,6 +91,9 @@ func Interpret(p plan.CompilationPlan, value any) (Verdict, error) {
 // carries (docs/integration.md §5, §8).
 type interp struct {
 	defs map[plan.SchemaID]plan.CompilationPlan
+	// ignoreRepresentation drops the representation from the acceptance decision, leaving
+	// only the checks design §4.1 makes the plan's contract. See [InterpretChecks].
+	ignoreRepresentation bool
 	// approx accumulates the constraints the interpreter could not enforce.
 	approx []string
 }

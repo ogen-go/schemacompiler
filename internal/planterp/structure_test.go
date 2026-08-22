@@ -201,3 +201,41 @@ func TestArrayStructurePredicate(t *testing.T) {
 		})
 	}
 }
+
+// TestReferencePredicate pins that a `$ref` is checked from the validation plan
+// (issue #115): the referring plan's representation is Any, so the verdict can only have
+// come from resolving the name against the document's graph.
+func TestReferencePredicate(t *testing.T) {
+	root := checking(plan.ReferencePredicate{Name: "#/$defs/S"}, plan.SetAny)
+	root.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+		"#/$defs/S": stringPlan(),
+	}}
+
+	t.Run("the target accepts", func(t *testing.T) {
+		v, err := planterp.Interpret(root, "a")
+		require.NoError(t, err)
+		require.True(t, v.Accepted, "reason: %v", v.Reason)
+	})
+
+	t.Run("the target rejects", func(t *testing.T) {
+		v, err := planterp.Interpret(root, float64(1))
+		require.NoError(t, err)
+		require.False(t, v.Accepted)
+	})
+
+	t.Run("an unresolvable name is an internal error, never an acceptance", func(t *testing.T) {
+		dangling := checking(plan.ReferencePredicate{Name: "#/$defs/missing"}, plan.SetAny)
+		dangling.Resolution = plan.StaticReferenceGraph{}
+		_, err := planterp.Interpret(dangling, "a")
+		require.Error(t, err)
+	})
+
+	t.Run("a cycle with no instance descent is an internal error", func(t *testing.T) {
+		loop := checking(plan.ReferencePredicate{Name: "#/$defs/L"}, plan.SetAny)
+		loop.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+			"#/$defs/L": checking(plan.ReferencePredicate{Name: "#/$defs/L"}, plan.SetAny),
+		}}
+		_, err := planterp.Interpret(loop, "a")
+		require.Error(t, err)
+	})
+}

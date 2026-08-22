@@ -24,9 +24,12 @@ func (b *builder) buildRef(v ir.Ref, path string) plan.CompilationPlan {
 	}
 	return plan.CompilationPlan{
 		Representation: plan.ReferenceRepresentation{Name: string(v.Target)},
-		Dispatch:       plan.NoDispatch{},
-		Resolution:     plan.StaticReferenceGraph{},
-		Capability:     capLevel,
+		Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
+			{Applicability: plan.SetAny, Expression: plan.ReferencePredicate{Name: string(v.Target)}},
+		}},
+		Dispatch:   plan.NoDispatch{},
+		Resolution: plan.StaticReferenceGraph{},
+		Capability: capLevel,
 	}
 }
 

@@ -76,6 +76,11 @@ const (
 	// malformed plan data. It is the guard the whole design rests on, so it is never
 	// quarantined and always fails.
 	verdictInternalError
+	// verdictRepresentationLoadBearing is the plan and its checks alone disagreeing about
+	// one instance, which means some constraint is enforced only by the Go shape. Design
+	// §4.1 says the checks are the whole contract, so this is a defect in the plan, not a
+	// permitted approximation, and it is never quarantined.
+	verdictRepresentationLoadBearing
 )
 
 func (k verdictKind) String() string {
@@ -94,6 +99,8 @@ func (k verdictKind) String() string {
 		return "invalid-instance-value"
 	case verdictInternalError:
 		return "interpreter-internal-error"
+	case verdictRepresentationLoadBearing:
+		return "representation-load-bearing"
 	default:
 		return fmt.Sprintf("verdictKind(%d)", int(k))
 	}
@@ -198,7 +205,7 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 					}
 					continue
 				}
-				if note, quarantined := diffSkips[key]; quarantined && kind != verdictInternalError {
+				if note, quarantined := diffSkips[key]; quarantined && !neverQuarantined(kind) {
 					seen[key] = true
 					tally.quarantined++
 					tally.failures[kind]++
@@ -227,6 +234,9 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 	require.Zero(t, tally.bandFailures[verdictInternalError],
 		"planterp could not read a plan in the skipped exactness=UnsupportedConversion band; "+
 			"that band skips the oracle, never the interpreter's own guards")
+	require.Zero(t, tally.bandFailures[verdictRepresentationLoadBearing],
+		"a plan in the skipped exactness=UnsupportedConversion band enforces a constraint only "+
+			"through its representation; that band skips the oracle, never design §4.1")
 }
 
 // judge applies the asymmetric oracle of issue #70 to one instance.
@@ -247,6 +257,21 @@ func judge(t *testing.T, res *schemacompiler.Result, inst diffInstance) (kind ve
 			return verdictInternalError, err.Error()
 		}
 		return verdictInvalidValue, err.Error()
+	}
+
+	// Design §4.1: the validation plan and the dispatch are the whole of what a plan
+	// accepts, and the representation is storage. Re-deciding the same instance without
+	// the representation must reach the same verdict; if it does not, some constraint is
+	// living in the Go shape and a consumer that validates from the checks alone would
+	// disagree with this one (issue #115).
+	checksOnly, checksErr := planterp.InterpretChecks(res.Plan, value)
+	if checksErr != nil {
+		return verdictInternalError, "checks-only: " + checksErr.Error()
+	}
+	if checksOnly.Accepted != verdict.Accepted {
+		return verdictRepresentationLoadBearing, fmt.Sprintf(
+			"instance %s: full plan accepted=%v, checks alone accepted=%v%s",
+			inst.Data, verdict.Accepted, checksOnly.Accepted, renderReason(checksOnly.Reason))
 	}
 
 	detail = fmt.Sprintf("instance %s, capability %v, exactness %v, verdict accepted=%v%s",
@@ -320,6 +345,13 @@ var reportedKinds = []verdictKind{
 	verdictDeclaredInexact,
 	verdictInvalidValue,
 	verdictInternalError,
+	verdictRepresentationLoadBearing,
+}
+
+// neverQuarantined reports whether k is a defect no quarantine entry may excuse: the
+// interpreter's own guards, and design §4.1's separation of acceptance from storage.
+func neverQuarantined(k verdictKind) bool {
+	return k == verdictInternalError || k == verdictRepresentationLoadBearing
 }
 
 // permitted reports whether the asymmetric oracle lets k pass. The three permitted kinds

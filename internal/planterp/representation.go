@@ -11,6 +11,9 @@ import (
 // (design §7). A representation that cannot hold it is a rejection: soundness (§24)
 // says every valid instance must fit, so a value that does not fit is not valid.
 func (in *interp) representation(r plan.Representation, value any, f frame) (Verdict, error) {
+	if in.ignoreRepresentation {
+		return accepted(), nil
+	}
 	if r == nil {
 		// No representation at all constrains nothing; the plan carries no shape to
 		// check the value against.
@@ -355,9 +358,28 @@ func (in *interp) reference(name string, value any, f frame) (Verdict, error) {
 	if body, ok := f.binders[name]; ok {
 		return in.representation(body, value, next)
 	}
+	return in.definition(name, value, next)
+}
+
+// referencePlan follows a [plan.ReferencePredicate]: the validation plan's own reading of
+// a `$ref`, resolved against the same document graph the representation of that name is.
+//
+// Recursion binders are not consulted. They bind a name to a [plan.Representation], which
+// only a [plan.RecursiveRepresentation] introduces, and the planner never emits one — a
+// recursive schema resolves through the definition graph like any other reference.
+func (in *interp) referencePlan(name string, value any, f frame) (Verdict, error) {
+	if f.active[name] {
+		return Verdict{}, internalf("reference cycle at %q with no instance descent", name)
+	}
+	return in.definition(name, value, f.follow(name))
+}
+
+// definition runs the whole-document plan name resolves to. f must already carry the
+// follow marker, since both callers set it before arriving here.
+func (in *interp) definition(name string, value any, f frame) (Verdict, error) {
 	def, ok := in.defs[plan.SchemaID(name)]
 	if !ok {
 		return Verdict{}, internalf("reference %q resolves to no definition in the plan", name)
 	}
-	return in.plan(def, value, next)
+	return in.plan(def, value, f)
 }

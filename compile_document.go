@@ -32,6 +32,9 @@ type DocumentResult struct {
 	Plans map[plan.SchemaID]plan.CompilationPlan
 	// Capability is the worst capability level over every plan.
 	Capability plan.CapabilityLevel
+	// Requirements is what the document's plans ask of whatever lowers them, unioned
+	// over every component and every reachable $ref target (design §25).
+	Requirements plan.Requirements
 	// Diagnostics explain what the compiler could not do, and what that costs: see
 	// [plan.DiagnosticKind].
 	Diagnostics []plan.Diagnostic
@@ -57,6 +60,7 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	for _, pointer := range slices.Sorted(maps.Keys(d.Schemas)) {
 		built := buildPlan(d.Schemas[pointer], d.Registry, budget)
 		res.Plans[plan.SchemaID(pointer)] = built.Plan
+		res.Requirements = mergeRequirements(res.Requirements, built.Requirements)
 		diags = append(diags, built.Diagnostics...)
 	}
 
@@ -64,6 +68,7 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	// those need a plan under their own pointer too.
 	defs := buildDefinitionsExcept(d.Registry, budget, res.Plans)
 	maps.Copy(res.Plans, defs.plans)
+	res.Requirements = sortRequirements(mergeRequirements(res.Requirements, defs.reqs))
 	diags = append(diags, defs.diags...)
 
 	positions := refTargetPositions(d.Registry)

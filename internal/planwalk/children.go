@@ -75,25 +75,25 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 	}
 
 	switch r := r.(type) {
-	case plan.AnyRepresentation:
-		var t struct{} = r
+	case *plan.AnyRepresentation:
+		var t struct{} = *r
 		_ = t
-	case plan.NeverRepresentation:
-		var t struct{} = r
+	case *plan.NeverRepresentation:
+		var t struct{} = *r
 		_ = t
-	case plan.PrimitiveRepresentation:
+	case *plan.PrimitiveRepresentation:
 		var t struct {
 			Kind    plan.JSONKind
 			Numeric plan.NumericDomain
 			Format  string
-		} = r
+		} = *r
 		_ = t
-	case plan.ObjectRepresentation:
+	case *plan.ObjectRepresentation:
 		var t struct {
 			Fields       []plan.FieldRepresentation
 			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
-		} = r
+		} = *r
 		for i, f := range t.Fields {
 			var g struct {
 				Name     string
@@ -131,11 +131,11 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 				return
 			}
 		}
-	case plan.ArrayRepresentation:
+	case *plan.ArrayRepresentation:
 		var t struct {
 			Prefix []plan.ItemRepresentation
 			Rest   plan.ItemRepresentation
-		} = r
+		} = *r
 		for i, it := range t.Prefix {
 			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePrefixItem, Index: i}, Plan: itemPlan(it)}) {
 				return
@@ -146,27 +146,27 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 				return
 			}
 		}
-	case plan.UnionRepresentation:
+	case *plan.UnionRepresentation:
 		var t struct {
 			Alternatives []plan.Representation
-		} = r
+		} = *r
 		for i, alt := range t.Alternatives {
 			if !subRepresentation(alt, Edge{Kind: EdgeAlternative, Index: i}, yield) {
 				return
 			}
 		}
-	case plan.RecursiveRepresentation:
+	case *plan.RecursiveRepresentation:
 		var t struct {
 			Name string
 			Body plan.Representation
-		} = r
+		} = *r
 		if !subRepresentation(t.Body, Edge{Kind: EdgeRecursiveBody, Name: t.Name}, yield) {
 			return
 		}
-	case plan.ReferenceRepresentation:
+	case *plan.ReferenceRepresentation:
 		var t struct {
 			Name string
-		} = r
+		} = *r
 		_ = t
 	default:
 		panic(fmt.Sprintf("planwalk: unhandled plan.Representation variant %T", r))
@@ -196,48 +196,48 @@ func dispatchChildren(d plan.DispatchPlan, yield func(Node) bool) {
 	}
 
 	switch d := d.(type) {
-	case plan.NoDispatch:
-		var t struct{} = d
+	case *plan.NoDispatch:
+		var t struct{} = *d
 		_ = t
-	case plan.KindDispatch:
+	case *plan.KindDispatch:
 		var t struct {
 			Cases map[plan.JSONKind]plan.CompilationPlan
-		} = d
+		} = *d
 		for kind, branch := range t.Cases {
 			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeKindCase, Case: kind}, Plan: branch}) {
 				return
 			}
 		}
-	case plan.LiteralDispatch:
+	case *plan.LiteralDispatch:
 		var t struct {
 			Cases []plan.LiteralCase
-		} = d
+		} = *d
 		literalCaseChildren(t.Cases, Edge{Kind: EdgeLiteralCase}, yield)
-	case plan.PropertyDispatch:
+	case *plan.PropertyDispatch:
 		var t struct {
 			Property string
 			Cases    []plan.LiteralCase
 			Tag      plan.TagSource
-		} = d
+		} = *d
 		literalCaseChildren(t.Cases, Edge{Kind: EdgePropertyCase, Name: t.Property, Tag: t.Tag}, yield)
-	case plan.PresenceDispatch:
+	case *plan.PresenceDispatch:
 		var t struct {
 			Property string
 			Present  plan.CompilationPlan
 			Absent   plan.CompilationPlan
-		} = d
+		} = *d
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePresent, Name: t.Property}, Plan: t.Present}) {
 			return
 		}
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeAbsent, Name: t.Property}, Plan: t.Absent}) {
 			return
 		}
-	case plan.PredicateCountDispatch:
+	case *plan.PredicateCountDispatch:
 		var t struct {
 			Branches []plan.CompilationPlan
 			Minimum  int
 			Maximum  int
-		} = d
+		} = *d
 		for i, branch := range t.Branches {
 			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeCountBranch, Index: i}, Plan: branch}) {
 				return
@@ -297,94 +297,94 @@ func predicateChildren(e plan.PredicateExpr, yield func(Node) bool) {
 	}
 
 	switch e := e.(type) {
-	case plan.MinLengthPredicate:
-		var t struct{ Value uint64 } = e
+	case *plan.MinLengthPredicate:
+		var t struct{ Value uint64 } = *e
 		_ = t
-	case plan.MaxLengthPredicate:
-		var t struct{ Value uint64 } = e
+	case *plan.MaxLengthPredicate:
+		var t struct{ Value uint64 } = *e
 		_ = t
-	case plan.PatternPredicate:
-		var t struct{ Regex string } = e
+	case *plan.PatternPredicate:
+		var t struct{ Regex string } = *e
 		_ = t
-	case plan.FormatPredicate:
-		var t struct{ Format string } = e
+	case *plan.FormatPredicate:
+		var t struct{ Format string } = *e
 		_ = t
-	case plan.MinimumPredicate:
+	case *plan.MinimumPredicate:
 		var t struct {
 			Value     float64
 			Exclusive bool
-		} = e
+		} = *e
 		_ = t
-	case plan.MaximumPredicate:
+	case *plan.MaximumPredicate:
 		var t struct {
 			Value     float64
 			Exclusive bool
-		} = e
+		} = *e
 		_ = t
-	case plan.NumericDomainPredicate:
-		var t struct{ Domain plan.NumericDomain } = e
+	case *plan.NumericDomainPredicate:
+		var t struct{ Domain plan.NumericDomain } = *e
 		_ = t
-	case plan.MultipleOfPredicate:
-		var t struct{ Value float64 } = e
+	case *plan.MultipleOfPredicate:
+		var t struct{ Value float64 } = *e
 		_ = t
-	case plan.MinItemsPredicate:
-		var t struct{ Value uint64 } = e
+	case *plan.MinItemsPredicate:
+		var t struct{ Value uint64 } = *e
 		_ = t
-	case plan.MaxItemsPredicate:
-		var t struct{ Value uint64 } = e
+	case *plan.MaxItemsPredicate:
+		var t struct{ Value uint64 } = *e
 		_ = t
-	case plan.UniqueItemsPredicate:
-		var t struct{} = e
+	case *plan.UniqueItemsPredicate:
+		var t struct{} = *e
 		_ = t
-	case plan.ContainsCountPredicate:
+	case *plan.ContainsCountPredicate:
 		var t struct {
 			Schema plan.CompilationPlan
 			Min    uint64
 			Max    *uint64
-		} = e
+		} = *e
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeContainsSchema}, Plan: t.Schema}) {
 			return
 		}
-	case plan.NegationPredicate:
-		var t struct{ Schema plan.CompilationPlan } = e
+	case *plan.NegationPredicate:
+		var t struct{ Schema plan.CompilationPlan } = *e
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeNegationSchema}, Plan: t.Schema}) {
 			return
 		}
-	case plan.RequiredPredicate:
-		var t struct{ Properties []string } = e
+	case *plan.RequiredPredicate:
+		var t struct{ Properties []string } = *e
 		_ = t
-	case plan.MinPropertiesPredicate:
-		var t struct{ Value uint64 } = e
+	case *plan.MinPropertiesPredicate:
+		var t struct{ Value uint64 } = *e
 		_ = t
-	case plan.MaxPropertiesPredicate:
-		var t struct{ Value uint64 } = e
+	case *plan.MaxPropertiesPredicate:
+		var t struct{ Value uint64 } = *e
 		_ = t
-	case plan.DependentRequiredPredicate:
-		var t struct{ Entries []plan.DependentRequiredEntry } = e
+	case *plan.DependentRequiredPredicate:
+		var t struct{ Entries []plan.DependentRequiredEntry } = *e
 		_ = t
-	case plan.PropertyNamesPredicate:
-		var t struct{ Schema plan.CompilationPlan } = e
+	case *plan.PropertyNamesPredicate:
+		var t struct{ Schema plan.CompilationPlan } = *e
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePropertyNamesSchema}, Plan: t.Schema}) {
 			return
 		}
-	case plan.ShapePredicate:
-		var t struct{ Schema plan.CompilationPlan } = e
+	case *plan.ShapePredicate:
+		var t struct{ Schema plan.CompilationPlan } = *e
 		if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeShapeSchema}, Plan: t.Schema}) {
 			return
 		}
-	case plan.ReferencePredicate:
+	case *plan.ReferencePredicate:
 		// A leaf here, as ReferenceRepresentation is: the target lives in the document's
 		// resolution graph, which planwalk deliberately does not descend.
-		var t struct{ Name string } = e
+		var t struct{ Name string } = *e
 		_ = t
-	case plan.ObjectStructurePredicate:
+	case *plan.ObjectStructurePredicate:
 		// The same edges an ObjectRepresentation uses: the relation "this plan governs
 		// the property named N" is the same one, so a generic consumer needs no new case.
 		var t struct {
 			Properties []plan.PropertyCheck
 			Patterns   []plan.PatternCheck
 			Additional *plan.CompilationPlan
-		} = e
+		} = *e
 		for i, pc := range t.Properties {
 			var c struct {
 				Name     string
@@ -418,11 +418,11 @@ func predicateChildren(e plan.PredicateExpr, yield func(Node) bool) {
 				return
 			}
 		}
-	case plan.ArrayStructurePredicate:
+	case *plan.ArrayStructurePredicate:
 		var t struct {
 			Prefix []plan.CompilationPlan
 			Rest   *plan.CompilationPlan
-		} = e
+		} = *e
 		for i, sub := range t.Prefix {
 			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePrefixItem, Index: i}, Plan: sub}) {
 				return

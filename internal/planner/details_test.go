@@ -22,8 +22,8 @@ import (
 func TestEveryPredicateDetailIsLowered(t *testing.T) {
 	for _, d := range ir.AllPredicateDetails() {
 		t.Run(fmt.Sprintf("%T", d), func(t *testing.T) {
-			got := planner.Build(ir.All{Operands: []ir.Expr{
-				ir.Predicate{Guard: plan.SetAny, Detail: d},
+			got := planner.Build(&ir.All{Operands: []ir.Expr{
+				&ir.Predicate{Guard: plan.SetAny, Detail: d},
 			}}, nil)
 
 			for _, diag := range got.Diagnostics {
@@ -41,9 +41,9 @@ func TestEveryPredicateDetailIsLowered(t *testing.T) {
 // generatable and declares the gap (issues #74, #84), which is a different case from a
 // detail the compiler does not understand.
 func TestDroppedKeywordStaysGeneratable(t *testing.T) {
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetString},
-		ir.Predicate{Guard: plan.SetString, Detail: ir.DroppedKeywordDetail{Keyword: "maxLength"}},
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetString},
+		&ir.Predicate{Guard: plan.SetString, Detail: &ir.DroppedKeywordDetail{Keyword: "maxLength"}},
 	}}, nil)
 
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)

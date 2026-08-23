@@ -58,7 +58,7 @@ func TestCompileDefinitionCapabilityRollUp(t *testing.T) {
 	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
 	require.NoError(t, err)
 
-	graph, ok := res.Plan.Resolution.(plan.StaticReferenceGraph)
+	graph, ok := res.Plan.Resolution.(*plan.StaticReferenceGraph)
 	require.True(t, ok, "expected StaticReferenceGraph, got %T", res.Plan.Resolution)
 	require.Equal(t, plan.EvaluationStateValidation, graph.Definitions["/$defs/A"].Capability)
 	require.Equal(t, plan.EvaluationStateValidation, graph.Definitions["/$defs/B"].Capability)
@@ -73,7 +73,7 @@ func TestCompileDocumentPlansAreFullyResolved(t *testing.T) {
 	require.NoError(t, err)
 
 	for id, p := range res.Plans {
-		require.IsType(t, plan.FullyResolved{}, p.Resolution, "plan %q", id)
+		require.IsType(t, &plan.FullyResolved{}, p.Resolution, "plan %q", id)
 	}
 }
 

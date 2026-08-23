@@ -31,8 +31,8 @@ func compileFormat(n *frontend.Node) []Expr {
 	if n.Format == "" {
 		return nil
 	}
-	return []Expr{Predicate{
+	return []Expr{&Predicate{
 		Guard:  formatKinds(n.Format),
-		Detail: FormatDetail{Format: n.Format},
+		Detail: &FormatDetail{Format: n.Format},
 	}}
 }

@@ -152,9 +152,9 @@ func defaultBaseURI(args []string) string {
 // dump.PlanDOT to follow ReferenceRepresentation edges into named definitions.
 func planDefinitions(p plan.CompilationPlan) map[plan.SchemaID]plan.CompilationPlan {
 	switch res := p.Resolution.(type) {
-	case plan.StaticReferenceGraph:
+	case *plan.StaticReferenceGraph:
 		return res.Definitions
-	case plan.DynamicReferenceGraph:
+	case *plan.DynamicReferenceGraph:
 		return res.StaticDefinitions
 	default:
 		return nil

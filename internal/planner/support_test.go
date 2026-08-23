@@ -23,30 +23,30 @@ func TestMergeResolution(t *testing.T) {
 		{
 			name:  "nothing to merge",
 			parts: nil,
-			want:  plan.FullyResolved{},
+			want:  &plan.FullyResolved{},
 		},
 		{
 			name:  "a nil part contributes nothing",
-			parts: []plan.ResolutionPlan{nil, plan.FullyResolved{}},
-			want:  plan.FullyResolved{},
+			parts: []plan.ResolutionPlan{nil, &plan.FullyResolved{}},
+			want:  &plan.FullyResolved{},
 		},
 		{
 			name: "static definitions union",
 			parts: []plan.ResolutionPlan{
-				plan.StaticReferenceGraph{Definitions: defs},
-				plan.StaticReferenceGraph{Definitions: other},
+				&plan.StaticReferenceGraph{Definitions: defs},
+				&plan.StaticReferenceGraph{Definitions: other},
 			},
-			want: plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+			want: &plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
 				"/$defs/S": {}, "/$defs/T": {},
 			}},
 		},
 		{
 			name: "one dynamic part makes the whole plan dynamic",
 			parts: []plan.ResolutionPlan{
-				plan.StaticReferenceGraph{Definitions: defs},
-				plan.DynamicReferenceGraph{DynamicAnchors: map[string][]plan.SchemaID{"a": {"/$defs/T"}}},
+				&plan.StaticReferenceGraph{Definitions: defs},
+				&plan.DynamicReferenceGraph{DynamicAnchors: map[string][]plan.SchemaID{"a": {"/$defs/T"}}},
 			},
-			want: plan.DynamicReferenceGraph{
+			want: &plan.DynamicReferenceGraph{
 				StaticDefinitions: defs,
 				DynamicAnchors:    map[string][]plan.SchemaID{"a": {"/$defs/T"}},
 			},
@@ -58,21 +58,22 @@ func TestMergeResolution(t *testing.T) {
 	}
 }
 
-// TestMergeResolutionPanicsOnAnUnhandledVariant pins issue #63. The interface is sealed by
-// an unexported method, so a fourth variant can only come from plan/resolution.go — but
-// the receivers are values, which puts isResolutionPlan in the pointer's method set too.
-// A pointer to one of the three therefore satisfies the interface, matches no case, and
-// used to return FullyResolved: the definitions were silently discarded and the plan
-// claimed it needed no reference machinery at all.
-func TestMergeResolutionPanicsOnAnUnhandledVariant(t *testing.T) {
-	pointer := &plan.StaticReferenceGraph{
-		Definitions: map[plan.SchemaID]plan.CompilationPlan{"/$defs/S": {}},
+// TestMergeResolutionHandlesEveryVariant pins the guard added for issue #63. The
+// unhandled branch panics rather than returning FullyResolved, which would be the claim
+// being falsified — a backend told to emit no reference machinery for a plan that needs it.
+//
+// The panic cannot be provoked from here any more, and that is the point: since #133 the
+// variants carry pointer receivers, so ResolutionPlan is sealed for real. A value spelling
+// no longer satisfies the interface, and a fourth variant can only come from
+// plan/resolution.go. What used to reach the default branch — `&plan.StaticReferenceGraph{}`
+// against value receivers — is now the ordinary spelling and is handled.
+func TestMergeResolutionHandlesEveryVariant(t *testing.T) {
+	for _, p := range []plan.ResolutionPlan{
+		nil,
+		&plan.FullyResolved{},
+		&plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{"/$defs/S": {}}},
+		&plan.DynamicReferenceGraph{DynamicAnchors: map[string][]plan.SchemaID{"a": {"/$defs/S"}}},
+	} {
+		require.NotPanics(t, func() { mergeResolution(p) }, "%T", p)
 	}
-
-	require.PanicsWithValue(t,
-		"planner: unhandled plan.ResolutionPlan variant *plan.StaticReferenceGraph",
-		func() { mergeResolution(pointer) },
-		"an unhandled variant must not be silently downgraded to FullyResolved")
-
-	require.NotPanics(t, func() { mergeResolution(*pointer) }, "the value form is handled")
 }

@@ -18,10 +18,10 @@ import (
 func TestAssertVsGuard(t *testing.T) {
 	planWith := func(gp plan.GuardedPredicate) plan.CompilationPlan {
 		return plan.CompilationPlan{
-			Representation: plan.AnyRepresentation{},
+			Representation: &plan.AnyRepresentation{},
 			Validation:     plan.ValidationPlan{Predicates: []plan.GuardedPredicate{gp}},
-			Dispatch:       plan.NoDispatch{},
-			Resolution:     plan.FullyResolved{},
+			Dispatch:       &plan.NoDispatch{},
+			Resolution:     &plan.FullyResolved{},
 		}
 	}
 
@@ -33,13 +33,13 @@ func TestAssertVsGuard(t *testing.T) {
 	}{
 		{
 			name:      "guard excuses another kind",
-			predicate: plan.GuardedPredicate{Applicability: plan.SetString, Expression: plan.MinLengthPredicate{Value: 3}},
+			predicate: plan.GuardedPredicate{Applicability: plan.SetString, Expression: &plan.MinLengthPredicate{Value: 3}},
 			value:     float64(1),
 			accepted:  true,
 		},
 		{
 			name:      "guard still applies to its own kind",
-			predicate: plan.GuardedPredicate{Applicability: plan.SetString, Expression: plan.MinLengthPredicate{Value: 3}},
+			predicate: plan.GuardedPredicate{Applicability: plan.SetString, Expression: &plan.MinLengthPredicate{Value: 3}},
 			value:     "ab",
 			accepted:  false,
 		},
@@ -60,7 +60,7 @@ func TestAssertVsGuard(t *testing.T) {
 			predicate: plan.GuardedPredicate{
 				Applicability: plan.SetString,
 				Assert:        true,
-				Expression:    plan.MinLengthPredicate{Value: 3},
+				Expression:    &plan.MinLengthPredicate{Value: 3},
 			},
 			value:    "ab",
 			accepted: false,
@@ -82,13 +82,13 @@ func TestAssertVsGuard(t *testing.T) {
 func TestNumericDomainFromValidation(t *testing.T) {
 	planFor := func(d plan.NumericDomain) plan.CompilationPlan {
 		return plan.CompilationPlan{
-			Representation: plan.AnyRepresentation{},
+			Representation: &plan.AnyRepresentation{},
 			Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
 				{Applicability: plan.SetNumber, Assert: true},
-				{Applicability: plan.SetNumber, Expression: plan.NumericDomainPredicate{Domain: d}},
+				{Applicability: plan.SetNumber, Expression: &plan.NumericDomainPredicate{Domain: d}},
 			}},
-			Dispatch:   plan.NoDispatch{},
-			Resolution: plan.FullyResolved{},
+			Dispatch:   &plan.NoDispatch{},
+			Resolution: &plan.FullyResolved{},
 		}
 	}
 

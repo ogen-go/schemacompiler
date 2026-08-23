@@ -134,25 +134,25 @@ func (b *builder) require(slot *[]plan.Location, path, detail string) {
 // retain one) used only for diagnostics.
 func (b *builder) build(e ir.Expr, path string) plan.CompilationPlan {
 	switch v := e.(type) {
-	case ir.Any:
+	case *ir.Any:
 		return anyPlan()
-	case ir.Never:
+	case *ir.Never:
 		return b.neverPlanAt(path)
-	case ir.Kinds, ir.Predicate, ir.Shape, ir.Not:
-		return b.buildAll(ir.All{Operands: []ir.Expr{e}}, path)
-	case ir.Literal:
+	case *ir.Kinds, *ir.Predicate, *ir.Shape, *ir.Not:
+		return b.buildAll(&ir.All{Operands: []ir.Expr{e}}, path)
+	case *ir.Literal:
 		return b.buildLiteral(v, path)
-	case ir.All:
+	case *ir.All:
 		return b.buildAll(v, path)
-	case ir.AnyOf:
+	case *ir.AnyOf:
 		return b.buildUnionWithContext(e.Kinds(), e, components{}, path)
-	case ir.ExactlyOne:
+	case *ir.ExactlyOne:
 		return b.buildUnionWithContext(e.Kinds(), e, components{}, path)
-	case ir.Ref:
+	case *ir.Ref:
 		return b.buildRef(v, path)
-	case ir.DynamicRef:
+	case *ir.DynamicRef:
 		return b.buildDynamicRef(v, path)
-	case ir.Annotated:
+	case *ir.Annotated:
 		// Evaluation annotations proper are not yet modeled (ir.EvaluationAnnotations is
 		// still an empty marker); unevaluatedProperties/unevaluatedItems are detected via
 		// ObjectShape/ArrayShape fields instead (see resolution.go/classify.go).
@@ -192,9 +192,9 @@ func flattenAll(operands []ir.Expr) components {
 	var walk func(e ir.Expr)
 	walk = func(e ir.Expr) {
 		switch v := e.(type) {
-		case ir.Any:
+		case *ir.Any:
 			// Contributes nothing.
-		case ir.Kinds:
+		case *ir.Kinds:
 			// The kind bitmask is already folded into the caller's Kinds() aggregate;
 			// only the numeric refinement needs to be tracked separately, since All's
 			// Kinds() does not propagate it.
@@ -206,30 +206,29 @@ func flattenAll(operands []ir.Expr) components {
 					c.never = true
 				}
 			}
-		case ir.Never:
+		case *ir.Never:
 			c.never = true
-		case ir.All:
+		case *ir.All:
 			for _, o := range v.Operands {
 				walk(o)
 			}
-		case ir.Annotated:
+		case *ir.Annotated:
 			walk(v.Expr)
-		case ir.Literal:
-			lit := v
-			c.literal = &lit
-		case ir.Predicate:
-			c.predicates = append(c.predicates, v)
-		case ir.Shape:
+		case *ir.Literal:
+			c.literal = v
+		case *ir.Predicate:
+			c.predicates = append(c.predicates, *v)
+		case *ir.Shape:
 			c.shapes = append(c.shapes, v.Detail)
-		case ir.AnyOf:
+		case *ir.AnyOf:
 			c.combinators = append(c.combinators, v)
-		case ir.ExactlyOne:
+		case *ir.ExactlyOne:
 			c.combinators = append(c.combinators, v)
-		case ir.Not:
-			c.nots = append(c.nots, v)
-		case ir.Ref:
+		case *ir.Not:
+			c.nots = append(c.nots, *v)
+		case *ir.Ref:
 			c.refs = append(c.refs, v)
-		case ir.DynamicRef:
+		case *ir.DynamicRef:
 			c.refs = append(c.refs, v)
 		}
 	}

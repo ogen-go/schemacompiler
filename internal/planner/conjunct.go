@@ -18,7 +18,7 @@ func (b *builder) withResidualConjuncts(k plan.KindSet, base plan.CompilationPla
 		return base
 	}
 	sub := b.buildConjunction(k, rest, path)
-	if _, never := sub.Representation.(plan.NeverRepresentation); never {
+	if _, never := sub.Representation.(*plan.NeverRepresentation); never {
 		return b.neverPlanAt(path)
 	}
 	if validationOnly(sub) {
@@ -28,7 +28,7 @@ func (b *builder) withResidualConjuncts(k plan.KindSet, base plan.CompilationPla
 		"$ref conjoined with further constraints: enforced against the instance, not merged into the referenced type")
 	base.Validation.Predicates = append(base.Validation.Predicates, plan.GuardedPredicate{
 		Applicability: plan.SetAny,
-		Expression:    plan.ShapePredicate{Schema: sub},
+		Expression:    &plan.ShapePredicate{Schema: sub},
 	})
 	base.Capability = maxCapability(base.Capability, sub.Capability)
 	base.Resolution = mergeResolution(base.Resolution, sub.Resolution)
@@ -47,9 +47,9 @@ func (c components) empty() bool {
 // alone, so [mergePlans] carries all of it and its representation and dispatch are not
 // worth preserving.
 func validationOnly(p plan.CompilationPlan) bool {
-	if _, isAny := p.Representation.(plan.AnyRepresentation); !isAny {
+	if _, isAny := p.Representation.(*plan.AnyRepresentation); !isAny {
 		return false
 	}
-	_, noDispatch := p.Dispatch.(plan.NoDispatch)
+	_, noDispatch := p.Dispatch.(*plan.NoDispatch)
 	return noDispatch
 }

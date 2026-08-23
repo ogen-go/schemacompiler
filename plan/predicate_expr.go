@@ -199,25 +199,25 @@ type DependentRequiredPredicate struct{ Entries []DependentRequiredEntry }
 // [Requirements.RawEvaluation] here.
 type PropertyNamesPredicate struct{ Schema CompilationPlan }
 
-func (MinLengthPredicate) isPredicateExpr()         {}
-func (MaxLengthPredicate) isPredicateExpr()         {}
-func (PatternPredicate) isPredicateExpr()           {}
-func (FormatPredicate) isPredicateExpr()            {}
-func (MinimumPredicate) isPredicateExpr()           {}
-func (MaximumPredicate) isPredicateExpr()           {}
-func (NumericDomainPredicate) isPredicateExpr()     {}
-func (ReferencePredicate) isPredicateExpr()         {}
-func (ObjectStructurePredicate) isPredicateExpr()   {}
-func (ArrayStructurePredicate) isPredicateExpr()    {}
-func (MultipleOfPredicate) isPredicateExpr()        {}
-func (MinItemsPredicate) isPredicateExpr()          {}
-func (MaxItemsPredicate) isPredicateExpr()          {}
-func (UniqueItemsPredicate) isPredicateExpr()       {}
-func (ContainsCountPredicate) isPredicateExpr()     {}
-func (NegationPredicate) isPredicateExpr()          {}
-func (RequiredPredicate) isPredicateExpr()          {}
-func (MinPropertiesPredicate) isPredicateExpr()     {}
-func (MaxPropertiesPredicate) isPredicateExpr()     {}
-func (DependentRequiredPredicate) isPredicateExpr() {}
-func (PropertyNamesPredicate) isPredicateExpr()     {}
-func (ShapePredicate) isPredicateExpr()             {}
+func (*MinLengthPredicate) isPredicateExpr()         {}
+func (*MaxLengthPredicate) isPredicateExpr()         {}
+func (*PatternPredicate) isPredicateExpr()           {}
+func (*FormatPredicate) isPredicateExpr()            {}
+func (*MinimumPredicate) isPredicateExpr()           {}
+func (*MaximumPredicate) isPredicateExpr()           {}
+func (*NumericDomainPredicate) isPredicateExpr()     {}
+func (*ReferencePredicate) isPredicateExpr()         {}
+func (*ObjectStructurePredicate) isPredicateExpr()   {}
+func (*ArrayStructurePredicate) isPredicateExpr()    {}
+func (*MultipleOfPredicate) isPredicateExpr()        {}
+func (*MinItemsPredicate) isPredicateExpr()          {}
+func (*MaxItemsPredicate) isPredicateExpr()          {}
+func (*UniqueItemsPredicate) isPredicateExpr()       {}
+func (*ContainsCountPredicate) isPredicateExpr()     {}
+func (*NegationPredicate) isPredicateExpr()          {}
+func (*RequiredPredicate) isPredicateExpr()          {}
+func (*MinPropertiesPredicate) isPredicateExpr()     {}
+func (*MaxPropertiesPredicate) isPredicateExpr()     {}
+func (*DependentRequiredPredicate) isPredicateExpr() {}
+func (*PropertyNamesPredicate) isPredicateExpr()     {}
+func (*ShapePredicate) isPredicateExpr()             {}

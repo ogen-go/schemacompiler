@@ -83,22 +83,22 @@ type DependentRequiredDetail struct{ Entries []DependentRequiredEntry }
 // every own property name, interpreted as a JSON string.
 type PropertyNamesDetail struct{ Schema Expr }
 
-func (DroppedKeywordDetail) isPredicateDetail()    {}
-func (MinLengthDetail) isPredicateDetail()         {}
-func (MaxLengthDetail) isPredicateDetail()         {}
-func (PatternDetail) isPredicateDetail()           {}
-func (FormatDetail) isPredicateDetail()            {}
-func (MinimumDetail) isPredicateDetail()           {}
-func (MaximumDetail) isPredicateDetail()           {}
-func (ExclusiveMinimumDetail) isPredicateDetail()  {}
-func (ExclusiveMaximumDetail) isPredicateDetail()  {}
-func (MultipleOfDetail) isPredicateDetail()        {}
-func (MinItemsDetail) isPredicateDetail()          {}
-func (MaxItemsDetail) isPredicateDetail()          {}
-func (UniqueItemsDetail) isPredicateDetail()       {}
-func (ContainsDetail) isPredicateDetail()          {}
-func (RequiredDetail) isPredicateDetail()          {}
-func (MinPropertiesDetail) isPredicateDetail()     {}
-func (MaxPropertiesDetail) isPredicateDetail()     {}
-func (DependentRequiredDetail) isPredicateDetail() {}
-func (PropertyNamesDetail) isPredicateDetail()     {}
+func (*DroppedKeywordDetail) isPredicateDetail()    {}
+func (*MinLengthDetail) isPredicateDetail()         {}
+func (*MaxLengthDetail) isPredicateDetail()         {}
+func (*PatternDetail) isPredicateDetail()           {}
+func (*FormatDetail) isPredicateDetail()            {}
+func (*MinimumDetail) isPredicateDetail()           {}
+func (*MaximumDetail) isPredicateDetail()           {}
+func (*ExclusiveMinimumDetail) isPredicateDetail()  {}
+func (*ExclusiveMaximumDetail) isPredicateDetail()  {}
+func (*MultipleOfDetail) isPredicateDetail()        {}
+func (*MinItemsDetail) isPredicateDetail()          {}
+func (*MaxItemsDetail) isPredicateDetail()          {}
+func (*UniqueItemsDetail) isPredicateDetail()       {}
+func (*ContainsDetail) isPredicateDetail()          {}
+func (*RequiredDetail) isPredicateDetail()          {}
+func (*MinPropertiesDetail) isPredicateDetail()     {}
+func (*MaxPropertiesDetail) isPredicateDetail()     {}
+func (*DependentRequiredDetail) isPredicateDetail() {}
+func (*PropertyNamesDetail) isPredicateDetail()     {}

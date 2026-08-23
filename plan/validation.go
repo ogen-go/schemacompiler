@@ -26,6 +26,10 @@ type GuardedPredicate struct {
 // PredicateExpr is a residual runtime check. The concrete variants (length bounds,
 // numeric ranges, pattern match, required presence, uniqueness, match-count, ...) are
 // defined by the planner; a backend switches over them to emit validator code.
+//
+// Variants implement this on a pointer receiver, so only *T satisfies it. A value
+// receiver would put the method in both T's and *T's method set, leaving every type
+// switch to match one spelling and silently miss the other (issue #133).
 type PredicateExpr interface {
 	isPredicateExpr()
 }

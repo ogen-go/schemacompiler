@@ -22,24 +22,24 @@ func TestCompileRefDefinitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// The document-level resolution graph must carry the referenced definition.
-	graph, ok := res.Plan.Resolution.(plan.StaticReferenceGraph)
+	graph, ok := res.Plan.Resolution.(*plan.StaticReferenceGraph)
 	require.True(t, ok, "expected StaticReferenceGraph, got %T", res.Plan.Resolution)
 	require.Len(t, graph.Definitions, 1, "one $ref target should become a definition")
 
 	for id, def := range graph.Definitions {
 		require.NotEmpty(t, id, "definition must have a SchemaID key")
-		prim, ok := def.Representation.(plan.PrimitiveRepresentation)
+		prim, ok := def.Representation.(*plan.PrimitiveRepresentation)
 		require.True(t, ok, "Leaf should be a primitive, got %T", def.Representation)
 		require.Equal(t, plan.KindString, prim.Kind)
 		require.Equal(t, plan.DirectGoType, def.Capability)
 	}
 
 	// The referencing field must point at the definition by name, not inline it.
-	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := res.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "root should be an object, got %T", res.Plan.Representation)
 	child, ok := fieldByName(t, obj, "child")
 	require.True(t, ok, "root should have a child field")
-	ref, ok := child.Plan.Representation.(plan.ReferenceRepresentation)
+	ref, ok := child.Plan.Representation.(*plan.ReferenceRepresentation)
 	require.True(t, ok, "child should be a reference, got %T", child.Plan.Representation)
 	_, inGraph := graph.Definitions[plan.SchemaID(ref.Name)]
 	require.True(t, inGraph, "child ref %q must resolve to a definition", ref.Name)
@@ -83,7 +83,7 @@ func TestCompileGuardedRecursion(t *testing.T) {
 	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
 	require.NoError(t, err)
 
-	graph, ok := res.Plan.Resolution.(plan.StaticReferenceGraph)
+	graph, ok := res.Plan.Resolution.(*plan.StaticReferenceGraph)
 	require.True(t, ok, "expected StaticReferenceGraph, got %T", res.Plan.Resolution)
 	require.NotEmpty(t, graph.Definitions, "recursive Node should be a definition")
 
@@ -107,7 +107,7 @@ func TestCompileDeclaredDiscriminatorSurvivesPipeline(t *testing.T) {
 	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
 	require.NoError(t, err)
 
-	disp, ok := res.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := res.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", res.Plan.Dispatch)
 	require.Equal(t, "petType", disp.Property)
 	require.Equal(t, plan.TagDeclared, disp.Tag)
@@ -136,7 +136,7 @@ func TestCompileAssertedDiscriminatorSurvivesPipeline(t *testing.T) {
 	res, err := schemacompiler.Compile(context.Background(), []byte(schema), schemacompiler.Options{})
 	require.NoError(t, err)
 
-	disp, ok := res.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := res.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", res.Plan.Dispatch)
 	require.Equal(t, "petType", disp.Property)
 	require.Equal(t, plan.TagAsserted, disp.Tag)

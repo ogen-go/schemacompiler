@@ -11,19 +11,19 @@ import (
 )
 
 func stringProperty(name string) ir.PropertyExpr {
-	return ir.PropertyExpr{Name: name, Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}}
+	return ir.PropertyExpr{Name: name, Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}}
 }
 
 func objectOf(properties ...ir.PropertyExpr) ir.Expr {
-	return ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{Properties: properties}},
+	return &ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{Properties: properties}},
 	}}
 }
 
 func fieldNames(t *testing.T, p plan.CompilationPlan) []string {
 	t.Helper()
-	obj, ok := p.Representation.(plan.ObjectRepresentation)
+	obj, ok := p.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", p.Representation)
 	names := make([]string, 0, len(obj.Fields))
 	for _, f := range obj.Fields {
@@ -47,12 +47,12 @@ func TestBuild_FieldsKeepSourceOrder(t *testing.T) {
 		},
 		{
 			name: "allOf branches keep first-declaration order",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetObject},
-				ir.Shape{Detail: ir.ObjectShape{Properties: []ir.PropertyExpr{
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetObject},
+				&ir.Shape{Detail: &ir.ObjectShape{Properties: []ir.PropertyExpr{
 					stringProperty("zeta"), stringProperty("alpha"),
 				}}},
-				ir.Shape{Detail: ir.ObjectShape{Properties: []ir.PropertyExpr{
+				&ir.Shape{Detail: &ir.ObjectShape{Properties: []ir.PropertyExpr{
 					stringProperty("alpha"), stringProperty("mid"),
 				}}},
 			}},

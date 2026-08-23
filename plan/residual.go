@@ -43,17 +43,17 @@ func dischargedBy(rep Representation, e PredicateExpr) bool {
 	switch e := e.(type) {
 	case nil:
 		return true
-	case NumericDomainPredicate:
-		prim, ok := rep.(PrimitiveRepresentation)
+	case *NumericDomainPredicate:
+		prim, ok := rep.(*PrimitiveRepresentation)
 		return ok && prim.Numeric == e.Domain
-	case ReferencePredicate:
-		ref, ok := rep.(ReferenceRepresentation)
+	case *ReferencePredicate:
+		ref, ok := rep.(*ReferenceRepresentation)
 		return ok && ref.Name == e.Name
-	case ObjectStructurePredicate:
-		obj, ok := rep.(ObjectRepresentation)
+	case *ObjectStructurePredicate:
+		obj, ok := rep.(*ObjectRepresentation)
 		return ok && objectRestates(obj, e)
-	case ArrayStructurePredicate:
-		arr, ok := rep.(ArrayRepresentation)
+	case *ArrayStructurePredicate:
+		arr, ok := rep.(*ArrayRepresentation)
 		return ok && arrayRestates(arr, e)
 	default:
 		return false
@@ -66,7 +66,7 @@ func dischargedBy(rep Representation, e PredicateExpr) bool {
 // The sub-plans are not compared: the planner builds e from rep and shares them, so
 // agreeing on the names, their presence and nullability, and the pattern list is enough to
 // tell a restatement from a genuinely different shape.
-func objectRestates(rep ObjectRepresentation, e ObjectStructurePredicate) bool {
+func objectRestates(rep *ObjectRepresentation, e *ObjectStructurePredicate) bool {
 	if len(rep.Fields) != len(e.Properties) || len(rep.PatternRules) != len(e.Patterns) {
 		return false
 	}
@@ -89,7 +89,7 @@ func objectRestates(rep ObjectRepresentation, e ObjectStructurePredicate) bool {
 
 // arrayRestates is [objectRestates] for an array: the same tuple width, and the same
 // answer to whether anything is admitted past it.
-func arrayRestates(rep ArrayRepresentation, e ArrayStructurePredicate) bool {
+func arrayRestates(rep *ArrayRepresentation, e *ArrayStructurePredicate) bool {
 	if len(rep.Prefix) != len(e.Prefix) {
 		return false
 	}

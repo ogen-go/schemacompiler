@@ -16,57 +16,57 @@ func Expr(w io.Writer, e ir.Expr) {
 
 func writeExpr(t *tw, e ir.Expr) {
 	switch e := e.(type) {
-	case ir.Any:
+	case *ir.Any:
 		t.line("Any")
-	case ir.Never:
+	case *ir.Never:
 		t.line("Never")
-	case ir.Kinds:
+	case *ir.Kinds:
 		if dom := numericDomainString(e.Numeric); dom != "" {
 			t.line("Kinds %s numeric=%s", kindSetString(e.Set), dom)
 		} else {
 			t.line("Kinds %s", kindSetString(e.Set))
 		}
-	case ir.Literal:
+	case *ir.Literal:
 		t.line("Literal %#v", e.Value)
-	case ir.Predicate:
+	case *ir.Predicate:
 		t.line("Predicate guard=%s", kindSetString(e.Guard))
 		t.enter(func() { writePredicateDetail(t, e.Detail) })
-	case ir.Shape:
+	case *ir.Shape:
 		t.line("Shape")
 		t.enter(func() { writeShapeDetail(t, e.Detail) })
-	case ir.All:
+	case *ir.All:
 		t.line("All")
 		t.enter(func() {
 			for _, o := range e.Operands {
 				writeExpr(t, o)
 			}
 		})
-	case ir.AnyOf:
+	case *ir.AnyOf:
 		t.line("AnyOf")
 		t.enter(func() {
 			for _, o := range e.Operands {
 				writeExpr(t, o)
 			}
 		})
-	case ir.ExactlyOne:
+	case *ir.ExactlyOne:
 		t.line("ExactlyOne")
 		t.enter(func() {
 			for _, o := range e.Operands {
 				writeExpr(t, o)
 			}
 		})
-	case ir.Not:
+	case *ir.Not:
 		t.line("Not")
 		t.enter(func() { writeExpr(t, e.Operand) })
-	case ir.Ref:
+	case *ir.Ref:
 		if e.KindsKnown {
 			t.line("Ref target=%q kinds=%s", e.Target, kindSetString(e.TargetKinds))
 		} else {
 			t.line("Ref target=%q kinds=unknown", e.Target)
 		}
-	case ir.DynamicRef:
+	case *ir.DynamicRef:
 		t.line("DynamicRef anchor=%q", e.Anchor)
-	case ir.Annotated:
+	case *ir.Annotated:
 		t.line("Annotated")
 		t.enter(func() { writeExpr(t, e.Expr) })
 	default:
@@ -76,47 +76,47 @@ func writeExpr(t *tw, e ir.Expr) {
 
 func writePredicateDetail(t *tw, d ir.PredicateDetail) {
 	switch d := d.(type) {
-	case ir.MinLengthDetail:
+	case *ir.MinLengthDetail:
 		t.line("MinLength %d", d.Value)
-	case ir.MaxLengthDetail:
+	case *ir.MaxLengthDetail:
 		t.line("MaxLength %d", d.Value)
-	case ir.PatternDetail:
+	case *ir.PatternDetail:
 		t.line("Pattern %q", d.Regex)
-	case ir.FormatDetail:
+	case *ir.FormatDetail:
 		t.line("Format %q", d.Format)
-	case ir.MinimumDetail:
+	case *ir.MinimumDetail:
 		t.line("Minimum %v", d.Value)
-	case ir.MaximumDetail:
+	case *ir.MaximumDetail:
 		t.line("Maximum %v", d.Value)
-	case ir.ExclusiveMinimumDetail:
+	case *ir.ExclusiveMinimumDetail:
 		t.line("ExclusiveMinimum %v", d.Value)
-	case ir.ExclusiveMaximumDetail:
+	case *ir.ExclusiveMaximumDetail:
 		t.line("ExclusiveMaximum %v", d.Value)
-	case ir.MultipleOfDetail:
+	case *ir.MultipleOfDetail:
 		t.line("MultipleOf %v", d.Value)
-	case ir.MinItemsDetail:
+	case *ir.MinItemsDetail:
 		t.line("MinItems %d", d.Value)
-	case ir.MaxItemsDetail:
+	case *ir.MaxItemsDetail:
 		t.line("MaxItems %d", d.Value)
-	case ir.UniqueItemsDetail:
+	case *ir.UniqueItemsDetail:
 		t.line("UniqueItems")
-	case ir.ContainsDetail:
+	case *ir.ContainsDetail:
 		t.line("Contains min=%s max=%s", uintPtrString(d.Min), uintPtrString(d.Max))
 		t.enter(func() { writeExpr(t, d.Schema) })
-	case ir.RequiredDetail:
+	case *ir.RequiredDetail:
 		t.line("Required %v", d.Properties)
-	case ir.MinPropertiesDetail:
+	case *ir.MinPropertiesDetail:
 		t.line("MinProperties %d", d.Value)
-	case ir.MaxPropertiesDetail:
+	case *ir.MaxPropertiesDetail:
 		t.line("MaxProperties %d", d.Value)
-	case ir.DependentRequiredDetail:
+	case *ir.DependentRequiredDetail:
 		t.line("DependentRequired")
 		t.enter(func() {
 			for _, entry := range d.Entries {
 				t.line("%q requires %v", entry.Property, entry.Requires)
 			}
 		})
-	case ir.PropertyNamesDetail:
+	case *ir.PropertyNamesDetail:
 		t.line("PropertyNames")
 		t.enter(func() { writeExpr(t, d.Schema) })
 	default:
@@ -126,7 +126,7 @@ func writePredicateDetail(t *tw, d ir.PredicateDetail) {
 
 func writeShapeDetail(t *tw, d ir.ShapeDetail) {
 	switch d := d.(type) {
-	case ir.ObjectShape:
+	case *ir.ObjectShape:
 		t.line("ObjectShape")
 		t.enter(func() {
 			for _, p := range d.Properties {
@@ -146,7 +146,7 @@ func writeShapeDetail(t *tw, d ir.ShapeDetail) {
 				t.enter(func() { writeExpr(t, d.UnevaluatedProperties) })
 			}
 		})
-	case ir.ArrayShape:
+	case *ir.ArrayShape:
 		t.line("ArrayShape")
 		t.enter(func() {
 			for i, p := range d.PrefixItems {

@@ -105,7 +105,7 @@ func localReferenceTargets(p plan.CompilationPlan) []plan.SchemaID {
 	seen := make(map[plan.SchemaID]struct{})
 	var targets []plan.SchemaID
 	collect := func(r plan.Representation) {
-		ref, ok := r.(plan.ReferenceRepresentation)
+		ref, ok := r.(*plan.ReferenceRepresentation)
 		if !ok {
 			return
 		}
@@ -154,13 +154,13 @@ func (g *planGraph) visitDispatch(id string, d plan.DispatchPlan) {
 	switch d := d.(type) {
 	case nil:
 		// No branches.
-	case plan.NoDispatch:
-		var t struct{} = d
+	case *plan.NoDispatch:
+		var t struct{} = *d
 		_ = t
-	case plan.KindDispatch:
+	case *plan.KindDispatch:
 		var t struct {
 			Cases map[plan.JSONKind]plan.CompilationPlan
-		} = d
+		} = *d
 		kinds := make([]plan.JSONKind, 0, len(t.Cases))
 		for k := range t.Cases {
 			kinds = append(kinds, k)
@@ -169,34 +169,34 @@ func (g *planGraph) visitDispatch(id string, d plan.DispatchPlan) {
 		for _, k := range kinds {
 			g.addBranch(id, jsonKindString(k), t.Cases[k])
 		}
-	case plan.LiteralDispatch:
+	case *plan.LiteralDispatch:
 		var t struct {
 			Cases []plan.LiteralCase
-		} = d
+		} = *d
 		g.visitLiteralCases(id, t.Cases)
-	case plan.PropertyDispatch:
+	case *plan.PropertyDispatch:
 		var t struct {
 			Property string
 			Cases    []plan.LiteralCase
 			Tag      plan.TagSource
-		} = d
+		} = *d
 		for _, c := range sortedLiteralCases(t.Cases) {
 			g.addBranch(id, fmt.Sprintf("%s=%v", t.Property, c.Value), c.Plan)
 		}
-	case plan.PresenceDispatch:
+	case *plan.PresenceDispatch:
 		var t struct {
 			Property string
 			Present  plan.CompilationPlan
 			Absent   plan.CompilationPlan
-		} = d
+		} = *d
 		g.addBranch(id, "present", t.Present)
 		g.addBranch(id, "absent", t.Absent)
-	case plan.PredicateCountDispatch:
+	case *plan.PredicateCountDispatch:
 		var t struct {
 			Branches []plan.CompilationPlan
 			Minimum  int
 			Maximum  int
-		} = d
+		} = *d
 		for i, br := range t.Branches {
 			g.addBranch(id, fmt.Sprintf("branch %d", i), br)
 		}
@@ -233,7 +233,7 @@ func (g *planGraph) addBranch(parent, label string, branch plan.CompilationPlan)
 // otherwise attached to any single edge.
 func planNodeLabel(p plan.CompilationPlan) string {
 	label := representationSummary(p.Representation) + " [" + capabilityString(p.Capability) + "]"
-	if cd, ok := p.Dispatch.(plan.PredicateCountDispatch); ok {
+	if cd, ok := p.Dispatch.(*plan.PredicateCountDispatch); ok {
 		label += fmt.Sprintf(" count[%d,%d]", cd.Minimum, cd.Maximum)
 	}
 	return label
@@ -244,58 +244,58 @@ func representationSummary(r plan.Representation) string {
 	switch r := r.(type) {
 	case nil:
 		return "<nil>"
-	case plan.AnyRepresentation:
-		var t struct{} = r
+	case *plan.AnyRepresentation:
+		var t struct{} = *r
 		_ = t
 		return "any"
-	case plan.NeverRepresentation:
-		var t struct{} = r
+	case *plan.NeverRepresentation:
+		var t struct{} = *r
 		_ = t
 		return "never"
-	case plan.PrimitiveRepresentation:
+	case *plan.PrimitiveRepresentation:
 		var t struct {
 			Kind    plan.JSONKind
 			Numeric plan.NumericDomain
 			Format  string
-		} = r
+		} = *r
 		if dom := numericDomainString(t.Numeric); dom != "" {
 			return jsonKindString(t.Kind) + "(" + dom + ")"
 		}
 		return jsonKindString(t.Kind)
-	case plan.ObjectRepresentation:
+	case *plan.ObjectRepresentation:
 		var t struct {
 			Fields       []plan.FieldRepresentation
 			Additional   *plan.CompilationPlan
 			PatternRules []plan.PatternFieldRepresentation
-		} = r
+		} = *r
 		names := make([]string, 0, len(t.Fields))
 		for _, f := range t.Fields {
 			names = append(names, f.Name)
 		}
 		return "object{" + strings.Join(names, ",") + "}"
-	case plan.ArrayRepresentation:
+	case *plan.ArrayRepresentation:
 		var t struct {
 			Prefix []plan.ItemRepresentation
 			Rest   plan.ItemRepresentation
-		} = r
+		} = *r
 		_ = t
 		return "array"
-	case plan.UnionRepresentation:
+	case *plan.UnionRepresentation:
 		var t struct {
 			Alternatives []plan.Representation
-		} = r
+		} = *r
 		_ = t
 		return "union"
-	case plan.RecursiveRepresentation:
+	case *plan.RecursiveRepresentation:
 		var t struct {
 			Name string
 			Body plan.Representation
-		} = r
+		} = *r
 		return "rec:" + t.Name
-	case plan.ReferenceRepresentation:
+	case *plan.ReferenceRepresentation:
 		var t struct {
 			Name string
-		} = r
+		} = *r
 		return "ref:" + t.Name
 	default:
 		return fmt.Sprintf("<unknown Representation %T>", r)

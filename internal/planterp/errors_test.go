@@ -18,25 +18,25 @@ func nestedRejectionPlan() plan.CompilationPlan {
 		Fields: []plan.FieldRepresentation{
 			{
 				Name:     "name",
-				Plan:     leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
+				Plan:     leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}),
 				Presence: plan.PresenceRequired,
 			},
 		},
-		Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
+		Additional: &[]plan.CompilationPlan{leaf(&plan.AnyRepresentation{})}[0],
 	}
-	branch := leaf(plan.ObjectRepresentation{
+	branch := leaf(&plan.ObjectRepresentation{
 		Fields: []plan.FieldRepresentation{
 			{
 				Name: "items",
-				Plan: leaf(plan.ArrayRepresentation{
-					Rest: plan.ItemRepresentation{Plan: leaf(element)},
+				Plan: leaf(&plan.ArrayRepresentation{
+					Rest: plan.ItemRepresentation{Plan: leaf(&element)},
 				}),
 				Presence: plan.PresenceRequired,
 			},
 		},
-		Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
+		Additional: &[]plan.CompilationPlan{leaf(&plan.AnyRepresentation{})}[0],
 	})
-	return plan.CompilationPlan{Dispatch: plan.PredicateCountDispatch{
+	return plan.CompilationPlan{Dispatch: &plan.PredicateCountDispatch{
 		Branches: []plan.CompilationPlan{branch},
 		Minimum:  1,
 		Maximum:  1,
@@ -71,7 +71,7 @@ func TestNestedValidateErrorRenders(t *testing.T) {
 // TestErrorKindsAreDiscriminated is the whole point of the split: the three outcomes are
 // told apart by type, not by matching substrings of one flat message.
 func TestErrorKindsAreDiscriminated(t *testing.T) {
-	anyPlan := plan.CompilationPlan{Representation: plan.AnyRepresentation{}}
+	anyPlan := plan.CompilationPlan{Representation: &plan.AnyRepresentation{}}
 
 	t.Run("ValidateError", func(t *testing.T) {
 		v, err := planterp.Interpret(nestedRejectionPlan(), map[string]any{})
@@ -102,7 +102,7 @@ func TestErrorKindsAreDiscriminated(t *testing.T) {
 	t.Run("InternalError", func(t *testing.T) {
 		// plan.Representation's method set is unexported, so no test outside package
 		// plan can add a variant; an out-of-range enum reaches the same defaults.
-		broken := leaf(plan.PrimitiveRepresentation{
+		broken := leaf(&plan.PrimitiveRepresentation{
 			Kind:    plan.KindNumber,
 			Numeric: plan.NumericDomain(99),
 		})
@@ -117,7 +117,7 @@ func TestErrorKindsAreDiscriminated(t *testing.T) {
 	})
 
 	t.Run("InternalErrorFromUnresolvableReference", func(t *testing.T) {
-		_, err := planterp.Interpret(leaf(plan.ReferenceRepresentation{Name: "#/$defs/missing"}), 1.0)
+		_, err := planterp.Interpret(leaf(&plan.ReferenceRepresentation{Name: "#/$defs/missing"}), 1.0)
 
 		var internal *planterp.InternalError
 		require.ErrorAs(t, err, &internal)
@@ -128,9 +128,9 @@ func TestErrorKindsAreDiscriminated(t *testing.T) {
 // TestInvalidValueErrorCarriesLocation keeps the offending value's position, so a bad
 // fixture points at the sub-value that is wrong rather than at the whole document.
 func TestInvalidValueErrorCarriesLocation(t *testing.T) {
-	p := leaf(plan.ArrayRepresentation{
+	p := leaf(&plan.ArrayRepresentation{
 		Rest: plan.ItemRepresentation{
-			Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
+			Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}),
 		},
 	})
 	_, err := planterp.Interpret(p, []any{"ok", int32(1)})
@@ -141,15 +141,15 @@ func TestInvalidValueErrorCarriesLocation(t *testing.T) {
 }
 
 func TestPointerTokensAreEscaped(t *testing.T) {
-	p := leaf(plan.ObjectRepresentation{
+	p := leaf(&plan.ObjectRepresentation{
 		Fields: []plan.FieldRepresentation{
 			{
 				Name:     "a/b~c",
-				Plan:     leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
+				Plan:     leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}),
 				Presence: plan.PresenceRequired,
 			},
 		},
-		Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
+		Additional: &[]plan.CompilationPlan{leaf(&plan.AnyRepresentation{})}[0],
 	})
 	v, err := planterp.Interpret(p, map[string]any{"a/b~c": 1.0})
 	require.NoError(t, err)

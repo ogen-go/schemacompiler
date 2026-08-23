@@ -73,7 +73,7 @@ func (b *builder) mergeObjectShapes(shapes []ir.ShapeDetail, path string) merged
 		}
 		expr := intersectExprs(operands)
 		if expr == nil {
-			expr = ir.Any{}
+			expr = &ir.Any{}
 		}
 		m.fields[name] = expr
 	}
@@ -176,8 +176,8 @@ func mergeArrayShapes(shapes []ir.ShapeDetail) mergedArray {
 func objectShapes(shapes []ir.ShapeDetail) []ir.ObjectShape {
 	var out []ir.ObjectShape
 	for _, sd := range shapes {
-		if os, ok := sd.(ir.ObjectShape); ok {
-			out = append(out, os)
+		if os, ok := sd.(*ir.ObjectShape); ok {
+			out = append(out, *os)
 		}
 	}
 	return out
@@ -186,8 +186,8 @@ func objectShapes(shapes []ir.ShapeDetail) []ir.ObjectShape {
 func arrayShapes(shapes []ir.ShapeDetail) []ir.ArrayShape {
 	var out []ir.ArrayShape
 	for _, sd := range shapes {
-		if as, ok := sd.(ir.ArrayShape); ok {
-			out = append(out, as)
+		if as, ok := sd.(*ir.ArrayShape); ok {
+			out = append(out, *as)
 		}
 	}
 	return out
@@ -202,6 +202,6 @@ func intersectExprs(operands []ir.Expr) ir.Expr {
 	case 1:
 		return operands[0]
 	default:
-		return norm.Normalize(ir.All{Operands: operands}, renormalizeBudget)
+		return norm.Normalize(&ir.All{Operands: operands}, renormalizeBudget)
 	}
 }

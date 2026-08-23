@@ -13,26 +13,26 @@ import (
 
 func TestExpr(t *testing.T) {
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetString},
-		ir.Predicate{Guard: plan.SetString, Detail: ir.MinLengthDetail{Value: 3}},
-		ir.Shape{Detail: ir.ObjectShape{
+		&ir.Kinds{Set: plan.SetString},
+		&ir.Predicate{Guard: plan.SetString, Detail: &ir.MinLengthDetail{Value: 3}},
+		&ir.Shape{Detail: &ir.ObjectShape{
 			Properties: []ir.PropertyExpr{
-				{Name: "id", Schema: ir.Kinds{Set: plan.SetString}},
+				{Name: "id", Schema: &ir.Kinds{Set: plan.SetString}},
 			},
-			AdditionalProperties: ir.Never{},
+			AdditionalProperties: &ir.Never{},
 		}},
-		ir.AnyOf{Operands: []ir.Expr{
-			ir.Ref{Target: "urn:def", TargetKinds: plan.SetString, KindsKnown: true},
-			ir.DynamicRef{Anchor: "node"},
+		&ir.AnyOf{Operands: []ir.Expr{
+			&ir.Ref{Target: "urn:def", TargetKinds: plan.SetString, KindsKnown: true},
+			&ir.DynamicRef{Anchor: "node"},
 		}},
-		ir.ExactlyOne{Operands: []ir.Expr{ir.Any{}, ir.Never{}}},
-		ir.Not{Operand: ir.Kinds{Set: plan.SetNumber}},
-		ir.Annotated{Expr: ir.Any{}},
-		ir.Literal{Value: "x"},
+		&ir.ExactlyOne{Operands: []ir.Expr{&ir.Any{}, &ir.Never{}}},
+		&ir.Not{Operand: &ir.Kinds{Set: plan.SetNumber}},
+		&ir.Annotated{Expr: &ir.Any{}},
+		&ir.Literal{Value: "x"},
 	}}
 
 	var out strings.Builder
-	dump.Expr(&out, e)
+	dump.Expr(&out, &e)
 	got := out.String()
 
 	for _, want := range []string{
@@ -59,14 +59,14 @@ func TestExpr(t *testing.T) {
 }
 
 func TestExpr_ArrayShapeAndContains(t *testing.T) {
-	e := ir.Shape{Detail: ir.ArrayShape{
-		PrefixItems:      []ir.ItemExpr{{Schema: ir.Kinds{Set: plan.SetString}}},
-		Items:            ir.ItemExpr{Schema: ir.Kinds{Set: plan.SetNumber}},
-		UnevaluatedItems: ir.Never{},
+	e := ir.Shape{Detail: &ir.ArrayShape{
+		PrefixItems:      []ir.ItemExpr{{Schema: &ir.Kinds{Set: plan.SetString}}},
+		Items:            ir.ItemExpr{Schema: &ir.Kinds{Set: plan.SetNumber}},
+		UnevaluatedItems: &ir.Never{},
 	}}
 
 	var out strings.Builder
-	dump.Expr(&out, e)
+	dump.Expr(&out, &e)
 	got := out.String()
 
 	require.Contains(t, got, "ArrayShape")
@@ -75,12 +75,12 @@ func TestExpr_ArrayShapeAndContains(t *testing.T) {
 	require.Contains(t, got, "unevaluatedItems")
 
 	minVal := uint64(1)
-	contains := ir.Predicate{Guard: plan.SetArray, Detail: ir.ContainsDetail{
-		Schema: ir.Kinds{Set: plan.SetString},
+	contains := ir.Predicate{Guard: plan.SetArray, Detail: &ir.ContainsDetail{
+		Schema: &ir.Kinds{Set: plan.SetString},
 		Min:    &minVal,
 	}}
 	out.Reset()
-	dump.Expr(&out, contains)
+	dump.Expr(&out, &contains)
 	got = out.String()
 	require.Contains(t, got, "Contains min=1 max=-")
 }

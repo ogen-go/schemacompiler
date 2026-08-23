@@ -77,8 +77,8 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	}
 	diags = append(diags, rollUpCapabilities(res.Plans, positions)...)
 	for id, p := range res.Plans {
-		if _, static := p.Resolution.(plan.StaticReferenceGraph); static {
-			p.Resolution = plan.FullyResolved{}
+		if _, static := p.Resolution.(*plan.StaticReferenceGraph); static {
+			p.Resolution = &plan.FullyResolved{}
 			res.Plans[id] = p
 		}
 		res.Capability = maxCapability(res.Capability, p.Capability)

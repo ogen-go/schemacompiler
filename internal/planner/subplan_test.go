@@ -12,9 +12,9 @@ import (
 
 // constrainedString is {"type":"string","minLength":1}.
 func constrainedString() ir.Expr {
-	return ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetString},
-		ir.Predicate{Guard: plan.SetString, Detail: ir.MinLengthDetail{Value: 1}},
+	return &ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetString},
+		&ir.Predicate{Guard: plan.SetString, Detail: &ir.MinLengthDetail{Value: 1}},
 	}}
 }
 
@@ -29,26 +29,26 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 	}{
 		{
 			name: "property",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetObject},
-				ir.Shape{Detail: ir.ObjectShape{
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetObject},
+				&ir.Shape{Detail: &ir.ObjectShape{
 					Properties: []ir.PropertyExpr{{Name: "a", Schema: constrainedString()}},
 				}},
 			}},
 			sub: func(t *testing.T, p plan.CompilationPlan) plan.CompilationPlan {
-				obj, ok := p.Representation.(plan.ObjectRepresentation)
+				obj, ok := p.Representation.(*plan.ObjectRepresentation)
 				require.True(t, ok, "got %T", p.Representation)
 				return plannerField(t, obj, "a").Plan
 			},
 		},
 		{
 			name: "additionalProperties",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetObject},
-				ir.Shape{Detail: ir.ObjectShape{AdditionalProperties: constrainedString()}},
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetObject},
+				&ir.Shape{Detail: &ir.ObjectShape{AdditionalProperties: constrainedString()}},
 			}},
 			sub: func(t *testing.T, p plan.CompilationPlan) plan.CompilationPlan {
-				obj, ok := p.Representation.(plan.ObjectRepresentation)
+				obj, ok := p.Representation.(*plan.ObjectRepresentation)
 				require.True(t, ok, "got %T", p.Representation)
 				require.NotNil(t, obj.Additional)
 				return *obj.Additional
@@ -56,14 +56,14 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 		},
 		{
 			name: "patternProperties",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetObject},
-				ir.Shape{Detail: ir.ObjectShape{
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetObject},
+				&ir.Shape{Detail: &ir.ObjectShape{
 					PatternProperties: []ir.PatternPropertyExpr{{Pattern: "^x", Schema: constrainedString()}},
 				}},
 			}},
 			sub: func(t *testing.T, p plan.CompilationPlan) plan.CompilationPlan {
-				obj, ok := p.Representation.(plan.ObjectRepresentation)
+				obj, ok := p.Representation.(*plan.ObjectRepresentation)
 				require.True(t, ok, "got %T", p.Representation)
 				require.Len(t, obj.PatternRules, 1)
 				return obj.PatternRules[0].Plan
@@ -71,12 +71,12 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 		},
 		{
 			name: "prefixItems",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetArray},
-				ir.Shape{Detail: ir.ArrayShape{PrefixItems: []ir.ItemExpr{{Schema: constrainedString()}}}},
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetArray},
+				&ir.Shape{Detail: &ir.ArrayShape{PrefixItems: []ir.ItemExpr{{Schema: constrainedString()}}}},
 			}},
 			sub: func(t *testing.T, p plan.CompilationPlan) plan.CompilationPlan {
-				arr, ok := p.Representation.(plan.ArrayRepresentation)
+				arr, ok := p.Representation.(*plan.ArrayRepresentation)
 				require.True(t, ok, "got %T", p.Representation)
 				require.Len(t, arr.Prefix, 1)
 				return arr.Prefix[0].Plan
@@ -84,12 +84,12 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 		},
 		{
 			name: "items",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetArray},
-				ir.Shape{Detail: ir.ArrayShape{Items: ir.ItemExpr{Schema: constrainedString()}}},
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetArray},
+				&ir.Shape{Detail: &ir.ArrayShape{Items: ir.ItemExpr{Schema: constrainedString()}}},
 			}},
 			sub: func(t *testing.T, p plan.CompilationPlan) plan.CompilationPlan {
-				arr, ok := p.Representation.(plan.ArrayRepresentation)
+				arr, ok := p.Representation.(*plan.ArrayRepresentation)
 				require.True(t, ok, "got %T", p.Representation)
 				return arr.Rest.Plan
 			},
@@ -103,9 +103,9 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 				"the sub-schema's cost must still be rolled up")
 
 			sub := tt.sub(t, got.Plan)
-			require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, sub.Representation)
+			require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, sub.Representation)
 			require.Len(t, sub.ResidualChecks(), 1)
-			require.Equal(t, plan.MinLengthPredicate{Value: 1}, sub.ResidualChecks()[0].Expression)
+			require.Equal(t, &plan.MinLengthPredicate{Value: 1}, sub.ResidualChecks()[0].Expression)
 			require.Equal(t, plan.SetString, sub.ResidualChecks()[0].Applicability)
 		})
 	}
@@ -116,21 +116,21 @@ func TestBuild_SubSchemaPlansSurvive(t *testing.T) {
 func TestBuild_SubSchemaDispatchSurvives(t *testing.T) {
 	// {"type":"object","properties":{"a":{"type":["string","integer","null"]}}}
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{Properties: []ir.PropertyExpr{{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{Properties: []ir.PropertyExpr{{
 			Name:   "a",
-			Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString | plan.SetNumber | plan.SetNull}}},
+			Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString | plan.SetNumber | plan.SetNull}}},
 		}}}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := got.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", got.Plan.Representation)
 	field := plannerField(t, obj, "a")
 	require.True(t, field.Nullable, "null is carried by the field, not by its plan")
 
-	disp, ok := field.Plan.Dispatch.(plan.KindDispatch)
+	disp, ok := field.Plan.Dispatch.(*plan.KindDispatch)
 	require.True(t, ok, "got %T", field.Plan.Dispatch)
 	require.Len(t, disp.Cases, 2)
 	require.Contains(t, disp.Cases, plan.KindString)

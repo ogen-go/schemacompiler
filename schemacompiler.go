@@ -102,9 +102,9 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 
 	if len(defs.plans) > 0 {
 		if schema.Registry.HasDynamicRefs() {
-			root.Plan.Resolution = plan.DynamicReferenceGraph{StaticDefinitions: defs.plans}
+			root.Plan.Resolution = &plan.DynamicReferenceGraph{StaticDefinitions: defs.plans}
 		} else {
-			root.Plan.Resolution = plan.StaticReferenceGraph{Definitions: defs.plans}
+			root.Plan.Resolution = &plan.StaticReferenceGraph{Definitions: defs.plans}
 		}
 	}
 

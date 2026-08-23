@@ -170,7 +170,7 @@ func TestBuild_DeclaredDiscriminatorLooksThroughNestedCombinators(t *testing.T) 
 
 			require.Equal(t, tt.warn, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 
-			disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+			disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 			if tt.property == "" {
 				require.False(t, ok, "expected no PropertyDispatch, got %#v", got.Plan.Dispatch)
 				return

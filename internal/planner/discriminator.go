@@ -105,17 +105,17 @@ func literalValues(e ir.Expr) ([]ir.Literal, bool) {
 		len(c.nots) > 0 || len(c.refs) > 0 || len(c.combinators) != 1 {
 		return nil, false
 	}
-	anyOf, ok := c.combinators[0].(ir.AnyOf)
+	anyOf, ok := c.combinators[0].(*ir.AnyOf)
 	if !ok || len(anyOf.Operands) == 0 {
 		return nil, false
 	}
 	out := make([]ir.Literal, 0, len(anyOf.Operands))
 	for _, op := range anyOf.Operands {
-		lit, ok := op.(ir.Literal)
+		lit, ok := op.(*ir.Literal)
 		if !ok {
 			return nil, false
 		}
-		out = append(out, lit)
+		out = append(out, *lit)
 	}
 	return out, true
 }
@@ -154,7 +154,7 @@ func containsLiteral(have []ir.Literal, want ir.Literal) bool {
 
 func requiredProperty(c components, name string) bool {
 	for _, p := range c.predicates {
-		rd, ok := p.Detail.(ir.RequiredDetail)
+		rd, ok := p.Detail.(*ir.RequiredDetail)
 		if !ok {
 			continue
 		}
@@ -171,7 +171,7 @@ func requiredProperty(c components, name string) bool {
 func branchRefTargets(be ir.Expr) []plan.SchemaID {
 	var out []plan.SchemaID
 	for _, r := range flattenAll([]ir.Expr{be}).refs {
-		if ref, ok := r.(ir.Ref); ok {
+		if ref, ok := r.(*ir.Ref); ok {
 			out = append(out, ref.Target)
 		}
 	}

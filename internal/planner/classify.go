@@ -13,15 +13,15 @@ import "github.com/ogen-go/schemacompiler/plan"
 // taught about must fail toward "too expensive to lower" rather than toward a plain Go
 // type that would silently drop the machinery the plan needs.
 func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.DispatchPlan, res plan.ResolutionPlan) plan.CapabilityLevel {
-	if _, ok := res.(plan.DynamicReferenceGraph); ok {
+	if _, ok := res.(*plan.DynamicReferenceGraph); ok {
 		return plan.DynamicSchemaResolution
 	}
 
 	switch disp.(type) {
-	case plan.NoDispatch:
-	case plan.PredicateCountDispatch:
+	case *plan.NoDispatch:
+	case *plan.PredicateCountDispatch:
 		return plan.PredicateDispatch
-	case plan.KindDispatch, plan.LiteralDispatch, plan.PropertyDispatch, plan.PresenceDispatch:
+	case *plan.KindDispatch, *plan.LiteralDispatch, *plan.PropertyDispatch, *plan.PresenceDispatch:
 		return plan.StaticDispatch
 	default:
 		return plan.Unsupported
@@ -32,9 +32,9 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 	}
 
 	switch rep.(type) {
-	case plan.AnyRepresentation, plan.NeverRepresentation, plan.PrimitiveRepresentation,
-		plan.ObjectRepresentation, plan.ArrayRepresentation, plan.UnionRepresentation,
-		plan.RecursiveRepresentation, plan.ReferenceRepresentation:
+	case *plan.AnyRepresentation, *plan.NeverRepresentation, *plan.PrimitiveRepresentation,
+		*plan.ObjectRepresentation, *plan.ArrayRepresentation, *plan.UnionRepresentation,
+		*plan.RecursiveRepresentation, *plan.ReferenceRepresentation:
 		return plan.DirectGoType
 	default:
 		return plan.Unsupported
@@ -65,7 +65,7 @@ func exactlyModeled(p plan.CompilationPlan, g gaps) bool {
 	if p.Capability >= plan.EvaluationStateValidation {
 		return false
 	}
-	if _, never := p.Representation.(plan.NeverRepresentation); never {
+	if _, never := p.Representation.(*plan.NeverRepresentation); never {
 		return true
 	}
 	return !g.dropped && !g.asserted

@@ -65,11 +65,11 @@ func TestCompileDocument(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, plan.DirectGoType, pet.Capability)
 
-	obj, ok := node.Representation.(plan.ObjectRepresentation)
+	obj, ok := node.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "Node should be an object, got %T", node.Representation)
 	field, ok := fieldByName(t, obj, "pet")
 	require.True(t, ok)
-	ref, ok := field.Plan.Representation.(plan.ReferenceRepresentation)
+	ref, ok := field.Plan.Representation.(*plan.ReferenceRepresentation)
 	require.True(t, ok, "pet should be a reference, got %T", field.Plan.Representation)
 	_, inDoc := res.Plans[plan.SchemaID(ref.Name)]
 	require.True(t, inDoc, "reference %q must name a compiled plan", ref.Name)
@@ -86,7 +86,7 @@ func TestCompileDocumentMetadata(t *testing.T) {
 	require.Equal(t, "A pet", pet.Metadata.Title)
 	require.Equal(t, "PetType", pet.Metadata.Extensions["x-ogen-name"])
 
-	obj, ok := pet.Representation.(plan.ObjectRepresentation)
+	obj, ok := pet.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok)
 	require.Equal(t, "pet name", mustField(t, obj, "name").Metadata.Description)
 }
@@ -106,7 +106,7 @@ func TestCompileSchema(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, plan.DirectGoType, res.Capability)
 
-	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := res.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "Pet should be an object, got %T", res.Plan.Representation)
 	_, ok = fieldByName(t, obj, "name")
 	require.True(t, ok, "Pet should have a name field")

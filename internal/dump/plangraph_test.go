@@ -33,7 +33,7 @@ func TestPlanDOT_RefAndStub(t *testing.T) {
 		[]byte(`{"$defs": {"Named": {"type": "string"}}, "$ref": "#/$defs/Named"}`), schemacompiler.Options{})
 	require.NoError(t, err)
 
-	defs, ok := result.Plan.Resolution.(plan.StaticReferenceGraph)
+	defs, ok := result.Plan.Resolution.(*plan.StaticReferenceGraph)
 	require.True(t, ok)
 
 	var out strings.Builder
@@ -56,7 +56,7 @@ func TestPlanDOT_RefUnderObjectProperty(t *testing.T) {
 		schemacompiler.Options{})
 	require.NoError(t, err)
 
-	defs, ok := result.Plan.Resolution.(plan.StaticReferenceGraph)
+	defs, ok := result.Plan.Resolution.(*plan.StaticReferenceGraph)
 	require.True(t, ok)
 
 	var out strings.Builder

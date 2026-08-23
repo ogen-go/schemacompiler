@@ -79,6 +79,6 @@ func TestRepresentationsAreIgnored(t *testing.T) {
 // TestUnknownValueType keeps the interpreter from guessing at a Go value that is not a
 // decoded JSON document.
 func TestUnknownValueType(t *testing.T) {
-	_, err := planterp.Interpret(plan.CompilationPlan{Representation: plan.AnyRepresentation{}}, int32(1))
+	_, err := planterp.Interpret(plan.CompilationPlan{Representation: &plan.AnyRepresentation{}}, int32(1))
 	require.ErrorContains(t, err, "not a decoded JSON value")
 }

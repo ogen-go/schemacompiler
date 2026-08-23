@@ -38,20 +38,20 @@ func guarded(guard plan.KindSet, e plan.PredicateExpr) plan.ValidationPlan {
 func leaf(r plan.Representation) plan.CompilationPlan {
 	p := plan.CompilationPlan{Representation: r}
 	switch r := r.(type) {
-	case plan.AnyRepresentation:
-	case plan.NeverRepresentation:
+	case *plan.AnyRepresentation:
+	case *plan.NeverRepresentation:
 		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{{Applicability: 0, Assert: true}}}
-	case plan.PrimitiveRepresentation:
+	case *plan.PrimitiveRepresentation:
 		guard := plan.KindSet(1) << r.Kind
 		preds := []plan.GuardedPredicate{{Applicability: guard, Assert: true}}
 		if r.Kind == plan.KindNumber && r.Numeric != plan.AnyNumber {
 			preds = append(preds, plan.GuardedPredicate{
 				Applicability: guard,
-				Expression:    plan.NumericDomainPredicate{Domain: r.Numeric},
+				Expression:    &plan.NumericDomainPredicate{Domain: r.Numeric},
 			})
 		}
 		p.Validation = plan.ValidationPlan{Predicates: preds}
-	case plan.ObjectRepresentation:
+	case *plan.ObjectRepresentation:
 		e := plan.ObjectStructurePredicate{Additional: r.Additional}
 		for _, f := range r.Fields {
 			e.Properties = append(e.Properties, plan.PropertyCheck{
@@ -63,9 +63,9 @@ func leaf(r plan.Representation) plan.CompilationPlan {
 		}
 		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
 			{Applicability: plan.SetObject, Assert: true},
-			{Applicability: plan.SetObject, Expression: e},
+			{Applicability: plan.SetObject, Expression: &e},
 		}}
-	case plan.ArrayRepresentation:
+	case *plan.ArrayRepresentation:
 		e := plan.ArrayStructurePredicate{}
 		for _, item := range r.Prefix {
 			e.Prefix = append(e.Prefix, item.Plan)
@@ -76,11 +76,11 @@ func leaf(r plan.Representation) plan.CompilationPlan {
 		}
 		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
 			{Applicability: plan.SetArray, Assert: true},
-			{Applicability: plan.SetArray, Expression: e},
+			{Applicability: plan.SetArray, Expression: &e},
 		}}
-	case plan.ReferenceRepresentation:
+	case *plan.ReferenceRepresentation:
 		p.Validation = plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
-			{Applicability: plan.SetAny, Expression: plan.ReferencePredicate(r)},
+			{Applicability: plan.SetAny, Expression: &plan.ReferencePredicate{Name: r.Name}},
 		}}
 	default:
 		panic(fmt.Sprintf("leaf: no validation-side counterpart for %T", r))
@@ -110,55 +110,55 @@ func runCases(t *testing.T, cases []interpCase) {
 func TestRepresentation(t *testing.T) {
 	object := plan.ObjectRepresentation{
 		Fields: []plan.FieldRepresentation{
-			{Name: "req", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), Presence: plan.PresenceRequired},
-			{Name: "opt", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), Presence: plan.PresenceOptional},
-			{Name: "null", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), Nullable: true, Presence: plan.PresenceOptional},
+			{Name: "req", Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}), Presence: plan.PresenceRequired},
+			{Name: "opt", Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}), Presence: plan.PresenceOptional},
+			{Name: "null", Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}), Nullable: true, Presence: plan.PresenceOptional},
 		},
-		Additional:   &[]plan.CompilationPlan{leaf(plan.NeverRepresentation{})}[0],
-		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x-", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindNumber})}},
+		Additional:   &[]plan.CompilationPlan{leaf(&plan.NeverRepresentation{})}[0],
+		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x-", Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindNumber})}},
 	}
 	array := plan.ArrayRepresentation{
-		Prefix: []plan.ItemRepresentation{{Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindBoolean})}},
-		Rest:   plan.ItemRepresentation{Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString})},
+		Prefix: []plan.ItemRepresentation{{Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindBoolean})}},
+		Rest:   plan.ItemRepresentation{Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString})},
 	}
 
 	runCases(t, []interpCase{
-		{name: "any accepts null", plan: leaf(plan.AnyRepresentation{}), value: `null`, accept: true},
-		{name: "never rejects null", plan: leaf(plan.NeverRepresentation{}), value: `null`},
-		{name: "string accepts string", plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), value: `"a"`, accept: true},
-		{name: "string rejects number", plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}), value: `1`},
+		{name: "any accepts null", plan: leaf(&plan.AnyRepresentation{}), value: `null`, accept: true},
+		{name: "never rejects null", plan: leaf(&plan.NeverRepresentation{}), value: `null`},
+		{name: "string accepts string", plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}), value: `"a"`, accept: true},
+		{name: "string rejects number", plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}), value: `1`},
 		{
 			name:   "integer domain accepts 1.0",
-			plan:   leaf(plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.IntegerOnly}),
+			plan:   leaf(&plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.IntegerOnly}),
 			value:  `1.0`,
 			accept: true,
 		},
 		{
 			name:  "integer domain rejects 1.5",
-			plan:  leaf(plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.IntegerOnly}),
+			plan:  leaf(&plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.IntegerOnly}),
 			value: `1.5`,
 		},
 		{
 			name:  "non-integer domain rejects 1",
-			plan:  leaf(plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.NonIntegerOnly}),
+			plan:  leaf(&plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.NonIntegerOnly}),
 			value: `1`,
 		},
-		{name: "object requires a required field", plan: leaf(object), value: `{}`},
-		{name: "object accepts the required field", plan: leaf(object), value: `{"req":"a"}`, accept: true},
-		{name: "object rejects a mistyped optional field", plan: leaf(object), value: `{"req":"a","opt":1}`},
-		{name: "object accepts null in a nullable field", plan: leaf(object), value: `{"req":"a","null":null}`, accept: true},
-		{name: "object rejects null in a non-nullable field", plan: leaf(object), value: `{"req":"a","opt":null}`},
-		{name: "object routes a matching name to its pattern rule", plan: leaf(object), value: `{"req":"a","x-n":1}`, accept: true},
-		{name: "object rejects a mistyped pattern match", plan: leaf(object), value: `{"req":"a","x-n":"s"}`},
-		{name: "object rejects an unmatched name against Never additional", plan: leaf(object), value: `{"req":"a","other":1}`},
-		{name: "object rejects a non-object", plan: leaf(object), value: `[]`},
-		{name: "array checks the tuple prefix", plan: leaf(array), value: `[true,"a"]`, accept: true},
-		{name: "array rejects a mistyped prefix item", plan: leaf(array), value: `["a"]`},
-		{name: "array rejects a mistyped rest item", plan: leaf(array), value: `[true,1]`},
+		{name: "object requires a required field", plan: leaf(&object), value: `{}`},
+		{name: "object accepts the required field", plan: leaf(&object), value: `{"req":"a"}`, accept: true},
+		{name: "object rejects a mistyped optional field", plan: leaf(&object), value: `{"req":"a","opt":1}`},
+		{name: "object accepts null in a nullable field", plan: leaf(&object), value: `{"req":"a","null":null}`, accept: true},
+		{name: "object rejects null in a non-nullable field", plan: leaf(&object), value: `{"req":"a","opt":null}`},
+		{name: "object routes a matching name to its pattern rule", plan: leaf(&object), value: `{"req":"a","x-n":1}`, accept: true},
+		{name: "object rejects a mistyped pattern match", plan: leaf(&object), value: `{"req":"a","x-n":"s"}`},
+		{name: "object rejects an unmatched name against Never additional", plan: leaf(&object), value: `{"req":"a","other":1}`},
+		{name: "object rejects a non-object", plan: leaf(&object), value: `[]`},
+		{name: "array checks the tuple prefix", plan: leaf(&array), value: `[true,"a"]`, accept: true},
+		{name: "array rejects a mistyped prefix item", plan: leaf(&array), value: `["a"]`},
+		{name: "array rejects a mistyped rest item", plan: leaf(&array), value: `[true,1]`},
 		{
 			name: "array with no rest rejects items past the prefix",
-			plan: leaf(plan.ArrayRepresentation{
-				Prefix: []plan.ItemRepresentation{{Plan: leaf(plan.AnyRepresentation{})}},
+			plan: leaf(&plan.ArrayRepresentation{
+				Prefix: []plan.ItemRepresentation{{Plan: leaf(&plan.AnyRepresentation{})}},
 			}),
 			value: `[1,2]`,
 		},
@@ -171,10 +171,10 @@ func TestRepresentation(t *testing.T) {
 
 func TestReference(t *testing.T) {
 	definitions := map[plan.SchemaID]plan.CompilationPlan{
-		"#/$defs/s": leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
+		"#/$defs/s": leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}),
 	}
-	referring := leaf(plan.ReferenceRepresentation{Name: "#/$defs/s"})
-	referring.Resolution = plan.StaticReferenceGraph{Definitions: definitions}
+	referring := leaf(&plan.ReferenceRepresentation{Name: "#/$defs/s"})
+	referring.Resolution = &plan.StaticReferenceGraph{Definitions: definitions}
 
 	runCases(t, []interpCase{
 		{name: "static graph resolves the target", plan: referring, value: `"a"`, accept: true},
@@ -182,32 +182,32 @@ func TestReference(t *testing.T) {
 	})
 
 	t.Run("dynamic graph reuses its static definitions", func(t *testing.T) {
-		p := leaf(plan.ReferenceRepresentation{Name: "#/$defs/s"})
-		p.Resolution = plan.DynamicReferenceGraph{StaticDefinitions: definitions}
+		p := leaf(&plan.ReferenceRepresentation{Name: "#/$defs/s"})
+		p.Resolution = &plan.DynamicReferenceGraph{StaticDefinitions: definitions}
 		verdict, err := planterp.Interpret(p, "a")
 		require.NoError(t, err)
 		require.True(t, verdict.Accepted)
 	})
 
 	t.Run("an unresolvable reference is not a verdict", func(t *testing.T) {
-		_, err := planterp.Interpret(leaf(plan.ReferenceRepresentation{Name: "#/$defs/missing"}), "a")
+		_, err := planterp.Interpret(leaf(&plan.ReferenceRepresentation{Name: "#/$defs/missing"}), "a")
 		require.ErrorContains(t, err, "resolves to no definition")
 	})
 
 	t.Run("a cycle with no instance descent fails loudly", func(t *testing.T) {
-		p := leaf(plan.ReferenceRepresentation{Name: "#/$defs/loop"})
-		p.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
-			"#/$defs/loop": leaf(plan.ReferenceRepresentation{Name: "#/$defs/loop"}),
+		p := leaf(&plan.ReferenceRepresentation{Name: "#/$defs/loop"})
+		p.Resolution = &plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+			"#/$defs/loop": leaf(&plan.ReferenceRepresentation{Name: "#/$defs/loop"}),
 		}}
 		_, err := planterp.Interpret(p, "a")
 		require.ErrorContains(t, err, "reference cycle")
 	})
 
 	t.Run("recursion through an instance descent terminates", func(t *testing.T) {
-		p := leaf(plan.ReferenceRepresentation{Name: "#/$defs/list"})
-		p.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
-			"#/$defs/list": leaf(plan.ArrayRepresentation{
-				Rest: plan.ItemRepresentation{Plan: leaf(plan.ReferenceRepresentation{Name: "#/$defs/list"})},
+		p := leaf(&plan.ReferenceRepresentation{Name: "#/$defs/list"})
+		p.Resolution = &plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+			"#/$defs/list": leaf(&plan.ArrayRepresentation{
+				Rest: plan.ItemRepresentation{Plan: leaf(&plan.ReferenceRepresentation{Name: "#/$defs/list"})},
 			}),
 		}}
 		verdict, err := planterp.Interpret(p, decode(t, `[[],[[]]]`))
@@ -217,37 +217,37 @@ func TestReference(t *testing.T) {
 }
 
 func TestDispatch(t *testing.T) {
-	str := leaf(plan.PrimitiveRepresentation{Kind: plan.KindString})
-	num := leaf(plan.PrimitiveRepresentation{Kind: plan.KindNumber})
+	str := leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString})
+	num := leaf(&plan.PrimitiveRepresentation{Kind: plan.KindNumber})
 
 	withDispatch := func(d plan.DispatchPlan) plan.CompilationPlan {
-		return plan.CompilationPlan{Representation: plan.AnyRepresentation{}, Dispatch: d}
+		return plan.CompilationPlan{Representation: &plan.AnyRepresentation{}, Dispatch: d}
 	}
-	kindDispatch := withDispatch(plan.KindDispatch{Cases: map[plan.JSONKind]plan.CompilationPlan{
+	kindDispatch := withDispatch(&plan.KindDispatch{Cases: map[plan.JSONKind]plan.CompilationPlan{
 		plan.KindString: str,
 		plan.KindNumber: num,
 	}})
-	literalDispatch := withDispatch(plan.LiteralDispatch{Cases: []plan.LiteralCase{
+	literalDispatch := withDispatch(&plan.LiteralDispatch{Cases: []plan.LiteralCase{
 		{Value: "a", Raw: []byte(`"a"`), Plan: str},
 		{Value: 9007199254740993.0, Raw: []byte(`9007199254740993`), Plan: num},
 	}})
-	propertyDispatch := withDispatch(plan.PropertyDispatch{
+	propertyDispatch := withDispatch(&plan.PropertyDispatch{
 		Property: "kind",
 		Cases: []plan.LiteralCase{{
 			Value: "cat",
-			Plan: leaf(plan.ObjectRepresentation{
-				Fields:     []plan.FieldRepresentation{{Name: "purrs", Plan: leaf(plan.PrimitiveRepresentation{Kind: plan.KindBoolean})}},
-				Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0],
+			Plan: leaf(&plan.ObjectRepresentation{
+				Fields:     []plan.FieldRepresentation{{Name: "purrs", Plan: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindBoolean})}},
+				Additional: &[]plan.CompilationPlan{leaf(&plan.AnyRepresentation{})}[0],
 			}),
 		}},
 	})
-	presenceDispatch := withDispatch(plan.PresenceDispatch{
+	presenceDispatch := withDispatch(&plan.PresenceDispatch{
 		Property: "a",
-		Present:  leaf(plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{{Name: "b", Presence: plan.PresenceRequired, Plan: leaf(plan.AnyRepresentation{})}}, Additional: &[]plan.CompilationPlan{leaf(plan.AnyRepresentation{})}[0]}),
-		Absent:   leaf(plan.AnyRepresentation{}),
+		Present:  leaf(&plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{{Name: "b", Presence: plan.PresenceRequired, Plan: leaf(&plan.AnyRepresentation{})}}, Additional: &[]plan.CompilationPlan{leaf(&plan.AnyRepresentation{})}[0]}),
+		Absent:   leaf(&plan.AnyRepresentation{}),
 	})
 	countDispatch := func(minimum, maximum int) plan.CompilationPlan {
-		return withDispatch(plan.PredicateCountDispatch{Branches: []plan.CompilationPlan{str, num, leaf(plan.AnyRepresentation{})}, Minimum: minimum, Maximum: maximum})
+		return withDispatch(&plan.PredicateCountDispatch{Branches: []plan.CompilationPlan{str, num, leaf(&plan.AnyRepresentation{})}, Minimum: minimum, Maximum: maximum})
 	}
 
 	runCases(t, []interpCase{
@@ -273,55 +273,55 @@ func TestDispatch(t *testing.T) {
 func TestPredicates(t *testing.T) {
 	two := uint64(2)
 	unrestricted := func(guard plan.KindSet, e plan.PredicateExpr) plan.CompilationPlan {
-		return plan.CompilationPlan{Representation: plan.AnyRepresentation{}, Validation: guarded(guard, e)}
+		return plan.CompilationPlan{Representation: &plan.AnyRepresentation{}, Validation: guarded(guard, e)}
 	}
 
 	runCases(t, []interpCase{
-		{name: "minLength counts code points", plan: unrestricted(plan.SetString, plan.MinLengthPredicate{Value: 2}), value: `"é"`},
-		{name: "minLength accepts two code points", plan: unrestricted(plan.SetString, plan.MinLengthPredicate{Value: 2}), value: `"éé"`, accept: true},
-		{name: "a guard that does not fire passes vacuously", plan: unrestricted(plan.SetString, plan.MinLengthPredicate{Value: 2}), value: `1`, accept: true},
-		{name: "maxLength rejects a longer string", plan: unrestricted(plan.SetString, plan.MaxLengthPredicate{Value: 1}), value: `"ab"`},
-		{name: "pattern is unanchored", plan: unrestricted(plan.SetString, plan.PatternPredicate{Regex: "b"}), value: `"abc"`, accept: true},
-		{name: "pattern rejects a non-match", plan: unrestricted(plan.SetString, plan.PatternPredicate{Regex: "^b"}), value: `"abc"`},
-		{name: "format is an annotation, not an assertion", plan: unrestricted(plan.SetString, plan.FormatPredicate{Format: "email"}), value: `"not-an-email"`, accept: true},
-		{name: "minimum accepts its boundary", plan: unrestricted(plan.SetNumber, plan.MinimumPredicate{Value: 1.1}), value: `1.1`, accept: true},
-		{name: "exclusiveMinimum rejects its boundary", plan: unrestricted(plan.SetNumber, plan.MinimumPredicate{Value: 1.1, Exclusive: true}), value: `1.1`},
-		{name: "maximum rejects above", plan: unrestricted(plan.SetNumber, plan.MaximumPredicate{Value: 3}), value: `3.5`},
-		{name: "exclusiveMaximum rejects its boundary", plan: unrestricted(plan.SetNumber, plan.MaximumPredicate{Value: 3, Exclusive: true}), value: `3`},
-		{name: "multipleOf uses decimal, not binary, arithmetic", plan: unrestricted(plan.SetNumber, plan.MultipleOfPredicate{Value: 0.0001}), value: `0.0075`, accept: true},
-		{name: "multipleOf rejects a non-multiple", plan: unrestricted(plan.SetNumber, plan.MultipleOfPredicate{Value: 2}), value: `7`},
-		{name: "minItems rejects a short array", plan: unrestricted(plan.SetArray, plan.MinItemsPredicate{Value: 2}), value: `[1]`},
-		{name: "maxItems rejects a long array", plan: unrestricted(plan.SetArray, plan.MaxItemsPredicate{Value: 1}), value: `[1,2]`},
-		{name: "uniqueItems compares JSON-deep", plan: unrestricted(plan.SetArray, plan.UniqueItemsPredicate{}), value: `[{"a":1,"b":2},{"b":2,"a":1}]`},
-		{name: "uniqueItems accepts distinct items", plan: unrestricted(plan.SetArray, plan.UniqueItemsPredicate{}), value: `[1,"1",true]`, accept: true},
-		{name: "required rejects an absent property", plan: unrestricted(plan.SetObject, plan.RequiredPredicate{Properties: []string{"a"}}), value: `{}`},
-		{name: "minProperties rejects too few", plan: unrestricted(plan.SetObject, plan.MinPropertiesPredicate{Value: 2}), value: `{"a":1}`},
-		{name: "maxProperties rejects too many", plan: unrestricted(plan.SetObject, plan.MaxPropertiesPredicate{Value: 1}), value: `{"a":1,"b":2}`},
+		{name: "minLength counts code points", plan: unrestricted(plan.SetString, &plan.MinLengthPredicate{Value: 2}), value: `"é"`},
+		{name: "minLength accepts two code points", plan: unrestricted(plan.SetString, &plan.MinLengthPredicate{Value: 2}), value: `"éé"`, accept: true},
+		{name: "a guard that does not fire passes vacuously", plan: unrestricted(plan.SetString, &plan.MinLengthPredicate{Value: 2}), value: `1`, accept: true},
+		{name: "maxLength rejects a longer string", plan: unrestricted(plan.SetString, &plan.MaxLengthPredicate{Value: 1}), value: `"ab"`},
+		{name: "pattern is unanchored", plan: unrestricted(plan.SetString, &plan.PatternPredicate{Regex: "b"}), value: `"abc"`, accept: true},
+		{name: "pattern rejects a non-match", plan: unrestricted(plan.SetString, &plan.PatternPredicate{Regex: "^b"}), value: `"abc"`},
+		{name: "format is an annotation, not an assertion", plan: unrestricted(plan.SetString, &plan.FormatPredicate{Format: "email"}), value: `"not-an-email"`, accept: true},
+		{name: "minimum accepts its boundary", plan: unrestricted(plan.SetNumber, &plan.MinimumPredicate{Value: 1.1}), value: `1.1`, accept: true},
+		{name: "exclusiveMinimum rejects its boundary", plan: unrestricted(plan.SetNumber, &plan.MinimumPredicate{Value: 1.1, Exclusive: true}), value: `1.1`},
+		{name: "maximum rejects above", plan: unrestricted(plan.SetNumber, &plan.MaximumPredicate{Value: 3}), value: `3.5`},
+		{name: "exclusiveMaximum rejects its boundary", plan: unrestricted(plan.SetNumber, &plan.MaximumPredicate{Value: 3, Exclusive: true}), value: `3`},
+		{name: "multipleOf uses decimal, not binary, arithmetic", plan: unrestricted(plan.SetNumber, &plan.MultipleOfPredicate{Value: 0.0001}), value: `0.0075`, accept: true},
+		{name: "multipleOf rejects a non-multiple", plan: unrestricted(plan.SetNumber, &plan.MultipleOfPredicate{Value: 2}), value: `7`},
+		{name: "minItems rejects a short array", plan: unrestricted(plan.SetArray, &plan.MinItemsPredicate{Value: 2}), value: `[1]`},
+		{name: "maxItems rejects a long array", plan: unrestricted(plan.SetArray, &plan.MaxItemsPredicate{Value: 1}), value: `[1,2]`},
+		{name: "uniqueItems compares JSON-deep", plan: unrestricted(plan.SetArray, &plan.UniqueItemsPredicate{}), value: `[{"a":1,"b":2},{"b":2,"a":1}]`},
+		{name: "uniqueItems accepts distinct items", plan: unrestricted(plan.SetArray, &plan.UniqueItemsPredicate{}), value: `[1,"1",true]`, accept: true},
+		{name: "required rejects an absent property", plan: unrestricted(plan.SetObject, &plan.RequiredPredicate{Properties: []string{"a"}}), value: `{}`},
+		{name: "minProperties rejects too few", plan: unrestricted(plan.SetObject, &plan.MinPropertiesPredicate{Value: 2}), value: `{"a":1}`},
+		{name: "maxProperties rejects too many", plan: unrestricted(plan.SetObject, &plan.MaxPropertiesPredicate{Value: 1}), value: `{"a":1,"b":2}`},
 		{
 			name:  "dependentRequired fires only when the trigger is present",
-			plan:  unrestricted(plan.SetObject, plan.DependentRequiredPredicate{Entries: []plan.DependentRequiredEntry{{Property: "a", Requires: []string{"b"}}}}),
+			plan:  unrestricted(plan.SetObject, &plan.DependentRequiredPredicate{Entries: []plan.DependentRequiredEntry{{Property: "a", Requires: []string{"b"}}}}),
 			value: `{"a":1}`,
 		},
 		{
 			name:   "dependentRequired passes when the trigger is absent",
-			plan:   unrestricted(plan.SetObject, plan.DependentRequiredPredicate{Entries: []plan.DependentRequiredEntry{{Property: "a", Requires: []string{"b"}}}}),
+			plan:   unrestricted(plan.SetObject, &plan.DependentRequiredPredicate{Entries: []plan.DependentRequiredEntry{{Property: "a", Requires: []string{"b"}}}}),
 			value:  `{"c":1}`,
 			accept: true,
 		},
 		{
 			name: "propertyNames runs its nested plan on every key",
-			plan: unrestricted(plan.SetObject, plan.PropertyNamesPredicate{
+			plan: unrestricted(plan.SetObject, &plan.PropertyNamesPredicate{
 				Schema: plan.CompilationPlan{
-					Representation: plan.PrimitiveRepresentation{Kind: plan.KindString},
-					Validation:     guarded(plan.SetString, plan.MaxLengthPredicate{Value: 2}),
+					Representation: &plan.PrimitiveRepresentation{Kind: plan.KindString},
+					Validation:     guarded(plan.SetString, &plan.MaxLengthPredicate{Value: 2}),
 				},
 			}),
 			value: `{"abc":1}`,
 		},
 		{
 			name: "contains counts matching elements",
-			plan: unrestricted(plan.SetArray, plan.ContainsCountPredicate{
-				Schema: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
+			plan: unrestricted(plan.SetArray, &plan.ContainsCountPredicate{
+				Schema: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}),
 				Min:    2,
 				Max:    &two,
 			}),
@@ -330,8 +330,8 @@ func TestPredicates(t *testing.T) {
 		},
 		{
 			name: "contains rejects too many matches",
-			plan: unrestricted(plan.SetArray, plan.ContainsCountPredicate{
-				Schema: leaf(plan.PrimitiveRepresentation{Kind: plan.KindString}),
+			plan: unrestricted(plan.SetArray, &plan.ContainsCountPredicate{
+				Schema: leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString}),
 				Min:    1,
 				Max:    &two,
 			}),
@@ -347,14 +347,14 @@ func TestApproximatedIsReported(t *testing.T) {
 		name string
 		expr plan.PredicateExpr
 	}{
-		{name: "format is never asserted", expr: plan.FormatPredicate{Format: "uuid"}},
-		{name: "a pattern the engine cannot compile", expr: plan.PatternPredicate{Regex: "("}},
+		{name: "format is never asserted", expr: &plan.FormatPredicate{Format: "uuid"}},
+		{name: "a pattern the engine cannot compile", expr: &plan.PatternPredicate{Regex: "("}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := plan.CompilationPlan{
-				Representation: plan.AnyRepresentation{},
+				Representation: &plan.AnyRepresentation{},
 				Validation:     guarded(plan.SetString, tt.expr),
 			}
 			verdict, err := planterp.Interpret(p, "x")
@@ -375,17 +375,17 @@ func TestNegationOverAnApproximatedSubPlanAccepts(t *testing.T) {
 		name string
 		expr plan.PredicateExpr
 	}{
-		{name: "format is never asserted", expr: plan.FormatPredicate{Format: "uuid"}},
-		{name: "a pattern the engine cannot compile", expr: plan.PatternPredicate{Regex: "("}},
+		{name: "format is never asserted", expr: &plan.FormatPredicate{Format: "uuid"}},
+		{name: "a pattern the engine cannot compile", expr: &plan.PatternPredicate{Regex: "("}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := plan.CompilationPlan{
-				Representation: plan.AnyRepresentation{},
+				Representation: &plan.AnyRepresentation{},
 				Capability:     plan.PredicateDispatch,
-				Validation: guarded(plan.SetAny, plan.NegationPredicate{Schema: plan.CompilationPlan{
-					Representation: plan.AnyRepresentation{},
+				Validation: guarded(plan.SetAny, &plan.NegationPredicate{Schema: plan.CompilationPlan{
+					Representation: &plan.AnyRepresentation{},
 					Validation:     guarded(plan.SetString, tt.expr),
 				}}),
 			}
@@ -402,13 +402,13 @@ func TestNegationOverAnApproximatedSubPlanAccepts(t *testing.T) {
 // predicate's whole purpose: an acceptance the interpreter really did check still inverts.
 func TestNegationOverAnEnforcedSubPlanInverts(t *testing.T) {
 	sub := plan.CompilationPlan{
-		Representation: plan.AnyRepresentation{},
-		Validation:     guarded(plan.SetString, plan.PatternPredicate{Regex: "^x"}),
+		Representation: &plan.AnyRepresentation{},
+		Validation:     guarded(plan.SetString, &plan.PatternPredicate{Regex: "^x"}),
 	}
 	p := plan.CompilationPlan{
-		Representation: plan.AnyRepresentation{},
+		Representation: &plan.AnyRepresentation{},
 		Capability:     plan.PredicateDispatch,
-		Validation:     guarded(plan.SetAny, plan.NegationPredicate{Schema: sub}),
+		Validation:     guarded(plan.SetAny, &plan.NegationPredicate{Schema: sub}),
 	}
 
 	verdict, err := planterp.Interpret(p, "x")

@@ -95,13 +95,13 @@ func TestNullablePlan_Property(t *testing.T) {
 		"properties": {"a": {"type": "string", "nullable": true}}
 	}`)
 
-	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := res.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok)
 
 	field := mustField(t, obj, "a")
 	require.Equal(t, plan.PresenceRequired, field.Presence)
 	require.True(t, field.Nullable)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Plan.Representation)
 }
 
 // Clause 2: `nullable` widens the `type` keyword and nothing else, so sibling constraints
@@ -212,7 +212,7 @@ func TestNullablePlan_MatchesTypeArraySpelling(t *testing.T) {
 
 			require.Equal(t, declared, nullable)
 
-			obj, ok := nullable.Plan.Representation.(plan.ObjectRepresentation)
+			obj, ok := nullable.Plan.Representation.(*plan.ObjectRepresentation)
 			require.True(t, ok)
 
 			field := mustField(t, obj, "a")
@@ -235,7 +235,7 @@ func TestNullablePlan_ArrayPositions(t *testing.T) {
 
 	require.Empty(t, res.Diagnostics)
 
-	arr, ok := res.Plan.Representation.(plan.ArrayRepresentation)
+	arr, ok := res.Plan.Representation.(*plan.ArrayRepresentation)
 	require.True(t, ok)
 	require.Len(t, arr.Prefix, 1)
 	require.Equal(t, "P0", arr.Prefix[0].Metadata.Title)
@@ -250,13 +250,13 @@ func TestNullablePlan_ArrayItself(t *testing.T) {
 		"properties": {"a": {"type": "array", "nullable": true, "title": "A", "items": {"type": "string"}}}
 	}`)
 
-	obj, ok := res.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := res.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok)
 
 	field := mustField(t, obj, "a")
 	require.True(t, field.Nullable)
 	require.Equal(t, "A", field.Metadata.Title)
-	require.IsType(t, plan.ArrayRepresentation{}, field.Plan.Representation)
+	require.IsType(t, &plan.ArrayRepresentation{}, field.Plan.Representation)
 }
 
 // `nullable: false` never removes a null the document declared itself, and repeating an
@@ -279,7 +279,7 @@ func TestNullablePlan_RefSibling(t *testing.T) {
 	res, got := compileNullable(t, `{`+nullablePets+`, "$ref": "#/$defs/Cat", "nullable": true}`)
 
 	requireIgnored(t, res)
-	require.Equal(t, plan.ReferenceRepresentation{Name: "/$defs/Cat"}, res.Plan.Representation)
+	require.Equal(t, &plan.ReferenceRepresentation{Name: "/$defs/Cat"}, res.Plan.Representation)
 	require.Contains(t, got, `definition "/$defs/Cat"`)
 }
 
@@ -394,7 +394,7 @@ func holderField(t *testing.T, node string) (field plan.FieldRepresentation, war
 	}, schemacompiler.Options{})
 	require.NoError(t, err)
 
-	obj, ok := res.Plans["/components/schemas/Holder"].Representation.(plan.ObjectRepresentation)
+	obj, ok := res.Plans["/components/schemas/Holder"].Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok)
 
 	var warns int

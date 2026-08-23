@@ -21,7 +21,7 @@ import (
 func (b *builder) refsTrusted(p plan.CompilationPlan, seen map[plan.SchemaID]bool) bool {
 	trusted := true
 	planwalk.Plan(p, func(r plan.Representation) {
-		ref, isRef := r.(plan.ReferenceRepresentation)
+		ref, isRef := r.(*plan.ReferenceRepresentation)
 		if !isRef || !trusted {
 			return
 		}

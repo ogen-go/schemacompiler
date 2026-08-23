@@ -19,8 +19,8 @@ import (
 // every instance — a silent widening where design §24 wants a loud failure. So it is an
 // [planterp.InternalError], which cannot be mistaken for a verdict.
 func TestUnfilledSlots(t *testing.T) {
-	str := leaf(plan.PrimitiveRepresentation{Kind: plan.KindString})
-	anything := leaf(plan.AnyRepresentation{})
+	str := leaf(&plan.PrimitiveRepresentation{Kind: plan.KindString})
+	anything := leaf(&plan.AnyRepresentation{})
 
 	tests := []struct {
 		name string
@@ -33,7 +33,7 @@ func TestUnfilledSlots(t *testing.T) {
 	}{
 		{
 			name: "a nil Additional cannot reject",
-			pred: plan.ObjectStructurePredicate{Properties: []plan.PropertyCheck{
+			pred: &plan.ObjectStructurePredicate{Properties: []plan.PropertyCheck{
 				{Name: "a", Plan: str, Presence: plan.PresenceOptional},
 			}},
 			value:  map[string]any{"b": 1.0},
@@ -41,13 +41,13 @@ func TestUnfilledSlots(t *testing.T) {
 		},
 		{
 			name:   "a nil Rest rejects items past the prefix",
-			pred:   plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{str}},
+			pred:   &plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{str}},
 			value:  []any{"a", "b"},
 			accept: false,
 		},
 		{
 			name: "an unfilled property plan",
-			pred: plan.ObjectStructurePredicate{
+			pred: &plan.ObjectStructurePredicate{
 				Properties: []plan.PropertyCheck{{Name: "a", Presence: plan.PresenceRequired}},
 				Additional: &anything,
 			},
@@ -56,7 +56,7 @@ func TestUnfilledSlots(t *testing.T) {
 		},
 		{
 			name: "an unfilled pattern plan",
-			pred: plan.ObjectStructurePredicate{
+			pred: &plan.ObjectStructurePredicate{
 				Patterns:   []plan.PatternCheck{{Pattern: "^a"}},
 				Additional: &anything,
 			},
@@ -65,7 +65,7 @@ func TestUnfilledSlots(t *testing.T) {
 		},
 		{
 			name:     "an unfilled prefix plan",
-			pred:     plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{{}}},
+			pred:     &plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{{}}},
 			value:    []any{"a"},
 			internal: "planterp: prefix check 0 at the instance root has no plan",
 		},
@@ -74,7 +74,7 @@ func TestUnfilledSlots(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			guard := plan.SetObject
-			if _, isArray := tt.pred.(plan.ArrayStructurePredicate); isArray {
+			if _, isArray := tt.pred.(*plan.ArrayStructurePredicate); isArray {
 				guard = plan.SetArray
 			}
 			v, err := planterp.Interpret(checking(tt.pred, guard), tt.value)
@@ -99,10 +99,10 @@ func TestUnfilledSlots(t *testing.T) {
 // TestUnfilledSlotLocationIsReported keeps the instance location on a malformed slot: one
 // plan node is reached once per sub-value, so the path is what makes it findable.
 func TestUnfilledSlotLocationIsReported(t *testing.T) {
-	inner := checking(plan.ObjectStructurePredicate{
+	inner := checking(&plan.ObjectStructurePredicate{
 		Properties: []plan.PropertyCheck{{Name: "a", Presence: plan.PresenceRequired}},
 	}, plan.SetObject)
-	p := checking(plan.ArrayStructurePredicate{Rest: &inner}, plan.SetArray)
+	p := checking(&plan.ArrayStructurePredicate{Rest: &inner}, plan.SetArray)
 
 	_, err := planterp.Interpret(p, []any{map[string]any{}})
 

@@ -12,15 +12,15 @@ import (
 
 // objectShapeExpr is {"properties":{"a":{"type":"string","minLength":1}},"additionalProperties":false}.
 func objectShapeExpr() ir.Expr {
-	return ir.Shape{Detail: ir.ObjectShape{
+	return &ir.Shape{Detail: &ir.ObjectShape{
 		Properties:           []ir.PropertyExpr{{Name: "a", Schema: constrainedString()}},
-		AdditionalProperties: ir.Never{},
+		AdditionalProperties: &ir.Never{},
 	}}
 }
 
 // arrayShapeExpr is {"items":{"type":"string","minLength":1}}.
 func arrayShapeExpr() ir.Expr {
-	return ir.Shape{Detail: ir.ArrayShape{Items: ir.ItemExpr{Schema: constrainedString()}}}
+	return &ir.Shape{Detail: &ir.ArrayShape{Items: ir.ItemExpr{Schema: constrainedString()}}}
 }
 
 // TestBuild_ShapeWithoutTypeIsKindGuarded pins issue #72. A shape keyword written without
@@ -39,12 +39,12 @@ func TestBuild_ShapeWithoutTypeIsKindGuarded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := planner.Build(tt.expr, nil).Plan
 
-			require.IsType(t, plan.AnyRepresentation{}, got.Representation,
+			require.IsType(t, &plan.AnyRepresentation{}, got.Representation,
 				"a shape keyword must not assert its own type")
 			require.Len(t, got.ResidualChecks(), 1)
 			gp := got.ResidualChecks()[0]
 			require.Equal(t, tt.guard, gp.Applicability)
-			require.IsType(t, plan.ShapePredicate{}, gp.Expression)
+			require.IsType(t, &plan.ShapePredicate{}, gp.Expression)
 		})
 	}
 }
@@ -64,13 +64,13 @@ func TestBuild_ShapeAgreesWithTypedSpelling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			untyped := planner.Build(tt.shape, nil).Plan
-			typed := planner.Build(ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: tt.kinds},
+			typed := planner.Build(&ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: tt.kinds},
 				tt.shape,
 			}}, nil).Plan
 
 			require.Len(t, untyped.ResidualChecks(), 1)
-			shape, ok := untyped.ResidualChecks()[0].Expression.(plan.ShapePredicate)
+			shape, ok := untyped.ResidualChecks()[0].Expression.(*plan.ShapePredicate)
 			require.True(t, ok)
 			require.Equal(t, typed, shape.Schema)
 		})
@@ -81,25 +81,25 @@ func TestBuild_ShapeAgreesWithTypedSpelling(t *testing.T) {
 // `constraintsFor(name)`: a property `properties` declares and a pattern matches must
 // satisfy both, so the field's own plan carries the pattern's constraint too.
 func TestBuild_PatternPropertiesIntersectDeclaredFields(t *testing.T) {
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{
 			Properties: []ir.PropertyExpr{
-				{Name: "foo", Schema: ir.Kinds{Set: plan.SetArray}},
-				{Name: "bar", Schema: ir.Kinds{Set: plan.SetArray}},
+				{Name: "foo", Schema: &ir.Kinds{Set: plan.SetArray}},
+				{Name: "bar", Schema: &ir.Kinds{Set: plan.SetArray}},
 			},
 			PatternProperties: []ir.PatternPropertyExpr{{
 				Pattern: "f.o",
-				Schema:  ir.Predicate{Guard: plan.SetArray, Detail: ir.MinItemsDetail{Value: 2}},
+				Schema:  &ir.Predicate{Guard: plan.SetArray, Detail: &ir.MinItemsDetail{Value: 2}},
 			}},
 		}},
 	}}, nil).Plan
 
-	obj, ok := got.Representation.(plan.ObjectRepresentation)
+	obj, ok := got.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", got.Representation)
 	require.Equal(t,
 		[]plan.GuardedPredicate{
-			{Applicability: plan.SetArray, Expression: plan.MinItemsPredicate{Value: 2}},
+			{Applicability: plan.SetArray, Expression: &plan.MinItemsPredicate{Value: 2}},
 		},
 		plannerField(t, obj, "foo").Plan.ResidualChecks(),
 		"a matching pattern must be intersected into the declared field")

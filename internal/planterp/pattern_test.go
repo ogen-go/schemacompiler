@@ -13,8 +13,8 @@ import (
 
 func patternPlan(regex string) plan.CompilationPlan {
 	return plan.CompilationPlan{
-		Representation: plan.AnyRepresentation{},
-		Validation:     guarded(plan.SetString, plan.PatternPredicate{Regex: regex}),
+		Representation: &plan.AnyRepresentation{},
+		Validation:     guarded(plan.SetString, &plan.PatternPredicate{Regex: regex}),
 	}
 }
 
@@ -74,9 +74,9 @@ func TestUncompilablePatternAccepts(t *testing.T) {
 // `patternProperties` side, where both booleans can reject: running the rule's plan on a
 // name it may not cover, or falling through to an `additionalProperties: false`.
 func TestUncompilablePatternRuleClaimsTheProperty(t *testing.T) {
-	p := leaf(plan.ObjectRepresentation{
-		Additional:   &[]plan.CompilationPlan{leaf(plan.NeverRepresentation{})}[0],
-		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "(", Plan: leaf(plan.NeverRepresentation{})}},
+	p := leaf(&plan.ObjectRepresentation{
+		Additional:   &[]plan.CompilationPlan{leaf(&plan.NeverRepresentation{})}[0],
+		PatternRules: []plan.PatternFieldRepresentation{{Pattern: "(", Plan: leaf(&plan.NeverRepresentation{})}},
 	})
 
 	verdict, err := planterp.Interpret(p, decode(t, `{"x": 1}`))

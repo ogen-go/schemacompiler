@@ -3,6 +3,10 @@ package plan
 // DispatchPlan selects among a finite set of known alternatives (design §9). It is
 // distinct from schema resolution (design §2.4): dispatch is runtime branch selection
 // over statically known plans.
+//
+// Variants implement this on a pointer receiver, so only *T satisfies it. A value
+// receiver would put the method in both T's and *T's method set, leaving every type
+// switch to match one spelling and silently miss the other (issue #133).
 type DispatchPlan interface {
 	isDispatchPlan()
 }
@@ -95,9 +99,9 @@ type PredicateCountDispatch struct {
 	Maximum int
 }
 
-func (NoDispatch) isDispatchPlan()             {}
-func (KindDispatch) isDispatchPlan()           {}
-func (LiteralDispatch) isDispatchPlan()        {}
-func (PropertyDispatch) isDispatchPlan()       {}
-func (PresenceDispatch) isDispatchPlan()       {}
-func (PredicateCountDispatch) isDispatchPlan() {}
+func (*NoDispatch) isDispatchPlan()             {}
+func (*KindDispatch) isDispatchPlan()           {}
+func (*LiteralDispatch) isDispatchPlan()        {}
+func (*PropertyDispatch) isDispatchPlan()       {}
+func (*PresenceDispatch) isDispatchPlan()       {}
+func (*PredicateCountDispatch) isDispatchPlan() {}

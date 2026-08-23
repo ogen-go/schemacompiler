@@ -8,7 +8,7 @@ import (
 // buildAll is the entry point for an ir.All (or a bare node wrapped as a one-element
 // All): it flattens the sibling contributions and routes to the right sub-builder
 // (design §21.1, §22).
-func (b *builder) buildAll(all ir.All, path string) plan.CompilationPlan {
+func (b *builder) buildAll(all *ir.All, path string) plan.CompilationPlan {
 	k := ir.Expr(all).Kinds()
 	if k == 0 {
 		return b.neverPlanAt(path)
@@ -57,7 +57,7 @@ func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, pa
 		}
 		p.Validation.Predicates = append(p.Validation.Predicates, plan.GuardedPredicate{
 			Applicability: plan.SetAny,
-			Expression:    plan.NegationPredicate{Schema: sub},
+			Expression:    &plan.NegationPredicate{Schema: sub},
 		})
 		p.Resolution = mergeResolution(p.Resolution, sub.Resolution)
 		emitted = true
@@ -102,16 +102,16 @@ func (b *builder) negatable(p plan.CompilationPlan, operand ir.Expr) bool {
 // An operand that really is unconstrained is excluded: `not {}` is legitimately Never, and
 // that is the one case where a plan accepting everything is the honest answer.
 func vacuous(p plan.CompilationPlan, operand ir.Expr) bool {
-	if _, isAny := p.Representation.(plan.AnyRepresentation); !isAny {
+	if _, isAny := p.Representation.(*plan.AnyRepresentation); !isAny {
 		return false
 	}
 	if !p.Validation.Empty() {
 		return false
 	}
-	if _, noDispatch := p.Dispatch.(plan.NoDispatch); !noDispatch {
+	if _, noDispatch := p.Dispatch.(*plan.NoDispatch); !noDispatch {
 		return false
 	}
-	_, operandIsAny := operand.(ir.Any)
+	_, operandIsAny := operand.(*ir.Any)
 	return !operandIsAny
 }
 

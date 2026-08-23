@@ -17,20 +17,20 @@ import (
 // covers the resolvable cases.
 func TestNegatable(t *testing.T) {
 	anyPlan := plan.CompilationPlan{
-		Representation: plan.AnyRepresentation{},
-		Dispatch:       plan.NoDispatch{},
+		Representation: &plan.AnyRepresentation{},
+		Dispatch:       &plan.NoDispatch{},
 	}
 	stringPlan := plan.CompilationPlan{
-		Representation: plan.PrimitiveRepresentation{Kind: plan.KindString},
-		Dispatch:       plan.NoDispatch{},
+		Representation: &plan.PrimitiveRepresentation{Kind: plan.KindString},
+		Dispatch:       &plan.NoDispatch{},
 	}
 	refPlan := plan.CompilationPlan{
-		Representation: plan.ReferenceRepresentation{Name: "#/$defs/S"},
-		Dispatch:       plan.NoDispatch{},
+		Representation: &plan.ReferenceRepresentation{Name: "#/$defs/S"},
+		Dispatch:       &plan.NoDispatch{},
 	}
 	objectWithRef := plan.CompilationPlan{
-		Representation: plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{{Name: "a", Plan: refPlan}}},
-		Dispatch:       plan.NoDispatch{},
+		Representation: &plan.ObjectRepresentation{Fields: []plan.FieldRepresentation{{Name: "a", Plan: refPlan}}},
+		Dispatch:       &plan.NoDispatch{},
 	}
 
 	for _, tt := range []struct {
@@ -42,43 +42,43 @@ func TestNegatable(t *testing.T) {
 		{
 			name:    "a primitive is trusted",
 			p:       stringPlan,
-			operand: ir.Kinds{Set: plan.KindSet(1 << plan.KindString)},
+			operand: &ir.Kinds{Set: plan.KindSet(1 << plan.KindString)},
 			want:    true,
 		},
 		{
 			name:    "an object is trusted",
-			p:       plan.CompilationPlan{Representation: plan.ObjectRepresentation{}, Dispatch: plan.NoDispatch{}},
-			operand: ir.Kinds{Set: plan.KindSet(1 << plan.KindObject)},
+			p:       plan.CompilationPlan{Representation: &plan.ObjectRepresentation{}, Dispatch: &plan.NoDispatch{}},
+			operand: &ir.Kinds{Set: plan.KindSet(1 << plan.KindObject)},
 			want:    true,
 		},
 		{
 			name:    "an array is trusted",
-			p:       plan.CompilationPlan{Representation: plan.ArrayRepresentation{}, Dispatch: plan.NoDispatch{}},
-			operand: ir.Kinds{Set: plan.KindSet(1 << plan.KindArray)},
+			p:       plan.CompilationPlan{Representation: &plan.ArrayRepresentation{}, Dispatch: &plan.NoDispatch{}},
+			operand: &ir.Kinds{Set: plan.KindSet(1 << plan.KindArray)},
 			want:    true,
 		},
 		{
 			name:    "a reference with no registry to resolve it is not",
 			p:       refPlan,
-			operand: ir.Ref{Target: "#/$defs/S"},
+			operand: &ir.Ref{Target: "#/$defs/S"},
 			want:    false,
 		},
 		{
 			name:    "a reference nested in a field with no registry is not",
 			p:       objectWithRef,
-			operand: ir.Kinds{Set: plan.KindSet(1 << plan.KindObject)},
+			operand: &ir.Kinds{Set: plan.KindSet(1 << plan.KindObject)},
 			want:    false,
 		},
 		{
 			name:    "a plan that enforces nothing is not",
 			p:       anyPlan,
-			operand: ir.Kinds{Set: plan.KindSet(1 << plan.KindString)},
+			operand: &ir.Kinds{Set: plan.KindSet(1 << plan.KindString)},
 			want:    false,
 		},
 		{
 			name:    "an unconstrained operand really is unconstrained",
 			p:       anyPlan,
-			operand: ir.Any{},
+			operand: &ir.Any{},
 			want:    true,
 		},
 	} {

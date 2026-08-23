@@ -13,7 +13,7 @@ import (
 // the stack.
 func buildExpr(data []byte, depth int) (expr ir.Expr, rest []byte) {
 	if len(data) == 0 {
-		return ir.Any{}, data
+		return &ir.Any{}, data
 	}
 	op := data[0]
 	data = data[1:]
@@ -21,17 +21,17 @@ func buildExpr(data []byte, depth int) (expr ir.Expr, rest []byte) {
 	leaf := func(n byte) ir.Expr {
 		switch n % 6 {
 		case 0:
-			return ir.Any{}
+			return &ir.Any{}
 		case 1:
-			return ir.Never{}
+			return &ir.Never{}
 		case 2:
-			return ir.Kinds{Set: plan.SetString}
+			return &ir.Kinds{Set: plan.SetString}
 		case 3:
-			return ir.Kinds{Set: plan.SetNumber}
+			return &ir.Kinds{Set: plan.SetNumber}
 		case 4:
-			return ir.Literal{Value: "a"}
+			return &ir.Literal{Value: "a"}
 		default:
-			return ir.Predicate{Guard: plan.SetString, Detail: ir.MinLengthDetail{Value: uint64(n)}}
+			return &ir.Predicate{Guard: plan.SetString, Detail: &ir.MinLengthDetail{Value: uint64(n)}}
 		}
 	}
 
@@ -45,13 +45,13 @@ func buildExpr(data []byte, depth int) (expr ir.Expr, rest []byte) {
 
 	switch op % 5 {
 	case 0:
-		return ir.All{Operands: []ir.Expr{a, b}}, data
+		return &ir.All{Operands: []ir.Expr{a, b}}, data
 	case 1:
-		return ir.AnyOf{Operands: []ir.Expr{a, b}}, data
+		return &ir.AnyOf{Operands: []ir.Expr{a, b}}, data
 	case 2:
-		return ir.ExactlyOne{Operands: []ir.Expr{a, b}}, data
+		return &ir.ExactlyOne{Operands: []ir.Expr{a, b}}, data
 	case 3:
-		return ir.Not{Operand: a}, data
+		return &ir.Not{Operand: a}, data
 	default:
 		return leaf(op), data
 	}

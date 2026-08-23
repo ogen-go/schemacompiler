@@ -44,9 +44,9 @@ func TestCompile_FormatGuardPerName(t *testing.T) {
 		{"decimal", plan.SetNumber},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Compile(&frontend.Node{Format: tt.name}).(All)
+			got := Compile(&frontend.Node{Format: tt.name}).(*All)
 			require.Equal(t, []Expr{
-				Predicate{Guard: tt.want, Detail: FormatDetail{Format: tt.name}},
+				&Predicate{Guard: tt.want, Detail: &FormatDetail{Format: tt.name}},
 			}, got.Operands)
 			require.Equal(t, plan.SetAny, got.Kinds(), "a guarded format still accepts every kind")
 		})
@@ -54,5 +54,5 @@ func TestCompile_FormatGuardPerName(t *testing.T) {
 }
 
 func TestCompile_FormatNoneIsNotEmitted(t *testing.T) {
-	require.Empty(t, Compile(&frontend.Node{}).(All).Operands)
+	require.Empty(t, Compile(&frontend.Node{}).(*All).Operands)
 }

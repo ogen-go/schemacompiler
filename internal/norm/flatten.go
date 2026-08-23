@@ -10,7 +10,7 @@ import (
 // (design §15.4-15.5, §17.3-17.4), fold Kinds operands, drop guard-vacuous
 // predicates, drop duplicates/Any, and collapse subsumed operands (design
 // §15.1, §15.2).
-func normalizeAll(e ir.All, st *state) ir.Expr {
+func normalizeAll(e *ir.All, st *state) ir.Expr {
 	// Flatten nested All *without* normalizing children first: a lone
 	// ExactlyOne/AnyOf sibling must still be recognizable here, before
 	// normalizing it in isolation could collapse it on its own (e.g. via
@@ -36,20 +36,20 @@ func normalizeAll(e ir.All, st *state) ir.Expr {
 		// them (design §15.5). foldKindsAll below only folds Kinds siblings; this also
 		// catches an operand whose kind set is implied rather than declared, such as a
 		// Literal of the wrong kind under a sibling `type` (design §16.2).
-		return ir.Never{}
+		return &ir.Never{}
 	}
 
 	flat, kinds, hasKinds, isNever := foldKindsAll(flat)
 	if isNever {
-		return ir.Never{}
+		return &ir.Never{}
 	}
 
 	flat = dropGuardVacuousPredicates(flat, kinds, hasKinds)
 
 	for _, o := range flat {
-		if _, ok := o.(ir.Never); ok {
+		if _, ok := o.(*ir.Never); ok {
 			// All(..., Never, ...) -> Never (design §15.1).
-			return ir.Never{}
+			return &ir.Never{}
 		}
 	}
 
@@ -59,17 +59,17 @@ func normalizeAll(e ir.All, st *state) ir.Expr {
 
 	switch len(flat) {
 	case 0:
-		return ir.Any{} // All() -> Any (design §15.1).
+		return &ir.Any{} // All() -> Any (design §15.1).
 	case 1:
 		return flat[0]
 	default:
-		return ir.All{Operands: flat}
+		return &ir.All{Operands: flat}
 	}
 }
 
 // normalizeAnyOf simplifies an AnyOf node: flatten nested AnyOf, drop Never
 // operands, dedup, and collapse subsumed operands (design §15.1, §15.2).
-func normalizeAnyOf(e ir.AnyOf, st *state) ir.Expr {
+func normalizeAnyOf(e *ir.AnyOf, st *state) ir.Expr {
 	var flat []ir.Expr
 	for _, o := range e.Operands {
 		flat = flattenAnyOfInto(flat, normalize(o, st))
@@ -81,11 +81,11 @@ func normalizeAnyOf(e ir.AnyOf, st *state) ir.Expr {
 
 	switch len(flat) {
 	case 0:
-		return ir.Never{} // AnyOf() -> Never (design §15.1).
+		return &ir.Never{} // AnyOf() -> Never (design §15.1).
 	case 1:
 		return flat[0]
 	default:
-		return ir.AnyOf{Operands: flat, Discriminator: e.Discriminator}
+		return &ir.AnyOf{Operands: flat, Discriminator: e.Discriminator}
 	}
 }
 
@@ -93,7 +93,7 @@ func normalizeAnyOf(e ir.AnyOf, st *state) ir.Expr {
 // associative under flattening (design §17.1: nested oneOf(anyOf(...), ...)
 // is not the same as flattening every operand into one exact-one group), so
 // nested ExactlyOne operands are normalized but never merged into this one.
-func normalizeExactlyOne(e ir.ExactlyOne, st *state) ir.Expr {
+func normalizeExactlyOne(e *ir.ExactlyOne, st *state) ir.Expr {
 	flat := make([]ir.Expr, 0, len(e.Operands))
 	for _, o := range e.Operands {
 		flat = append(flat, normalize(o, st))
@@ -107,15 +107,15 @@ func normalizeExactlyOne(e ir.ExactlyOne, st *state) ir.Expr {
 	// matches, so it can never satisfy exactly-one; exclude it and recurse
 	// on what remains: ExactlyOne(A, A, C, ...) = All(Not(A), ExactlyOne(C, ...)).
 	if dup, rest, ok := extractDuplicate(flat); ok {
-		return normalize(ir.All{Operands: []ir.Expr{
-			ir.Not{Operand: dup},
-			ir.ExactlyOne{Operands: rest},
+		return normalize(&ir.All{Operands: []ir.Expr{
+			&ir.Not{Operand: dup},
+			&ir.ExactlyOne{Operands: rest},
 		}}, st)
 	}
 
 	switch len(flat) {
 	case 0:
-		return ir.Never{} // ExactlyOne() -> Never (design §15.1).
+		return &ir.Never{} // ExactlyOne() -> Never (design §15.1).
 	case 1:
 		return flat[0]
 	}
@@ -127,23 +127,23 @@ func normalizeExactlyOne(e ir.ExactlyOne, st *state) ir.Expr {
 		a, b := flat[0], flat[1]
 		switch {
 		case subsumes(a, b):
-			return normalize(ir.All{Operands: []ir.Expr{b, ir.Not{Operand: a}}}, st)
+			return normalize(&ir.All{Operands: []ir.Expr{b, &ir.Not{Operand: a}}}, st)
 		case subsumes(b, a):
-			return normalize(ir.All{Operands: []ir.Expr{a, ir.Not{Operand: b}}}, st)
+			return normalize(&ir.All{Operands: []ir.Expr{a, &ir.Not{Operand: b}}}, st)
 		}
 	}
 
 	// Disjointness -> union (design §15.3): rewriting unlocks static kind
 	// dispatch downstream instead of a residual match-count check.
 	if allPairwiseDisjoint(flat) {
-		return normalize(ir.AnyOf{Operands: flat, Discriminator: e.Discriminator}, st)
+		return normalize(&ir.AnyOf{Operands: flat, Discriminator: e.Discriminator}, st)
 	}
 
-	return ir.ExactlyOne{Operands: flat, Discriminator: e.Discriminator}
+	return &ir.ExactlyOne{Operands: flat, Discriminator: e.Discriminator}
 }
 
 func flattenAllInto(dst []ir.Expr, e ir.Expr) []ir.Expr {
-	if a, ok := e.(ir.All); ok {
+	if a, ok := e.(*ir.All); ok {
 		for _, o := range a.Operands {
 			dst = flattenAllInto(dst, o)
 		}
@@ -155,7 +155,7 @@ func flattenAllInto(dst []ir.Expr, e ir.Expr) []ir.Expr {
 // flattenAnyOfInto merges nested AnyOf operands into dst. An operand carrying its own
 // declared discriminator is kept intact: merging it would drop the declaration.
 func flattenAnyOfInto(dst []ir.Expr, e ir.Expr) []ir.Expr {
-	if a, ok := e.(ir.AnyOf); ok && a.Discriminator == nil {
+	if a, ok := e.(*ir.AnyOf); ok && a.Discriminator == nil {
 		for _, o := range a.Operands {
 			dst = flattenAnyOfInto(dst, o)
 		}
@@ -178,7 +178,7 @@ func foldKindsAll(operands []ir.Expr) (result []ir.Expr, kinds ir.Kinds, hasKind
 	var rest []ir.Expr
 
 	for _, o := range operands {
-		k, ok := o.(ir.Kinds)
+		k, ok := o.(*ir.Kinds)
 		if !ok {
 			rest = append(rest, o)
 			continue
@@ -203,7 +203,7 @@ func foldKindsAll(operands []ir.Expr) (result []ir.Expr, kinds ir.Kinds, hasKind
 
 	merged := ir.Kinds{Set: set, Numeric: numeric}
 	result = make([]ir.Expr, 0, len(rest)+1)
-	result = append(result, merged)
+	result = append(result, &merged)
 	result = append(result, rest...)
 	return result, merged, true, false
 }
@@ -239,7 +239,7 @@ func dropGuardVacuousPredicates(operands []ir.Expr, kinds ir.Kinds, hasKinds boo
 	}
 	out := make([]ir.Expr, 0, len(operands))
 	for _, o := range operands {
-		if p, ok := o.(ir.Predicate); ok && kinds.Set&p.Guard == 0 {
+		if p, ok := o.(*ir.Predicate); ok && kinds.Set&p.Guard == 0 {
 			continue // vacuous under this All's kind restriction: drop it.
 		}
 		out = append(out, o)
@@ -267,7 +267,7 @@ func dedupExprs(operands []ir.Expr) []ir.Expr {
 func dropAny(operands []ir.Expr) []ir.Expr {
 	out := make([]ir.Expr, 0, len(operands))
 	for _, o := range operands {
-		if _, ok := o.(ir.Any); ok {
+		if _, ok := o.(*ir.Any); ok {
 			continue
 		}
 		out = append(out, o)
@@ -278,7 +278,7 @@ func dropAny(operands []ir.Expr) []ir.Expr {
 func filterNotNever(operands []ir.Expr) []ir.Expr {
 	out := make([]ir.Expr, 0, len(operands))
 	for _, o := range operands {
-		if _, ok := o.(ir.Never); ok {
+		if _, ok := o.(*ir.Never); ok {
 			continue
 		}
 		out = append(out, o)

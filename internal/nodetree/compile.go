@@ -193,14 +193,14 @@ func (v *Validator) compileDispatch(d plan.DispatchPlan) (node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return literalDispatch{cases: cases}, nil
+		return literalDispatch{caseTable: newCaseTable(cases)}, nil
 
 	case plan.PropertyDispatch:
 		cases, err := v.compileCases(d.Cases)
 		if err != nil {
 			return nil, err
 		}
-		return propertyDispatch{property: d.Property, cases: cases}, nil
+		return propertyDispatch{property: d.Property, caseTable: newCaseTable(cases)}, nil
 
 	case plan.PresenceDispatch:
 		present, err := v.compilePlan(d.Present)

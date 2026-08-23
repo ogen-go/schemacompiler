@@ -3,7 +3,6 @@ package nodetree
 import (
 	"github.com/go-faster/jx"
 
-	"github.com/ogen-go/schemacompiler/internal/jsonequal"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -26,23 +25,10 @@ type literalCase struct {
 	inner node
 }
 
-// selectCase finds the case whose literal equals selector, comparing as JSON values
-// rather than bytes so `1` and `1.0` agree.
-func selectCase(cases []literalCase, selector []byte) (node, bool) {
-	for _, c := range cases {
-		eq, err := jsonequal.Equal(c.raw, selector)
-		if err != nil || !eq {
-			continue
-		}
-		return c.inner, true
-	}
-	return nil, false
-}
-
-type literalDispatch struct{ cases []literalCase }
+type literalDispatch struct{ caseTable }
 
 func (l literalDispatch) ok(raw []byte) bool {
-	n, ok := selectCase(l.cases, raw)
+	n, ok := l.selectCase(raw)
 	if !ok {
 		return false
 	}
@@ -51,7 +37,7 @@ func (l literalDispatch) ok(raw []byte) bool {
 
 type propertyDispatch struct {
 	property string
-	cases    []literalCase
+	caseTable
 }
 
 func (p propertyDispatch) ok(raw []byte) bool {
@@ -59,7 +45,7 @@ func (p propertyDispatch) ok(raw []byte) bool {
 	if !isObject || !found {
 		return false
 	}
-	n, ok := selectCase(p.cases, tag)
+	n, ok := p.selectCase(tag)
 	if !ok {
 		return false
 	}

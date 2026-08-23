@@ -325,7 +325,7 @@ func (k kindDispatch) errs(raw []byte, at *loc, yield func(Error) bool) bool {
 }
 
 func (l literalDispatch) errs(raw []byte, at *loc, yield func(Error) bool) bool {
-	n, ok := selectCase(l.cases, raw)
+	n, ok := l.selectCase(raw)
 	if !ok {
 		return yield(Error{Location: at.String(), Keyword: "enum", Message: "value is not one of the allowed literals"})
 	}
@@ -344,7 +344,7 @@ func (p propertyDispatch) errs(raw []byte, at *loc, yield func(Error) bool) bool
 			Message:  strconv.Quote(p.property) + " is absent",
 		})
 	}
-	n, ok := selectCase(p.cases, tag)
+	n, ok := p.selectCase(tag)
 	if !ok {
 		return yield(Error{
 			Location: childLocation(at, p.property),

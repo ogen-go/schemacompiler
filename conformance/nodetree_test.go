@@ -80,6 +80,16 @@ func TestNodetreeAgreesWithPlanterp(t *testing.T) {
 				instances++
 
 				got := v.IsValid(inst.Data)
+
+				// IterErrors is a second traversal, hand-written per node. It has to
+				// agree with the fast path exactly: an instance is invalid if and only
+				// if at least one error is reported, or one of the two is lying.
+				reported := v.Validate(inst.Data)
+				if (reported == nil) != got {
+					t.Errorf("%s (%q/%q): IsValid=%v but Validate=%v",
+						rel, c.Description, inst.Description, got, reported)
+				}
+
 				if got == want.Accepted {
 					agreed++
 					continue

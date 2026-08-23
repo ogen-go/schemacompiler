@@ -66,3 +66,60 @@ func BenchmarkNodetree(b *testing.B) {
 		}
 	}
 }
+
+var benchBadDoc = []byte(`{"id":0,"name":"","email":"nope","tags":["x",""],"meta":{"k":1}}`)
+
+// BenchmarkNodetreeInvalid is the rejecting path with no reporting: it must not pay for
+// error machinery either.
+func BenchmarkNodetreeInvalid(b *testing.B) {
+	v := benchValidator(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if v.IsValid(benchBadDoc) {
+			b.Fatal("should reject")
+		}
+	}
+}
+
+// BenchmarkNodetreeValidate is the first-error path, which is where the lazy location is
+// actually materialized.
+func BenchmarkNodetreeValidate(b *testing.B) {
+	v := benchValidator(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := v.Validate(benchBadDoc); err == nil {
+			b.Fatal("should reject")
+		}
+	}
+}
+
+// BenchmarkNodetreeIterErrors drains every error, the most expensive mode.
+func BenchmarkNodetreeIterErrors(b *testing.B) {
+	v := benchValidator(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		n := 0
+		for range v.IterErrors(benchBadDoc) {
+			n++
+		}
+		if n == 0 {
+			b.Fatal("should report")
+		}
+	}
+}
+
+func benchValidator(b *testing.B) *nodetree.Validator {
+	b.Helper()
+	res, err := schemacompiler.Compile(context.Background(), []byte(benchSchema), schemacompiler.Options{})
+	if err != nil {
+		b.Fatal(err)
+	}
+	v, err := nodetree.Compile(res.Plan)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return v
+}

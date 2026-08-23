@@ -66,11 +66,11 @@ func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, pa
 		// Widening the outer plan is sound, but it no longer reproduces the accepted set,
 		// and nothing downstream can tell from the plan alone that a conjunct is missing.
 		b.dropped = true
-		b.diag(path, plan.SeverityWarning,
+		b.diag(path, plan.DiagnosticUnenforced, plan.SeverityWarning,
 			"negated sub-schema is not exactly modeled; the negation is dropped and the plan accepts more")
 	}
 	if emitted {
-		b.diag(path, plan.SeverityWarning,
+		b.diag(path, plan.DiagnosticCost, plan.SeverityWarning,
 			"residual negation requires runtime sub-schema validation")
 		p.Capability = maxCapability(p.Capability, plan.PredicateDispatch)
 	}

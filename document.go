@@ -112,6 +112,7 @@ func unresolvedDiagnostics(refs []frontend.UnresolvedRef) []plan.Diagnostic {
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
 			Position: u.Position,
+			Kind:     plan.DiagnosticUnenforced,
 			Severity: plan.SeverityError,
 			Message:  "unresolved $ref " + u.Ref + ": " + u.Reason,
 		}
@@ -132,6 +133,7 @@ func ignoredNullableDiagnostics(nodes []frontend.IgnoredNullable) []plan.Diagnos
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
 			Position: u.Position,
+			Kind:     plan.DiagnosticAdvisory,
 			Severity: plan.SeverityWarning,
 			Message: "ignoring `nullable: true`: OAS 3.0.3 adds null to the `type` keyword " +
 				"only if `type` is declared in the same Schema Object; spell it `type: [T, \"null\"]`",
@@ -153,6 +155,7 @@ func unusedDiscriminatorDiagnostics(nodes []frontend.UnusedDiscriminator) []plan
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
 			Position: u.Position,
+			Kind:     plan.DiagnosticAdvisory,
 			Severity: plan.SeverityWarning,
 			Message: "`discriminator` does not produce a tagged union here: only a sibling " +
 				"`oneOf` or `anyOf` lists the alternatives in place. OAS 3.0.3 line 2761 also " +
@@ -182,6 +185,7 @@ func invalidKeywordDiagnostics(nodes []frontend.InvalidKeyword) []plan.Diagnosti
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
 			Position: u.Position,
+			Kind:     plan.DiagnosticUnenforced,
 			Severity: plan.SeverityError,
 			Message:  msg + ": " + u.Reason + "; the keyword is ignored",
 		}
@@ -202,6 +206,7 @@ func uninhabitedDiagnostics(nodes []frontend.UninhabitedNode) []plan.Diagnostic 
 		diags[i] = plan.Diagnostic{
 			Pointer:  u.Pointer,
 			Position: u.Position,
+			Kind:     plan.DiagnosticAdvisory,
 			Severity: plan.SeverityWarning,
 			Message:  "uninhabited schema: " + u.Reason,
 		}

@@ -124,7 +124,7 @@ func TestRefTrusted_LeavesNoTrace(t *testing.T) {
 	require.NotEmpty(t, sub.diags, "the target must be one whose build says something")
 
 	b := newBuilder(s.Registry)
-	b.diag("/pre", plan.SeverityWarning, "pre-existing")
+	b.diag("/pre", plan.DiagnosticAdvisory, plan.SeverityWarning, "pre-existing")
 	before := b.gaps
 
 	require.False(t, b.refTrusted("/$defs/S", nil))

@@ -28,7 +28,7 @@ func (b *builder) pickFormat(formats []string, path string) string {
 		return names[0]
 	}
 	sort.Strings(names)
-	b.diag(path+"/format", plan.SeverityInfo,
+	b.diag(path+"/format", plan.DiagnosticAdvisory, plan.SeverityInfo,
 		"conflicting formats ("+strings.Join(names, ", ")+") composed by an unordered intersection; "+
 			"the representation carries none, all remain validation-only")
 	return ""

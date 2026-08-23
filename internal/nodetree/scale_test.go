@@ -90,3 +90,70 @@ func TestRequiredWithoutMatchingPropertyIsEnforced(t *testing.T) {
 	require.True(t, v.IsValid([]byte(`{"a":1}`)))
 	require.False(t, v.IsValid([]byte(`{"b":"x"}`)), "a is required though undeclared")
 }
+
+// TestFoldedCountBoundsAreEnforced pins the behavior behind the count folding: the bound
+// still rejects, still tolerates a kind it does not apply to, and still reports under its
+// own keyword rather than the structure's.
+func TestFoldedCountBoundsAreEnforced(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		schema  string
+		accept  []string
+		reject  string
+		keyword string
+	}{
+		{
+			name:    "maxItems beside items",
+			schema:  `{"type":"array","items":{"type":"string"},"maxItems":2}`,
+			accept:  []string{`["a","b"]`, `[]`},
+			reject:  `["a","b","c"]`,
+			keyword: "maxItems",
+		},
+		{
+			name:    "minItems beside items",
+			schema:  `{"type":"array","items":{"type":"string"},"minItems":2}`,
+			accept:  []string{`["a","b"]`, `["a","b","c"]`},
+			reject:  `["a"]`,
+			keyword: "minItems",
+		},
+		{
+			name:    "maxProperties beside properties",
+			schema:  `{"type":"object","properties":{"a":{"type":"string"}},"maxProperties":2}`,
+			accept:  []string{`{"a":"x","b":1}`, `{}`},
+			reject:  `{"a":"x","b":1,"c":2}`,
+			keyword: "maxProperties",
+		},
+		{
+			name:    "minProperties beside properties",
+			schema:  `{"type":"object","properties":{"a":{"type":"string"}},"minProperties":2}`,
+			accept:  []string{`{"a":"x","b":1}`},
+			reject:  `{"a":"x"}`,
+			keyword: "minProperties",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := compile(t, tt.schema)
+			for _, doc := range tt.accept {
+				require.True(t, v.IsValid([]byte(doc)), doc)
+			}
+			require.False(t, v.IsValid([]byte(tt.reject)), tt.reject)
+
+			errs := errorsOf(v, tt.reject)
+			require.Len(t, errs, 1)
+			require.Equal(t, tt.keyword, errs[0].Keyword)
+			require.Equal(t, "", errs[0].Location)
+			require.Error(t, v.Validate([]byte(tt.reject)))
+		})
+	}
+}
+
+// TestFoldedBoundIgnoresOtherKinds pins that folding kept the bound a guard: a string is
+// neither an array nor an object, so neither the structure nor the bound applies.
+func TestFoldedBoundIgnoresOtherKinds(t *testing.T) {
+	v := compile(t, `{"items":{"type":"string"},"maxItems":1,"properties":{"a":{}},"minProperties":3}`)
+
+	require.True(t, v.IsValid([]byte(`"a string"`)))
+	require.True(t, v.IsValid([]byte(`42`)))
+	require.False(t, v.IsValid([]byte(`["a","b"]`)), "the array bound still applies to an array")
+	require.False(t, v.IsValid([]byte(`{"a":1}`)), "the object bound still applies to an object")
+}

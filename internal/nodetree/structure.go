@@ -32,6 +32,9 @@ type objectStructure struct {
 	// required has a bit per required field, matched against the bits set while walking
 	// the instance's keys. It replaces a per-instance map.
 	required presence
+	// counts is `minProperties`/`maxProperties`, folded in because this walk already
+	// visits every key (see [newPlanFusion]).
+	counts countBounds
 }
 
 func (o objectStructure) ok(raw []byte) bool {
@@ -39,8 +42,10 @@ func (o objectStructure) ok(raw []byte) bool {
 	defer jx.PutDecoder(d)
 
 	seen := o.set.newPresence()
+	count := uint64(0)
 	valid := true
 	if err := d.ObjBytes(func(d *jx.Decoder, key []byte) error {
+		count++
 		if !valid {
 			return d.Skip()
 		}
@@ -96,7 +101,7 @@ func (o objectStructure) ok(raw []byte) bool {
 	if !valid {
 		return false
 	}
-	return seen.covers(o.required)
+	return seen.covers(o.required) && o.counts.ok(count)
 }
 
 func isNull(raw []byte) bool {
@@ -110,6 +115,9 @@ type arrayStructure struct {
 	prefix        []node
 	rest          node
 	restForbidden bool
+	// counts is `minItems`/`maxItems`, folded in because this walk already visits every
+	// element (see [newPlanFusion]).
+	counts countBounds
 }
 
 func (a arrayStructure) ok(raw []byte) bool {
@@ -145,7 +153,7 @@ func (a arrayStructure) ok(raw []byte) bool {
 	}); err != nil {
 		return true
 	}
-	return valid
+	return valid && a.counts.ok(uint64(i))
 }
 
 func encodeLiteral(v any) ([]byte, error) {

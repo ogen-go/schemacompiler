@@ -15,7 +15,7 @@ import (
 var ErrUnsupported = errors.New("nodetree: unsupported construct")
 
 //nolint:gocyclo // one case per plan.PredicateExpr variant, as planterp's switch is.
-func (v *Validator) compileExpr(e plan.PredicateExpr) (node, error) {
+func (v *Validator) compileExpr(e plan.PredicateExpr, fusion planFusion) (node, error) {
 	switch e := e.(type) {
 	case nil:
 		return nil, nil
@@ -71,9 +71,9 @@ func (v *Validator) compileExpr(e plan.PredicateExpr) (node, error) {
 		return newDependentRequired(e.Entries), nil
 
 	case plan.ObjectStructurePredicate:
-		return v.compileObjectStructure(e)
+		return v.compileObjectStructure(e, fusion.objectBounds)
 	case plan.ArrayStructurePredicate:
-		return v.compileArrayStructure(e)
+		return v.compileArrayStructure(e, fusion.arrayBounds)
 
 	case plan.ReferencePredicate:
 		return reference{name: e.Name, defs: v.defs}, nil
@@ -112,12 +112,12 @@ func (v *Validator) compileExpr(e plan.PredicateExpr) (node, error) {
 	}
 }
 
-func (v *Validator) compileObjectStructure(e plan.ObjectStructurePredicate) (node, error) {
+func (v *Validator) compileObjectStructure(e plan.ObjectStructurePredicate, counts countBounds) (node, error) {
 	declared := make([]string, len(e.Properties))
 	for i, pc := range e.Properties {
 		declared[i] = pc.Name
 	}
-	o := objectStructure{set: newNameSet(declared)}
+	o := objectStructure{set: newNameSet(declared), counts: counts}
 	o.required = o.set.newPresence()
 	for i, pc := range e.Properties {
 		if pc.Presence == plan.PresenceRequired {
@@ -151,8 +151,8 @@ func (v *Validator) compileObjectStructure(e plan.ObjectStructurePredicate) (nod
 	return o, nil
 }
 
-func (v *Validator) compileArrayStructure(e plan.ArrayStructurePredicate) (node, error) {
-	a := arrayStructure{}
+func (v *Validator) compileArrayStructure(e plan.ArrayStructurePredicate, counts countBounds) (node, error) {
+	a := arrayStructure{counts: counts}
 	for _, p := range e.Prefix {
 		n, err := v.compilePlan(p)
 		if err != nil {

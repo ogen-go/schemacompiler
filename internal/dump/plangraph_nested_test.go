@@ -11,16 +11,16 @@ import (
 )
 
 func refRep(name string) plan.Representation {
-	return plan.ReferenceRepresentation{Name: name}
+	return &plan.ReferenceRepresentation{Name: name}
 }
 
 func targetDefs(names ...string) map[plan.SchemaID]plan.CompilationPlan {
 	defs := make(map[plan.SchemaID]plan.CompilationPlan, len(names))
 	for _, n := range names {
 		defs[plan.SchemaID(n)] = plan.CompilationPlan{
-			Representation: plan.PrimitiveRepresentation{Kind: plan.KindString},
-			Dispatch:       plan.NoDispatch{},
-			Resolution:     plan.FullyResolved{},
+			Representation: &plan.PrimitiveRepresentation{Kind: plan.KindString},
+			Dispatch:       &plan.NoDispatch{},
+			Resolution:     &plan.FullyResolved{},
 			Capability:     plan.DirectGoType,
 		}
 	}
@@ -34,43 +34,43 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 	}{
 		{
 			name: "object field",
-			p: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
+			p: plan.CompilationPlan{Representation: &plan.ObjectRepresentation{
 				Fields: []plan.FieldRepresentation{{Name: "a", Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 			}},
 		},
 		{
 			name: "object additional",
-			p: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
+			p: plan.CompilationPlan{Representation: &plan.ObjectRepresentation{
 				Additional: &plan.CompilationPlan{Representation: refRep("A")},
 			}},
 		},
 		{
 			name: "object pattern rule",
-			p: plan.CompilationPlan{Representation: plan.ObjectRepresentation{
+			p: plan.CompilationPlan{Representation: &plan.ObjectRepresentation{
 				PatternRules: []plan.PatternFieldRepresentation{{Pattern: "^x", Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 			}},
 		},
 		{
 			name: "array prefix item",
-			p: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
+			p: plan.CompilationPlan{Representation: &plan.ArrayRepresentation{
 				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 			}},
 		},
 		{
 			name: "array rest item",
-			p: plan.CompilationPlan{Representation: plan.ArrayRepresentation{
+			p: plan.CompilationPlan{Representation: &plan.ArrayRepresentation{
 				Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: refRep("A")}},
 			}},
 		},
 		{
 			name: "union alternative",
-			p: plan.CompilationPlan{Representation: plan.UnionRepresentation{
-				Alternatives: []plan.Representation{plan.PrimitiveRepresentation{Kind: plan.KindNull}, refRep("A")},
+			p: plan.CompilationPlan{Representation: &plan.UnionRepresentation{
+				Alternatives: []plan.Representation{&plan.PrimitiveRepresentation{Kind: plan.KindNull}, refRep("A")},
 			}},
 		},
 		{
 			name: "recursive body",
-			p: plan.CompilationPlan{Representation: plan.RecursiveRepresentation{
+			p: plan.CompilationPlan{Representation: &plan.RecursiveRepresentation{
 				Name: "Node",
 				Body: refRep("A"),
 			}},
@@ -78,9 +78,9 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 		{
 			name: "contains predicate plan",
 			p: plan.CompilationPlan{
-				Representation: plan.ArrayRepresentation{},
+				Representation: &plan.ArrayRepresentation{},
 				Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{{
-					Expression: plan.ContainsCountPredicate{
+					Expression: &plan.ContainsCountPredicate{
 						Schema: plan.CompilationPlan{Representation: refRep("A")},
 						Min:    1,
 					},
@@ -90,9 +90,9 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 		{
 			name: "property names predicate plan",
 			p: plan.CompilationPlan{
-				Representation: plan.ObjectRepresentation{},
+				Representation: &plan.ObjectRepresentation{},
 				Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{{
-					Expression: plan.PropertyNamesPredicate{
+					Expression: &plan.PropertyNamesPredicate{
 						Schema: plan.CompilationPlan{Representation: refRep("A")},
 					},
 				}}},
@@ -101,9 +101,9 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 		{
 			name: "reference nested under a dispatch branch",
 			p: plan.CompilationPlan{
-				Representation: plan.AnyRepresentation{},
-				Dispatch: plan.PredicateCountDispatch{
-					Branches: []plan.CompilationPlan{{Representation: plan.ObjectRepresentation{
+				Representation: &plan.AnyRepresentation{},
+				Dispatch: &plan.PredicateCountDispatch{
+					Branches: []plan.CompilationPlan{{Representation: &plan.ObjectRepresentation{
 						Fields: []plan.FieldRepresentation{{Name: "a", Plan: plan.CompilationPlan{Representation: refRep("A")}}},
 					}}},
 					Minimum: 1,
@@ -127,7 +127,7 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 }
 
 func TestPlanDOTNestedReferenceIsStableAndDeduplicated(t *testing.T) {
-	p := plan.CompilationPlan{Representation: plan.ObjectRepresentation{
+	p := plan.CompilationPlan{Representation: &plan.ObjectRepresentation{
 		Fields: []plan.FieldRepresentation{
 			{Name: "a", Plan: plan.CompilationPlan{Representation: refRep("A")}},
 			{Name: "b", Plan: plan.CompilationPlan{Representation: refRep("B")}},
@@ -151,7 +151,7 @@ func TestPlanDOTNestedReferenceIsStableAndDeduplicated(t *testing.T) {
 }
 
 func TestPlanDOTNestedReferenceToMissingDefIsStub(t *testing.T) {
-	p := plan.CompilationPlan{Representation: plan.ArrayRepresentation{
+	p := plan.CompilationPlan{Representation: &plan.ArrayRepresentation{
 		Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: refRep("Missing")}},
 	}}
 

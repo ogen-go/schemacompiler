@@ -10,9 +10,9 @@ import (
 // nothing to validate, dispatch, or resolve.
 func anyPlan() plan.CompilationPlan {
 	return plan.CompilationPlan{
-		Representation: plan.AnyRepresentation{},
-		Dispatch:       plan.NoDispatch{},
-		Resolution:     plan.FullyResolved{},
+		Representation: &plan.AnyRepresentation{},
+		Dispatch:       &plan.NoDispatch{},
+		Resolution:     &plan.FullyResolved{},
 		Capability:     plan.DirectGoType,
 	}
 }
@@ -21,15 +21,15 @@ func anyPlan() plan.CompilationPlan {
 // intersection): the empty type is itself an exact, if uninhabited, representation.
 func (b *builder) neverPlanAt(_ string) plan.CompilationPlan {
 	return plan.CompilationPlan{
-		Representation: plan.NeverRepresentation{},
+		Representation: &plan.NeverRepresentation{},
 		// An assertion over the empty kind set: no instance's kind is in it, so every
 		// instance is rejected. Design §4.1 puts that in the validation plan rather than
 		// leaving it to a Go type nothing can be stored in.
 		Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
 			{Applicability: 0, Assert: true},
 		}},
-		Dispatch:   plan.NoDispatch{},
-		Resolution: plan.FullyResolved{},
+		Dispatch:   &plan.NoDispatch{},
+		Resolution: &plan.FullyResolved{},
 		Capability: plan.DirectGoType,
 	}
 }
@@ -69,8 +69,8 @@ func mergeResolution(parts ...plan.ResolutionPlan) plan.ResolutionPlan {
 	)
 	for _, p := range parts {
 		switch v := p.(type) {
-		case nil, plan.FullyResolved:
-		case plan.StaticReferenceGraph:
+		case nil, *plan.FullyResolved:
+		case *plan.StaticReferenceGraph:
 			static = true
 			for k, val := range v.Definitions {
 				if statics == nil {
@@ -78,7 +78,7 @@ func mergeResolution(parts ...plan.ResolutionPlan) plan.ResolutionPlan {
 				}
 				statics[k] = val
 			}
-		case plan.DynamicReferenceGraph:
+		case *plan.DynamicReferenceGraph:
 			dyn = true
 			for k, val := range v.StaticDefinitions {
 				if statics == nil {
@@ -103,11 +103,11 @@ func mergeResolution(parts ...plan.ResolutionPlan) plan.ResolutionPlan {
 	}
 	switch {
 	case dyn:
-		return plan.DynamicReferenceGraph{StaticDefinitions: statics, DynamicAnchors: dynAnchors}
+		return &plan.DynamicReferenceGraph{StaticDefinitions: statics, DynamicAnchors: dynAnchors}
 	case static:
-		return plan.StaticReferenceGraph{Definitions: statics}
+		return &plan.StaticReferenceGraph{Definitions: statics}
 	default:
-		return plan.FullyResolved{}
+		return &plan.FullyResolved{}
 	}
 }
 

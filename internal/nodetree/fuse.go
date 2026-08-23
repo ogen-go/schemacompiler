@@ -51,24 +51,24 @@ func newPlanFusion(preds []plan.GuardedPredicate) planFusion {
 			continue
 		}
 		switch e := gp.Expression.(type) {
-		case plan.RequiredPredicate:
+		case *plan.RequiredPredicate:
 			f.skip[i] = requiredIsRestated(e, gp, preds)
-		case plan.MinPropertiesPredicate:
+		case *plan.MinPropertiesPredicate:
 			if foldable(object, hasObject, gp) && !f.objectBounds.hasMin {
 				f.objectBounds.min, f.objectBounds.hasMin = e.Value, true
 				f.skip[i] = true
 			}
-		case plan.MaxPropertiesPredicate:
+		case *plan.MaxPropertiesPredicate:
 			if foldable(object, hasObject, gp) && !f.objectBounds.hasMax {
 				f.objectBounds.max, f.objectBounds.hasMax = e.Value, true
 				f.skip[i] = true
 			}
-		case plan.MinItemsPredicate:
+		case *plan.MinItemsPredicate:
 			if foldable(array, hasArray, gp) && !f.arrayBounds.hasMin {
 				f.arrayBounds.min, f.arrayBounds.hasMin = e.Value, true
 				f.skip[i] = true
 			}
-		case plan.MaxItemsPredicate:
+		case *plan.MaxItemsPredicate:
 			if foldable(array, hasArray, gp) && !f.arrayBounds.hasMax {
 				f.arrayBounds.max, f.arrayBounds.hasMax = e.Value, true
 				f.skip[i] = true
@@ -79,12 +79,12 @@ func newPlanFusion(preds []plan.GuardedPredicate) planFusion {
 }
 
 func isObjectStructure(e plan.PredicateExpr) bool {
-	_, ok := e.(plan.ObjectStructurePredicate)
+	_, ok := e.(*plan.ObjectStructurePredicate)
 	return ok
 }
 
 func isArrayStructure(e plan.PredicateExpr) bool {
-	_, ok := e.(plan.ArrayStructurePredicate)
+	_, ok := e.(*plan.ArrayStructurePredicate)
 	return ok
 }
 
@@ -107,9 +107,9 @@ func loneStructure(preds []plan.GuardedPredicate, is func(plan.PredicateExpr) bo
 // requiredIsRestated reports whether some sibling object structure requires every name req
 // does. The sibling has to guard the same kinds: a structure applying to fewer kinds than
 // the required check cannot stand in for it.
-func requiredIsRestated(req plan.RequiredPredicate, gp plan.GuardedPredicate, preds []plan.GuardedPredicate) bool {
+func requiredIsRestated(req *plan.RequiredPredicate, gp plan.GuardedPredicate, preds []plan.GuardedPredicate) bool {
 	for _, other := range preds {
-		structure, isStructure := other.Expression.(plan.ObjectStructurePredicate)
+		structure, isStructure := other.Expression.(*plan.ObjectStructurePredicate)
 		if !isStructure || other.Assert || other.Applicability != gp.Applicability {
 			continue
 		}
@@ -120,7 +120,7 @@ func requiredIsRestated(req plan.RequiredPredicate, gp plan.GuardedPredicate, pr
 	return false
 }
 
-func structureRequires(s plan.ObjectStructurePredicate, names []string) bool {
+func structureRequires(s *plan.ObjectStructurePredicate, names []string) bool {
 	for _, name := range names {
 		found := false
 		for _, pc := range s.Properties {

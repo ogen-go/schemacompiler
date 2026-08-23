@@ -15,17 +15,17 @@ import (
 // table can pin the shape without spelling out a whole nested representation tree.
 func repShape(r plan.Representation) string {
 	switch r := r.(type) {
-	case plan.AnyRepresentation:
+	case *plan.AnyRepresentation:
 		return "any"
-	case plan.NeverRepresentation:
+	case *plan.NeverRepresentation:
 		return "never"
-	case plan.PrimitiveRepresentation:
+	case *plan.PrimitiveRepresentation:
 		return "primitive:" + kindName(r.Kind)
-	case plan.ObjectRepresentation:
+	case *plan.ObjectRepresentation:
 		return "object"
-	case plan.ArrayRepresentation:
+	case *plan.ArrayRepresentation:
 		return "array"
-	case plan.UnionRepresentation:
+	case *plan.UnionRepresentation:
 		out := "union("
 		for i, alt := range r.Alternatives {
 			if i > 0 {
@@ -34,7 +34,7 @@ func repShape(r plan.Representation) string {
 			out += repShape(alt)
 		}
 		return out + ")"
-	case plan.ReferenceRepresentation:
+	case *plan.ReferenceRepresentation:
 		return "ref:" + r.Name
 	default:
 		return fmt.Sprintf("%T", r)
@@ -62,17 +62,17 @@ func kindName(k plan.JSONKind) string {
 
 func dispatchShape(d plan.DispatchPlan) string {
 	switch d.(type) {
-	case plan.NoDispatch:
+	case *plan.NoDispatch:
 		return "none"
-	case plan.LiteralDispatch:
+	case *plan.LiteralDispatch:
 		return "literal"
-	case plan.KindDispatch:
+	case *plan.KindDispatch:
 		return "kind"
-	case plan.PropertyDispatch:
+	case *plan.PropertyDispatch:
 		return "property"
-	case plan.PresenceDispatch:
+	case *plan.PresenceDispatch:
 		return "presence"
-	case plan.PredicateCountDispatch:
+	case *plan.PredicateCountDispatch:
 		return "predicate-count"
 	default:
 		return fmt.Sprintf("%T", d)
@@ -82,7 +82,7 @@ func dispatchShape(d plan.DispatchPlan) string {
 // literalCaseValues returns the raw JSON source of each LiteralDispatch case, in order,
 // or nil when the plan does not dispatch on literals.
 func literalCaseValues(d plan.DispatchPlan) []string {
-	ld, ok := d.(plan.LiteralDispatch)
+	ld, ok := d.(*plan.LiteralDispatch)
 	if !ok {
 		return nil
 	}

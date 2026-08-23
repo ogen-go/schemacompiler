@@ -26,10 +26,10 @@ func subsumes(a, b ir.Expr) bool {
 	if exprEqual(a, b) {
 		return true
 	}
-	if _, ok := a.(ir.Never); ok {
+	if _, ok := a.(*ir.Never); ok {
 		return true
 	}
-	if _, ok := b.(ir.Any); ok {
+	if _, ok := b.(*ir.Any); ok {
 		return true
 	}
 
@@ -39,20 +39,20 @@ func subsumes(a, b ir.Expr) bool {
 		}
 	}
 
-	if pa, ok := a.(ir.Predicate); ok {
-		if pb, ok := b.(ir.Predicate); ok && pa.Guard == pb.Guard && predicateDetailSubsumes(pa.Detail, pb.Detail) {
+	if pa, ok := a.(*ir.Predicate); ok {
+		if pb, ok := b.(*ir.Predicate); ok && pa.Guard == pb.Guard && predicateDetailSubsumes(pa.Detail, pb.Detail) {
 			return true
 		}
 	}
 
-	if allA, ok := a.(ir.All); ok {
+	if allA, ok := a.(*ir.All); ok {
 		for _, o := range allA.Operands {
 			if subsumes(o, b) {
 				return true
 			}
 		}
 	}
-	if allB, ok := b.(ir.All); ok {
+	if allB, ok := b.(*ir.All); ok {
 		all := true
 		for _, y := range allB.Operands {
 			if !subsumes(a, y) {
@@ -64,7 +64,7 @@ func subsumes(a, b ir.Expr) bool {
 			return true
 		}
 	}
-	if anyB, ok := b.(ir.AnyOf); ok {
+	if anyB, ok := b.(*ir.AnyOf); ok {
 		for _, o := range anyB.Operands {
 			if subsumes(a, o) {
 				return true
@@ -79,13 +79,13 @@ func subsumes(a, b ir.Expr) bool {
 // single-operand All wrapping one of those.
 func asKinds(e ir.Expr) (ir.Kinds, bool) {
 	switch e := e.(type) {
-	case ir.Kinds:
-		return e, true
-	case ir.Any:
+	case *ir.Kinds:
+		return *e, true
+	case *ir.Any:
 		return ir.Kinds{Set: plan.SetAny}, true
-	case ir.Never:
+	case *ir.Never:
 		return ir.Kinds{Set: 0}, true
-	case ir.All:
+	case *ir.All:
 		if len(e.Operands) == 1 {
 			return asKinds(e.Operands[0])
 		}
@@ -112,44 +112,44 @@ func numericSubsumes(a, b plan.NumericDomain) bool {
 // strict as b's, so every value passing a also passes b.
 func predicateDetailSubsumes(a, b ir.PredicateDetail) bool {
 	switch a := a.(type) {
-	case ir.MinLengthDetail:
-		if b, ok := b.(ir.MinLengthDetail); ok {
+	case *ir.MinLengthDetail:
+		if b, ok := b.(*ir.MinLengthDetail); ok {
 			return a.Value >= b.Value
 		}
-	case ir.MaxLengthDetail:
-		if b, ok := b.(ir.MaxLengthDetail); ok {
+	case *ir.MaxLengthDetail:
+		if b, ok := b.(*ir.MaxLengthDetail); ok {
 			return a.Value <= b.Value
 		}
-	case ir.MinimumDetail:
-		if b, ok := b.(ir.MinimumDetail); ok {
+	case *ir.MinimumDetail:
+		if b, ok := b.(*ir.MinimumDetail); ok {
 			return a.Value >= b.Value
 		}
-	case ir.MaximumDetail:
-		if b, ok := b.(ir.MaximumDetail); ok {
+	case *ir.MaximumDetail:
+		if b, ok := b.(*ir.MaximumDetail); ok {
 			return a.Value <= b.Value
 		}
-	case ir.ExclusiveMinimumDetail:
-		if b, ok := b.(ir.ExclusiveMinimumDetail); ok {
+	case *ir.ExclusiveMinimumDetail:
+		if b, ok := b.(*ir.ExclusiveMinimumDetail); ok {
 			return a.Value >= b.Value
 		}
-	case ir.ExclusiveMaximumDetail:
-		if b, ok := b.(ir.ExclusiveMaximumDetail); ok {
+	case *ir.ExclusiveMaximumDetail:
+		if b, ok := b.(*ir.ExclusiveMaximumDetail); ok {
 			return a.Value <= b.Value
 		}
-	case ir.MinItemsDetail:
-		if b, ok := b.(ir.MinItemsDetail); ok {
+	case *ir.MinItemsDetail:
+		if b, ok := b.(*ir.MinItemsDetail); ok {
 			return a.Value >= b.Value
 		}
-	case ir.MaxItemsDetail:
-		if b, ok := b.(ir.MaxItemsDetail); ok {
+	case *ir.MaxItemsDetail:
+		if b, ok := b.(*ir.MaxItemsDetail); ok {
 			return a.Value <= b.Value
 		}
-	case ir.MinPropertiesDetail:
-		if b, ok := b.(ir.MinPropertiesDetail); ok {
+	case *ir.MinPropertiesDetail:
+		if b, ok := b.(*ir.MinPropertiesDetail); ok {
 			return a.Value >= b.Value
 		}
-	case ir.MaxPropertiesDetail:
-		if b, ok := b.(ir.MaxPropertiesDetail); ok {
+	case *ir.MaxPropertiesDetail:
+		if b, ok := b.(*ir.MaxPropertiesDetail); ok {
 			return a.Value <= b.Value
 		}
 	}

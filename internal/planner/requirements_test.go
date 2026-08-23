@@ -45,9 +45,9 @@ func TestRequireECMARegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := planner.Build(ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetString},
-				ir.Predicate{Guard: plan.SetString, Detail: ir.PatternDetail{Regex: tt.pattern}},
+			got := planner.Build(&ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetString},
+				&ir.Predicate{Guard: plan.SetString, Detail: &ir.PatternDetail{Regex: tt.pattern}},
 			}}, nil)
 
 			if !tt.required {
@@ -65,10 +65,10 @@ func TestRequireECMARegex(t *testing.T) {
 // discharged statically and must not be listed.
 func TestRequireUnboundedNumeric(t *testing.T) {
 	numberWith := func(preds ...ir.Expr) ir.Expr {
-		return ir.All{Operands: append([]ir.Expr{ir.Kinds{Set: plan.SetNumber}}, preds...)}
+		return &ir.All{Operands: append([]ir.Expr{&ir.Kinds{Set: plan.SetNumber}}, preds...)}
 	}
-	minimum := ir.Predicate{Guard: plan.SetNumber, Detail: ir.MinimumDetail{Value: 0}}
-	maximum := ir.Predicate{Guard: plan.SetNumber, Detail: ir.MaximumDetail{Value: 1000}}
+	minimum := ir.Predicate{Guard: plan.SetNumber, Detail: &ir.MinimumDetail{Value: 0}}
+	maximum := ir.Predicate{Guard: plan.SetNumber, Detail: &ir.MaximumDetail{Value: 1000}}
 
 	tests := []struct {
 		name     string
@@ -76,10 +76,10 @@ func TestRequireUnboundedNumeric(t *testing.T) {
 		required bool
 	}{
 		{name: "bare number", expr: numberWith(), required: true},
-		{name: "only a lower bound", expr: numberWith(minimum), required: true},
-		{name: "only an upper bound", expr: numberWith(maximum), required: true},
-		{name: "bounded both ways", expr: numberWith(minimum, maximum), required: false},
-		{name: "a string is not numeric", expr: ir.Kinds{Set: plan.SetString}, required: false},
+		{name: "only a lower bound", expr: numberWith(&minimum), required: true},
+		{name: "only an upper bound", expr: numberWith(&maximum), required: true},
+		{name: "bounded both ways", expr: numberWith(&minimum, &maximum), required: false},
+		{name: "a string is not numeric", expr: &ir.Kinds{Set: plan.SetString}, required: false},
 	}
 
 	for _, tt := range tests {
@@ -95,10 +95,10 @@ func TestRequireUnboundedNumeric(t *testing.T) {
 // (design §24.3), so a consumer cannot discharge them against the decoded value.
 func TestRequireRawEvaluation(t *testing.T) {
 	object := func(preds ...ir.Expr) ir.Expr {
-		return ir.All{Operands: append([]ir.Expr{ir.Kinds{Set: plan.SetObject}}, preds...)}
+		return &ir.All{Operands: append([]ir.Expr{&ir.Kinds{Set: plan.SetObject}}, preds...)}
 	}
 	pred := func(d ir.PredicateDetail) ir.Expr {
-		return ir.Predicate{Guard: plan.SetObject, Detail: d}
+		return &ir.Predicate{Guard: plan.SetObject, Detail: d}
 	}
 
 	tests := []struct {
@@ -106,29 +106,29 @@ func TestRequireRawEvaluation(t *testing.T) {
 		expr ir.Expr
 		want int
 	}{
-		{name: "minProperties", expr: object(pred(ir.MinPropertiesDetail{Value: 1})), want: 1},
-		{name: "maxProperties", expr: object(pred(ir.MaxPropertiesDetail{Value: 1})), want: 1},
+		{name: "minProperties", expr: object(pred(&ir.MinPropertiesDetail{Value: 1})), want: 1},
+		{name: "maxProperties", expr: object(pred(&ir.MaxPropertiesDetail{Value: 1})), want: 1},
 		{
 			name: "propertyNames",
-			expr: object(pred(ir.PropertyNamesDetail{Schema: ir.Kinds{Set: plan.SetString}})),
+			expr: object(pred(&ir.PropertyNamesDetail{Schema: &ir.Kinds{Set: plan.SetString}})),
 			want: 1,
 		},
 		{
 			name: "additionalProperties false",
-			expr: object(ir.Shape{Detail: ir.ObjectShape{AdditionalProperties: ir.Never{}}}),
+			expr: object(&ir.Shape{Detail: &ir.ObjectShape{AdditionalProperties: &ir.Never{}}}),
 			want: 1,
 		},
 		{
 			name: "uniqueItems",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetArray},
-				ir.Predicate{Guard: plan.SetArray, Detail: ir.UniqueItemsDetail{}},
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetArray},
+				&ir.Predicate{Guard: plan.SetArray, Detail: &ir.UniqueItemsDetail{}},
 			}},
 			want: 1,
 		},
 		{
 			name: "required is discharged by presence, not by the raw document",
-			expr: object(pred(ir.RequiredDetail{Properties: []string{"a"}})),
+			expr: object(pred(&ir.RequiredDetail{Properties: []string{"a"}})),
 			want: 0,
 		},
 		{
@@ -151,9 +151,9 @@ func TestRequireRawEvaluation(t *testing.T) {
 // two JSON-distinct items that decode to the same Go value would make it reject an array
 // the schema accepts (design §24.3).
 func TestRequireJSONEquality(t *testing.T) {
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetArray},
-		ir.Predicate{Guard: plan.SetArray, Detail: ir.UniqueItemsDetail{}},
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetArray},
+		&ir.Predicate{Guard: plan.SetArray, Detail: &ir.UniqueItemsDetail{}},
 	}}, nil)
 	require.Equal(t, []string{"uniqueItems"}, details(got.Requirements.JSONEquality))
 }
@@ -162,15 +162,15 @@ func TestRequireJSONEquality(t *testing.T) {
 // the planner passes through it: a `patternProperties` pattern is matched against every
 // declared property name.
 func TestRequirementsAreDeduplicated(t *testing.T) {
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{
 			Properties: []ir.PropertyExpr{
-				{Name: "a", Schema: ir.Kinds{Set: plan.SetString}},
-				{Name: "b", Schema: ir.Kinds{Set: plan.SetString}},
-				{Name: "c", Schema: ir.Kinds{Set: plan.SetString}},
+				{Name: "a", Schema: &ir.Kinds{Set: plan.SetString}},
+				{Name: "b", Schema: &ir.Kinds{Set: plan.SetString}},
+				{Name: "c", Schema: &ir.Kinds{Set: plan.SetString}},
 			},
-			PatternProperties: []ir.PatternPropertyExpr{{Pattern: `^\d`, Schema: ir.Kinds{Set: plan.SetString}}},
+			PatternProperties: []ir.PatternPropertyExpr{{Pattern: `^\d`, Schema: &ir.Kinds{Set: plan.SetString}}},
 		}},
 	}}, nil)
 
@@ -180,10 +180,10 @@ func TestRequirementsAreDeduplicated(t *testing.T) {
 // TestRequirementsEmptyForAPlainSchema keeps the fields from firing on everything: a
 // consumer must be able to read an empty Requirements as "nothing special here".
 func TestRequirementsEmptyForAPlainSchema(t *testing.T) {
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{
-			Properties: []ir.PropertyExpr{{Name: "a", Schema: ir.Kinds{Set: plan.SetString}}},
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{
+			Properties: []ir.PropertyExpr{{Name: "a", Schema: &ir.Kinds{Set: plan.SetString}}},
 		}},
 	}}, nil)
 	require.True(t, got.Requirements.Empty(), "got %+v", got.Requirements)

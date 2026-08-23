@@ -16,11 +16,11 @@ type guardedFormat struct {
 }
 
 func formatExpr(set plan.KindSet, formats ...guardedFormat) ir.Expr {
-	operands := []ir.Expr{ir.Kinds{Set: set}}
+	operands := []ir.Expr{&ir.Kinds{Set: set}}
 	for _, f := range formats {
-		operands = append(operands, ir.Predicate{Guard: f.guard, Detail: ir.FormatDetail{Format: f.name}})
+		operands = append(operands, &ir.Predicate{Guard: f.guard, Detail: &ir.FormatDetail{Format: f.name}})
 	}
-	return ir.All{Operands: operands}
+	return &ir.All{Operands: operands}
 }
 
 func TestBuild_FormatOnRepresentation(t *testing.T) {
@@ -40,7 +40,7 @@ func TestBuild_FormatOnRepresentation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := planner.Build(formatExpr(tt.set, guardedFormat{tt.name, tt.guard}), nil)
 
-			require.Equal(t, plan.PrimitiveRepresentation{
+			require.Equal(t, &plan.PrimitiveRepresentation{
 				Kind:   tt.kind,
 				Format: tt.name,
 			}, got.Plan.Representation)
@@ -48,7 +48,7 @@ func TestBuild_FormatOnRepresentation(t *testing.T) {
 			// The residual assertion survives onto the representation: a backend may
 			// ignore Format and still validate.
 			require.Len(t, got.Plan.ResidualChecks(), 1)
-			require.Equal(t, plan.FormatPredicate{Format: tt.name}, got.Plan.ResidualChecks()[0].Expression)
+			require.Equal(t, &plan.FormatPredicate{Format: tt.name}, got.Plan.ResidualChecks()[0].Expression)
 			require.Empty(t, got.Diagnostics)
 		})
 	}
@@ -71,7 +71,7 @@ func TestBuild_FormatVacuousForKind(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := planner.Build(formatExpr(tt.set, tt.format), nil)
 
-			require.Equal(t, plan.PrimitiveRepresentation{Kind: tt.kind}, got.Plan.Representation)
+			require.Equal(t, &plan.PrimitiveRepresentation{Kind: tt.kind}, got.Plan.Representation)
 			require.Empty(t, got.Plan.ResidualChecks())
 			require.Empty(t, got.Diagnostics)
 		})
@@ -81,11 +81,11 @@ func TestBuild_FormatVacuousForKind(t *testing.T) {
 func TestBuild_FormatWithoutTypeStaysValidationOnly(t *testing.T) {
 	// {"format": "uuid"}: every non-string value is still accepted, so the
 	// representation widens to Any and cannot carry the format.
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Predicate{Guard: plan.SetString, Detail: ir.FormatDetail{Format: "uuid"}},
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Predicate{Guard: plan.SetString, Detail: &ir.FormatDetail{Format: "uuid"}},
 	}}, nil)
 
-	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
+	require.Equal(t, &plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Len(t, got.Plan.ResidualChecks(), 1)
 	require.Equal(t, plan.SetString, got.Plan.ResidualChecks()[0].Applicability)
 }
@@ -97,7 +97,7 @@ func TestBuild_ConflictingFormatsCarryNone(t *testing.T) {
 		guardedFormat{"uuid", plan.SetString}, guardedFormat{"date-time", plan.SetString}), nil)
 
 	require.Equal(t, forward.Plan.Representation, reverse.Plan.Representation)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, forward.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, forward.Plan.Representation)
 
 	for _, got := range []planner.Result{forward, reverse} {
 		require.Len(t, got.Plan.ResidualChecks(), 2)

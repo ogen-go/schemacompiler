@@ -14,29 +14,29 @@ import (
 func exprSamples() []ir.Expr {
 	str := ir.Kinds{Set: plan.SetString}
 	num := ir.Kinds{Set: plan.SetNumber}
-	minLen5 := ir.Predicate{Guard: plan.SetString, Detail: ir.MinLengthDetail{Value: 5}}
-	minimum0 := ir.Predicate{Guard: plan.SetNumber, Detail: ir.MinimumDetail{Value: 0}}
+	minLen5 := ir.Predicate{Guard: plan.SetString, Detail: &ir.MinLengthDetail{Value: 5}}
+	minimum0 := ir.Predicate{Guard: plan.SetNumber, Detail: &ir.MinimumDetail{Value: 0}}
 
 	return []ir.Expr{
-		ir.Any{},
-		ir.Never{},
-		str,
-		ir.Literal{Value: "a"},
-		ir.AnyOf{Operands: []ir.Expr{ir.Literal{Value: "a"}, ir.Literal{Value: "b"}}},
-		ir.All{Operands: []ir.Expr{str, minLen5}},
-		ir.ExactlyOne{Operands: []ir.Expr{str, num}},
-		ir.ExactlyOne{Operands: []ir.Expr{str, ir.All{Operands: []ir.Expr{str, minLen5}}}},
-		ir.All{Operands: []ir.Expr{
-			ir.Kinds{Set: plan.SetString | plan.SetNumber},
-			ir.ExactlyOne{Operands: []ir.Expr{str, ir.Kinds{Set: plan.SetBoolean}}},
+		&ir.Any{},
+		&ir.Never{},
+		&str,
+		&ir.Literal{Value: "a"},
+		&ir.AnyOf{Operands: []ir.Expr{&ir.Literal{Value: "a"}, &ir.Literal{Value: "b"}}},
+		&ir.All{Operands: []ir.Expr{&str, &minLen5}},
+		&ir.ExactlyOne{Operands: []ir.Expr{&str, &num}},
+		&ir.ExactlyOne{Operands: []ir.Expr{&str, &ir.All{Operands: []ir.Expr{&str, &minLen5}}}},
+		&ir.All{Operands: []ir.Expr{
+			&ir.Kinds{Set: plan.SetString | plan.SetNumber},
+			&ir.ExactlyOne{Operands: []ir.Expr{&str, &ir.Kinds{Set: plan.SetBoolean}}},
 		}},
-		ir.All{Operands: []ir.Expr{
-			ir.ExactlyOne{Operands: []ir.Expr{str, num}},
-			ir.AnyOf{Operands: []ir.Expr{minLen5, minimum0}},
+		&ir.All{Operands: []ir.Expr{
+			&ir.ExactlyOne{Operands: []ir.Expr{&str, &num}},
+			&ir.AnyOf{Operands: []ir.Expr{&minLen5, &minimum0}},
 		}},
-		ir.Not{Operand: ir.Not{Operand: str}},
-		ir.Shape{Detail: ir.ObjectShape{
-			Properties: []ir.PropertyExpr{{Name: "x", Schema: ir.All{Operands: []ir.Expr{str, str}}}},
+		&ir.Not{Operand: &ir.Not{Operand: &str}},
+		&ir.Shape{Detail: &ir.ObjectShape{
+			Properties: []ir.PropertyExpr{{Name: "x", Schema: &ir.All{Operands: []ir.Expr{&str, &str}}}},
 		}},
 	}
 }

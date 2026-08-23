@@ -13,26 +13,26 @@ import (
 func Compile(n *frontend.Node) Expr {
 	if n == nil {
 		// A missing sub-schema (e.g. unset `items`) behaves as the empty schema `true`.
-		return Any{}
+		return &Any{}
 	}
 	if n.Always != nil {
 		if *n.Always {
-			return Any{}
+			return &Any{}
 		}
-		return Never{}
+		return &Never{}
 	}
 
 	var siblings []Expr
 
 	if n.Ref != "" {
-		siblings = append(siblings, Ref{
+		siblings = append(siblings, &Ref{
 			Target:      refTarget(n),
 			TargetKinds: refTargetKinds(n),
 			KindsKnown:  n.Resolved != nil,
 		})
 	}
 	if n.DynamicRef != "" {
-		siblings = append(siblings, DynamicRef{Anchor: n.DynamicRef})
+		siblings = append(siblings, &DynamicRef{Anchor: n.DynamicRef})
 	}
 
 	if n.HasType {
@@ -40,11 +40,11 @@ func Compile(n *frontend.Node) Expr {
 		if n.IntegerType {
 			numeric = plan.IntegerOnly
 		}
-		siblings = append(siblings, Kinds{Set: plan.KindSet(n.Types), Numeric: numeric})
+		siblings = append(siblings, &Kinds{Set: plan.KindSet(n.Types), Numeric: numeric})
 	}
 
 	if n.Const != nil {
-		siblings = append(siblings, Literal{Value: n.Const.Decoded, Raw: n.Const.Raw})
+		siblings = append(siblings, &Literal{Value: n.Const.Decoded, Raw: n.Const.Raw})
 	}
 	if n.HasEnum || len(n.Enum) > 0 {
 		// enum: [v1, ..., vn] -> AnyOf(Literal(v1), ..., Literal(vn)) (design §11.4). A
@@ -52,28 +52,28 @@ func Compile(n *frontend.Node) Expr {
 		// false for every instance: Never (design §15.1), not Any.
 		operands := make([]Expr, len(n.Enum))
 		for i, v := range n.Enum {
-			operands[i] = Literal{Value: v.Decoded, Raw: v.Raw}
+			operands[i] = &Literal{Value: v.Decoded, Raw: v.Raw}
 		}
-		siblings = append(siblings, AnyOf{Operands: operands})
+		siblings = append(siblings, &AnyOf{Operands: operands})
 	}
 
 	if len(n.AllOf) > 0 {
-		siblings = append(siblings, All{Operands: compileAll(n.AllOf)})
+		siblings = append(siblings, &All{Operands: compileAll(n.AllOf)})
 	}
 	if len(n.AnyOf) > 0 {
-		siblings = append(siblings, AnyOf{
+		siblings = append(siblings, &AnyOf{
 			Operands:      compileAll(n.AnyOf),
 			Discriminator: compileDiscriminator(n.Discriminator),
 		})
 	}
 	if len(n.OneOf) > 0 {
-		siblings = append(siblings, ExactlyOne{
+		siblings = append(siblings, &ExactlyOne{
 			Operands:      compileAll(n.OneOf),
 			Discriminator: compileDiscriminator(n.Discriminator),
 		})
 	}
 	if n.Not != nil {
-		siblings = append(siblings, Not{Operand: Compile(n.Not)})
+		siblings = append(siblings, &Not{Operand: Compile(n.Not)})
 	}
 	if n.If != nil {
 		siblings = append(siblings, compileIfThenElse(n))
@@ -86,7 +86,7 @@ func Compile(n *frontend.Node) Expr {
 	siblings = append(siblings, compileArrayKeywords(n)...)
 	siblings = append(siblings, compileObjectKeywords(n)...)
 
-	return All{Operands: siblings}
+	return &All{Operands: siblings}
 }
 
 // compileItems compiles each positional sub-schema in order, keeping its annotations.
@@ -125,9 +125,9 @@ func compileIfThenElse(n *frontend.Node) Expr {
 	p := Compile(n.If)
 	t := Compile(n.Then)
 	e := Compile(n.Else)
-	return AnyOf{Operands: []Expr{
-		All{Operands: []Expr{p, t}},
-		All{Operands: []Expr{Not{Operand: p}, e}},
+	return &AnyOf{Operands: []Expr{
+		&All{Operands: []Expr{p, t}},
+		&All{Operands: []Expr{&Not{Operand: p}, e}},
 	}}
 }
 
@@ -147,7 +147,7 @@ func refTarget(n *frontend.Node) plan.SchemaID {
 func compileDroppedKeywords(n *frontend.Node) []Expr {
 	out := make([]Expr, 0, len(n.DroppedKeywords))
 	for _, kw := range n.DroppedKeywords {
-		out = append(out, Predicate{Guard: plan.SetAny, Detail: DroppedKeywordDetail{Keyword: kw}})
+		out = append(out, &Predicate{Guard: plan.SetAny, Detail: &DroppedKeywordDetail{Keyword: kw}})
 	}
 	return out
 }
@@ -155,16 +155,16 @@ func compileDroppedKeywords(n *frontend.Node) []Expr {
 func compileStringKeywords(n *frontend.Node) []Expr {
 	var out []Expr
 	guard := func(detail PredicateDetail) {
-		out = append(out, Predicate{Guard: plan.SetString, Detail: detail})
+		out = append(out, &Predicate{Guard: plan.SetString, Detail: detail})
 	}
 	if n.MinLength != nil {
-		guard(MinLengthDetail{Value: *n.MinLength})
+		guard(&MinLengthDetail{Value: *n.MinLength})
 	}
 	if n.MaxLength != nil {
-		guard(MaxLengthDetail{Value: *n.MaxLength})
+		guard(&MaxLengthDetail{Value: *n.MaxLength})
 	}
 	if n.Pattern != nil {
-		guard(PatternDetail{Regex: *n.Pattern})
+		guard(&PatternDetail{Regex: *n.Pattern})
 	}
 	return out
 }
@@ -172,22 +172,22 @@ func compileStringKeywords(n *frontend.Node) []Expr {
 func compileNumericKeywords(n *frontend.Node) []Expr {
 	var out []Expr
 	guard := func(detail PredicateDetail) {
-		out = append(out, Predicate{Guard: plan.SetNumber, Detail: detail})
+		out = append(out, &Predicate{Guard: plan.SetNumber, Detail: detail})
 	}
 	if n.Minimum != nil {
-		guard(MinimumDetail{Value: *n.Minimum})
+		guard(&MinimumDetail{Value: *n.Minimum})
 	}
 	if n.Maximum != nil {
-		guard(MaximumDetail{Value: *n.Maximum})
+		guard(&MaximumDetail{Value: *n.Maximum})
 	}
 	if n.ExclusiveMinimum != nil {
-		guard(ExclusiveMinimumDetail{Value: *n.ExclusiveMinimum})
+		guard(&ExclusiveMinimumDetail{Value: *n.ExclusiveMinimum})
 	}
 	if n.ExclusiveMaximum != nil {
-		guard(ExclusiveMaximumDetail{Value: *n.ExclusiveMaximum})
+		guard(&ExclusiveMaximumDetail{Value: *n.ExclusiveMaximum})
 	}
 	if n.MultipleOf != nil {
-		guard(MultipleOfDetail{Value: *n.MultipleOf})
+		guard(&MultipleOfDetail{Value: *n.MultipleOf})
 	}
 	return out
 }
@@ -195,7 +195,7 @@ func compileNumericKeywords(n *frontend.Node) []Expr {
 func compileArrayKeywords(n *frontend.Node) []Expr {
 	var out []Expr
 	guard := func(detail PredicateDetail) {
-		out = append(out, Predicate{Guard: plan.SetArray, Detail: detail})
+		out = append(out, &Predicate{Guard: plan.SetArray, Detail: detail})
 	}
 
 	if len(n.PrefixItems) > 0 || n.Items != nil || n.UnevaluatedItems != nil {
@@ -206,22 +206,22 @@ func compileArrayKeywords(n *frontend.Node) []Expr {
 		if n.UnevaluatedItems != nil {
 			shape.UnevaluatedItems = Compile(n.UnevaluatedItems)
 		}
-		out = append(out, Shape{Detail: shape})
+		out = append(out, &Shape{Detail: &shape})
 	}
 
 	if n.MinItems != nil {
-		guard(MinItemsDetail{Value: *n.MinItems})
+		guard(&MinItemsDetail{Value: *n.MinItems})
 	}
 	if n.MaxItems != nil {
-		guard(MaxItemsDetail{Value: *n.MaxItems})
+		guard(&MaxItemsDetail{Value: *n.MaxItems})
 	}
 	if n.UniqueItems {
-		guard(UniqueItemsDetail{})
+		guard(&UniqueItemsDetail{})
 	}
 	// Draft 2020-12 6.4.4/6.4.5: minContains/maxContains have no effect unless
 	// `contains` is present in the same schema object.
 	if n.Contains != nil {
-		guard(ContainsDetail{
+		guard(&ContainsDetail{
 			Schema: Compile(n.Contains),
 			Min:    n.MinContains,
 			Max:    n.MaxContains,
@@ -233,7 +233,7 @@ func compileArrayKeywords(n *frontend.Node) []Expr {
 func compileObjectKeywords(n *frontend.Node) []Expr {
 	var out []Expr
 	guard := func(detail PredicateDetail) {
-		out = append(out, Predicate{Guard: plan.SetObject, Detail: detail})
+		out = append(out, &Predicate{Guard: plan.SetObject, Detail: detail})
 	}
 
 	if len(n.Properties) > 0 || len(n.PatternProperties) > 0 ||
@@ -259,27 +259,27 @@ func compileObjectKeywords(n *frontend.Node) []Expr {
 		if n.UnevaluatedProperties != nil {
 			shape.UnevaluatedProperties = Compile(n.UnevaluatedProperties)
 		}
-		out = append(out, Shape{Detail: shape})
+		out = append(out, &Shape{Detail: &shape})
 	}
 
 	if len(n.Required) > 0 {
-		guard(RequiredDetail{Properties: n.Required})
+		guard(&RequiredDetail{Properties: n.Required})
 	}
 	if n.MinProperties != nil {
-		guard(MinPropertiesDetail{Value: *n.MinProperties})
+		guard(&MinPropertiesDetail{Value: *n.MinProperties})
 	}
 	if n.MaxProperties != nil {
-		guard(MaxPropertiesDetail{Value: *n.MaxProperties})
+		guard(&MaxPropertiesDetail{Value: *n.MaxProperties})
 	}
 	if len(n.DependentRequired) > 0 {
 		entries := make([]DependentRequiredEntry, len(n.DependentRequired))
 		for i, d := range n.DependentRequired {
 			entries[i] = DependentRequiredEntry{Property: d.Property, Requires: d.Requires}
 		}
-		guard(DependentRequiredDetail{Entries: entries})
+		guard(&DependentRequiredDetail{Entries: entries})
 	}
 	if n.PropertyNames != nil {
-		guard(PropertyNamesDetail{Schema: Compile(n.PropertyNames)})
+		guard(&PropertyNamesDetail{Schema: Compile(n.PropertyNames)})
 	}
 	for _, d := range n.DependentSchemas {
 		out = append(out, compileDependentSchema(d))
@@ -291,9 +291,9 @@ func compileObjectKeywords(n *frontend.Node) []Expr {
 //
 //	Has(p) => C(S)  ≡  Not(Has(p)) or All(Has(p), C(S))
 func compileDependentSchema(d frontend.NamedSchema) Expr {
-	has := Predicate{Guard: plan.SetObject, Detail: RequiredDetail{Properties: []string{d.Name}}}
-	return AnyOf{Operands: []Expr{
-		Not{Operand: has},
-		All{Operands: []Expr{has, Compile(d.Schema)}},
+	has := Predicate{Guard: plan.SetObject, Detail: &RequiredDetail{Properties: []string{d.Name}}}
+	return &AnyOf{Operands: []Expr{
+		&Not{Operand: &has},
+		&All{Operands: []Expr{&has, Compile(d.Schema)}},
 	}}
 }

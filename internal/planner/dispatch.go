@@ -9,24 +9,24 @@ import (
 // of a combinator (design §15.4, §17): `T ∩ ExactlyOne(A1,...,An) = ExactlyOne(T∩A1,
 // ..., T∩An)`, and similarly for AnyOf.
 func pushContext(k plan.KindSet, ctx components, op ir.Expr) ir.Expr {
-	operands := append([]ir.Expr{op, ir.Kinds{Set: k, Numeric: ctx.numeric}}, ctx.nonKindOperands()...)
-	return ir.All{Operands: operands}
+	operands := append([]ir.Expr{op, &ir.Kinds{Set: k, Numeric: ctx.numeric}}, ctx.nonKindOperands()...)
+	return &ir.All{Operands: operands}
 }
 
 // nonKindOperands reconstructs every non-kind contribution as sibling ir.Expr nodes.
 func (c components) nonKindOperands() []ir.Expr {
 	var out []ir.Expr
 	if c.literal != nil {
-		out = append(out, *c.literal)
+		out = append(out, c.literal)
 	}
 	for _, s := range c.shapes {
-		out = append(out, ir.Shape{Detail: s})
+		out = append(out, &ir.Shape{Detail: s})
 	}
 	for _, p := range c.predicates {
-		out = append(out, p)
+		out = append(out, &p)
 	}
 	for _, n := range c.nots {
-		out = append(out, n)
+		out = append(out, &n)
 	}
 	out = append(out, c.refs...)
 	out = append(out, c.combinators...)
@@ -50,9 +50,9 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 	var disc *ir.Discriminator
 	isOneOf := false
 	switch v := combinator.(type) {
-	case ir.AnyOf:
+	case *ir.AnyOf:
 		operands, disc = v.Operands, v.Discriminator
-	case ir.ExactlyOne:
+	case *ir.ExactlyOne:
 		operands, disc = v.Operands, v.Discriminator
 		isOneOf = true
 	default:
@@ -156,7 +156,7 @@ func (b *builder) buildLiteralDispatch(cases []discCase, path string) plan.Compi
 	}
 	return plan.CompilationPlan{
 		Representation: unionRepresentation(alts),
-		Dispatch:       plan.LiteralDispatch{Cases: lcases},
+		Dispatch:       &plan.LiteralDispatch{Cases: lcases},
 		Resolution:     mergeResolution(resParts...),
 		Capability:     capLevel,
 	}
@@ -191,7 +191,7 @@ func (b *builder) buildKindDisjointDispatch(branchExprs []ir.Expr, path string) 
 	}
 	return plan.CompilationPlan{
 		Representation: unionRepresentation(alts),
-		Dispatch:       plan.KindDispatch{Cases: cases},
+		Dispatch:       &plan.KindDispatch{Cases: cases},
 		Resolution:     mergeResolution(resParts...),
 		Capability:     capLevel,
 	}
@@ -212,7 +212,7 @@ func (b *builder) flattenThroughRefs(e ir.Expr, seen map[plan.SchemaID]bool) com
 		return c
 	}
 	for _, r := range c.refs {
-		ref, ok := r.(ir.Ref)
+		ref, ok := r.(*ir.Ref)
 		if !ok || !ref.KindsKnown {
 			// DynamicRef or unresolved static ref: cannot resolve statically.
 			continue
@@ -255,14 +255,14 @@ func (b *builder) discriminatorProperty(e ir.Expr) (string, ir.Literal, bool) {
 func requiredConstProperty(c components, name string) (string, ir.Literal, bool) {
 	required := make(map[string]bool)
 	for _, p := range c.predicates {
-		if rd, ok := p.Detail.(ir.RequiredDetail); ok {
+		if rd, ok := p.Detail.(*ir.RequiredDetail); ok {
 			for _, prop := range rd.Properties {
 				required[prop] = true
 			}
 		}
 	}
 	for _, sd := range c.shapes {
-		os, ok := sd.(ir.ObjectShape)
+		os, ok := sd.(*ir.ObjectShape)
 		if !ok {
 			continue
 		}
@@ -319,7 +319,7 @@ func (b *builder) buildPropertyDispatch(name string, cases []discCase, tag plan.
 	}
 	return plan.CompilationPlan{
 		Representation: unionRepresentation(alts),
-		Dispatch:       plan.PropertyDispatch{Property: name, Cases: lcases, Tag: tag},
+		Dispatch:       &plan.PropertyDispatch{Property: name, Cases: lcases, Tag: tag},
 		Resolution:     mergeResolution(resParts...),
 		Capability:     capLevel,
 	}
@@ -341,7 +341,7 @@ func negatedRequiredSingle(e ir.Expr) (string, bool) {
 	if inner.never || len(inner.predicates) != 1 {
 		return "", false
 	}
-	rd, ok := inner.predicates[0].Detail.(ir.RequiredDetail)
+	rd, ok := inner.predicates[0].Detail.(*ir.RequiredDetail)
 	if !ok || len(rd.Properties) != 1 {
 		return "", false
 	}
@@ -356,28 +356,28 @@ func negatedRequiredSingle(e ir.Expr) (string, bool) {
 // Callers must have proven that something else in the plan already enforces every
 // negation removed.
 func withoutNegations(e ir.Expr) ir.Expr {
-	all, ok := e.(ir.All)
+	all, ok := e.(*ir.All)
 	if !ok {
-		if _, isNot := e.(ir.Not); isNot {
-			return ir.Any{}
+		if _, isNot := e.(*ir.Not); isNot {
+			return &ir.Any{}
 		}
 		return e
 	}
 	kept := make([]ir.Expr, 0, len(all.Operands))
 	for _, o := range all.Operands {
-		if _, isNot := o.(ir.Not); isNot {
+		if _, isNot := o.(*ir.Not); isNot {
 			continue
 		}
 		kept = append(kept, withoutNegations(o))
 	}
-	return ir.All{Operands: kept}
+	return &ir.All{Operands: kept}
 }
 
 // requiredSingleHeld reports whether e's flattened predicates require name's presence.
 func requiredSingleHeld(e ir.Expr, name string) bool {
 	c := flattenAll([]ir.Expr{e})
 	for _, p := range c.predicates {
-		if rd, ok := p.Detail.(ir.RequiredDetail); ok {
+		if rd, ok := p.Detail.(*ir.RequiredDetail); ok {
 			for _, n := range rd.Properties {
 				if n == name {
 					return true
@@ -416,7 +416,7 @@ func (b *builder) buildPresenceDispatch(name string, absentExpr, presentExpr ir.
 	capLevel := maxCapability(plan.StaticDispatch, maxCapability(present.Capability, absent.Capability))
 	return plan.CompilationPlan{
 		Representation: unionRepresentation([]plan.Representation{present.Representation, absent.Representation}),
-		Dispatch:       plan.PresenceDispatch{Property: name, Present: present, Absent: absent},
+		Dispatch:       &plan.PresenceDispatch{Property: name, Present: present, Absent: absent},
 		Resolution:     mergeResolution(present.Resolution, absent.Resolution),
 		Capability:     capLevel,
 	}
@@ -438,7 +438,7 @@ func (b *builder) buildPredicateCountDispatch(branchExprs []ir.Expr, minimum, ma
 		// Sound over-approximation: the exact branch is chosen by match-count at
 		// runtime, so the representation must be able to hold every branch's values.
 		Representation: unionRepresentation(alts),
-		Dispatch:       plan.PredicateCountDispatch{Branches: branches, Minimum: minimum, Maximum: maximum},
+		Dispatch:       &plan.PredicateCountDispatch{Branches: branches, Minimum: minimum, Maximum: maximum},
 		Resolution:     mergeResolution(resParts...),
 		Capability:     capLevel,
 	}

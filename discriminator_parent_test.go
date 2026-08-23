@@ -96,7 +96,7 @@ func TestCompileDocument_DiscriminatorOnAllOfParent(t *testing.T) {
 	}, schemacompiler.Options{})
 	require.NoError(t, err)
 
-	require.IsType(t, plan.NoDispatch{}, res.Plans["/components/schemas/Pet"].Dispatch)
+	require.IsType(t, &plan.NoDispatch{}, res.Plans["/components/schemas/Pet"].Dispatch)
 
 	d := requireOneMessageContaining(t, res.Diagnostics, unusedDiscriminatorMessage)
 	require.Equal(t, "/components/schemas/Pet", d.Pointer)
@@ -119,7 +119,7 @@ func TestCompileDocument_DiscriminatorOnParentWithoutChildren(t *testing.T) {
 	}, schemacompiler.Options{})
 	require.NoError(t, err)
 
-	require.IsType(t, plan.NoDispatch{}, res.Plans["/components/schemas/Pet"].Dispatch)
+	require.IsType(t, &plan.NoDispatch{}, res.Plans["/components/schemas/Pet"].Dispatch)
 
 	d := requireOneMessageContaining(t, res.Diagnostics, unusedDiscriminatorMessage)
 	require.Equal(t, "/components/schemas/Pet", d.Pointer)
@@ -156,7 +156,7 @@ func TestCompile_UnusedDiscriminator(t *testing.T) {
 			res, err := schemacompiler.Compile(context.Background(), []byte(tt.schema), schemacompiler.Options{})
 			require.NoError(t, err)
 
-			require.IsType(t, plan.NoDispatch{}, res.Plan.Dispatch)
+			require.IsType(t, &plan.NoDispatch{}, res.Plan.Dispatch)
 			d := requireOneMessageContaining(t, res.Diagnostics, unusedDiscriminatorMessage)
 			require.Equal(t, "", d.Pointer)
 			require.Equal(t, plan.SeverityWarning, d.Severity)
@@ -177,7 +177,7 @@ func TestCompile_DeclaredDiscriminatorOnUnionIsNotReportedUnused(t *testing.T) {
 	}`), schemacompiler.Options{})
 	require.NoError(t, err)
 
-	require.IsType(t, plan.PropertyDispatch{}, res.Plan.Dispatch)
+	require.IsType(t, &plan.PropertyDispatch{}, res.Plan.Dispatch)
 	for _, d := range res.Diagnostics {
 		require.NotContains(t, d.Message, "discriminator", "the declaration drove dispatch")
 	}

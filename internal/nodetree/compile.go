@@ -20,83 +20,83 @@ func (v *Validator) compileExpr(e plan.PredicateExpr, fusion planFusion) (node, 
 	case nil:
 		return nil, nil
 
-	case plan.MinLengthPredicate:
+	case *plan.MinLengthPredicate:
 		return lengthBound{bound: e.Value, isMin: true}, nil
-	case plan.MaxLengthPredicate:
+	case *plan.MaxLengthPredicate:
 		return lengthBound{bound: e.Value}, nil
-	case plan.PatternPredicate:
+	case *plan.PatternPredicate:
 		return patternNode{regex: e.Regex}, nil
 
-	case plan.FormatPredicate:
+	case *plan.FormatPredicate:
 		// `format` is an annotation in the 2020-12 standard dialect; assertion requires
 		// opting into format-assertion, which no plan carries (docs/integration.md §1.1).
 		return nil, nil
 
-	case plan.MinimumPredicate:
+	case *plan.MinimumPredicate:
 		n, ok := newNumericBound(e.Value, e.Exclusive, true)
 		if !ok {
 			return nil, errors.Wrapf(ErrUnsupported, "minimum %v", e.Value)
 		}
 		return n, nil
-	case plan.MaximumPredicate:
+	case *plan.MaximumPredicate:
 		n, ok := newNumericBound(e.Value, e.Exclusive, false)
 		if !ok {
 			return nil, errors.Wrapf(ErrUnsupported, "maximum %v", e.Value)
 		}
 		return n, nil
-	case plan.MultipleOfPredicate:
+	case *plan.MultipleOfPredicate:
 		div := new(big.Rat)
 		if _, ok := div.SetString(strconv.FormatFloat(e.Value, 'g', -1, 64)); !ok || div.Sign() == 0 {
 			return nil, errors.Wrapf(ErrUnsupported, "multipleOf %v", e.Value)
 		}
 		return multipleOf{divisor: div}, nil
-	case plan.NumericDomainPredicate:
+	case *plan.NumericDomainPredicate:
 		return numericDomain{domain: e.Domain}, nil
 
-	case plan.MinItemsPredicate:
+	case *plan.MinItemsPredicate:
 		return itemsBound{bound: e.Value, isMin: true}, nil
-	case plan.MaxItemsPredicate:
+	case *plan.MaxItemsPredicate:
 		return itemsBound{bound: e.Value}, nil
-	case plan.UniqueItemsPredicate:
+	case *plan.UniqueItemsPredicate:
 		return uniqueItems{}, nil
 
-	case plan.RequiredPredicate:
+	case *plan.RequiredPredicate:
 		set := newNameSet(e.Properties)
 		return requiredNode{set: set, wanted: set.maskOf(e.Properties)}, nil
-	case plan.MinPropertiesPredicate:
+	case *plan.MinPropertiesPredicate:
 		return propertiesBound{bound: e.Value, isMin: true}, nil
-	case plan.MaxPropertiesPredicate:
+	case *plan.MaxPropertiesPredicate:
 		return propertiesBound{bound: e.Value}, nil
-	case plan.DependentRequiredPredicate:
+	case *plan.DependentRequiredPredicate:
 		return newDependentRequired(e.Entries), nil
 
-	case plan.ObjectStructurePredicate:
+	case *plan.ObjectStructurePredicate:
 		return v.compileObjectStructure(e, fusion.objectBounds)
-	case plan.ArrayStructurePredicate:
+	case *plan.ArrayStructurePredicate:
 		return v.compileArrayStructure(e, fusion.arrayBounds)
 
-	case plan.ReferencePredicate:
+	case *plan.ReferencePredicate:
 		return reference{name: e.Name, defs: v.defs}, nil
 
-	case plan.NegationPredicate:
+	case *plan.NegationPredicate:
 		inner, err := v.compilePlan(e.Schema)
 		if err != nil {
 			return nil, err
 		}
 		return negation{inner: inner}, nil
-	case plan.ShapePredicate:
+	case *plan.ShapePredicate:
 		inner, err := v.compilePlan(e.Schema)
 		if err != nil {
 			return nil, err
 		}
 		return shape{inner: inner}, nil
-	case plan.PropertyNamesPredicate:
+	case *plan.PropertyNamesPredicate:
 		inner, err := v.compilePlan(e.Schema)
 		if err != nil {
 			return nil, err
 		}
 		return propertyNames{inner: inner}, nil
-	case plan.ContainsCountPredicate:
+	case *plan.ContainsCountPredicate:
 		inner, err := v.compilePlan(e.Schema)
 		if err != nil {
 			return nil, err
@@ -112,7 +112,7 @@ func (v *Validator) compileExpr(e plan.PredicateExpr, fusion planFusion) (node, 
 	}
 }
 
-func (v *Validator) compileObjectStructure(e plan.ObjectStructurePredicate, counts countBounds) (node, error) {
+func (v *Validator) compileObjectStructure(e *plan.ObjectStructurePredicate, counts countBounds) (node, error) {
 	declared := make([]string, len(e.Properties))
 	for i, pc := range e.Properties {
 		declared[i] = pc.Name
@@ -151,7 +151,7 @@ func (v *Validator) compileObjectStructure(e plan.ObjectStructurePredicate, coun
 	return o, nil
 }
 
-func (v *Validator) compileArrayStructure(e plan.ArrayStructurePredicate, counts countBounds) (node, error) {
+func (v *Validator) compileArrayStructure(e *plan.ArrayStructurePredicate, counts countBounds) (node, error) {
 	a := arrayStructure{counts: counts}
 	for _, p := range e.Prefix {
 		n, err := v.compilePlan(p)
@@ -174,10 +174,10 @@ func (v *Validator) compileArrayStructure(e plan.ArrayStructurePredicate, counts
 
 func (v *Validator) compileDispatch(d plan.DispatchPlan) (node, error) {
 	switch d := d.(type) {
-	case nil, plan.NoDispatch:
+	case nil, *plan.NoDispatch:
 		return nil, nil
 
-	case plan.KindDispatch:
+	case *plan.KindDispatch:
 		kd := kindDispatch{cases: map[plan.JSONKind]node{}}
 		for k, c := range d.Cases {
 			n, err := v.compilePlan(c)
@@ -188,21 +188,21 @@ func (v *Validator) compileDispatch(d plan.DispatchPlan) (node, error) {
 		}
 		return kd, nil
 
-	case plan.LiteralDispatch:
+	case *plan.LiteralDispatch:
 		cases, err := v.compileCases(d.Cases)
 		if err != nil {
 			return nil, err
 		}
 		return literalDispatch{caseTable: newCaseTable(cases)}, nil
 
-	case plan.PropertyDispatch:
+	case *plan.PropertyDispatch:
 		cases, err := v.compileCases(d.Cases)
 		if err != nil {
 			return nil, err
 		}
 		return propertyDispatch{property: d.Property, caseTable: newCaseTable(cases)}, nil
 
-	case plan.PresenceDispatch:
+	case *plan.PresenceDispatch:
 		present, err := v.compilePlan(d.Present)
 		if err != nil {
 			return nil, err
@@ -213,7 +213,7 @@ func (v *Validator) compileDispatch(d plan.DispatchPlan) (node, error) {
 		}
 		return presenceDispatch{property: d.Property, present: present, absent: absent}, nil
 
-	case plan.PredicateCountDispatch:
+	case *plan.PredicateCountDispatch:
 		pc := predicateCountDispatch{min: d.Minimum, max: d.Maximum}
 		for _, b := range d.Branches {
 			n, err := v.compilePlan(b)

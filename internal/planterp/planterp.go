@@ -86,21 +86,21 @@ func (in *interp) loadDefinitions(r plan.ResolutionPlan) error {
 		return nil
 	}
 	switch r := r.(type) {
-	case plan.FullyResolved:
-		var t struct{} = r
+	case *plan.FullyResolved:
+		var t struct{} = *r
 		_ = t
 		return nil
-	case plan.StaticReferenceGraph:
+	case *plan.StaticReferenceGraph:
 		var t struct {
 			Definitions map[plan.SchemaID]plan.CompilationPlan
-		} = r
+		} = *r
 		in.defs = t.Definitions
 		return nil
-	case plan.DynamicReferenceGraph:
+	case *plan.DynamicReferenceGraph:
 		var t struct {
 			StaticDefinitions map[plan.SchemaID]plan.CompilationPlan
 			DynamicAnchors    map[string][]plan.SchemaID
-		} = r
+		} = *r
 		in.defs = t.StaticDefinitions
 		// DynamicAnchors describe a runtime dynamic scope the plan does not resolve
 		// (design §10.2); a reference needing one fails when it is followed.

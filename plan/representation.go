@@ -2,6 +2,10 @@ package plan
 
 // Representation is the Go data shape capable of storing accepted values (design §7).
 // A backend maps each variant to a concrete Go type.
+//
+// Variants implement this on a pointer receiver, so only *T satisfies it. A value
+// receiver would put the method in both T's and *T's method set, leaving every type
+// switch to match one spelling and silently miss the other (issue #133).
 type Representation interface {
 	isRepresentation()
 }
@@ -104,11 +108,11 @@ type ReferenceRepresentation struct {
 	Name string
 }
 
-func (AnyRepresentation) isRepresentation()       {}
-func (NeverRepresentation) isRepresentation()     {}
-func (PrimitiveRepresentation) isRepresentation() {}
-func (ObjectRepresentation) isRepresentation()    {}
-func (ArrayRepresentation) isRepresentation()     {}
-func (UnionRepresentation) isRepresentation()     {}
-func (RecursiveRepresentation) isRepresentation() {}
-func (ReferenceRepresentation) isRepresentation() {}
+func (*AnyRepresentation) isRepresentation()       {}
+func (*NeverRepresentation) isRepresentation()     {}
+func (*PrimitiveRepresentation) isRepresentation() {}
+func (*ObjectRepresentation) isRepresentation()    {}
+func (*ArrayRepresentation) isRepresentation()     {}
+func (*UnionRepresentation) isRepresentation()     {}
+func (*RecursiveRepresentation) isRepresentation() {}
+func (*ReferenceRepresentation) isRepresentation() {}

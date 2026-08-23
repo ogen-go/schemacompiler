@@ -16,7 +16,7 @@ func ptr[T any](v T) *T { return &v }
 
 // plannerField looks one field up by property name: plan.ObjectRepresentation.Fields is
 // ordered rather than keyed (issue #89).
-func plannerField(t *testing.T, obj plan.ObjectRepresentation, name string) plan.FieldRepresentation {
+func plannerField(t *testing.T, obj *plan.ObjectRepresentation, name string) plan.FieldRepresentation {
 	t.Helper()
 	for _, f := range obj.Fields {
 		if f.Name == name {
@@ -29,11 +29,11 @@ func plannerField(t *testing.T, obj plan.ObjectRepresentation, name string) plan
 
 func TestBuild_DirectGoType(t *testing.T) {
 	// {"type": "string"}
-	e := ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}
+	e := ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
 	// The plan still carries the kind assertion §4.1 requires; DirectGoType now means the
 	// representation discharges every check, not that there are none (§22, issue #115).
 	require.Equal(t, []plan.GuardedPredicate{{Applicability: plan.SetString, Assert: true}},
@@ -46,16 +46,16 @@ func TestBuild_DirectGoType(t *testing.T) {
 func TestBuild_GoTypeWithValidation(t *testing.T) {
 	// {"type": "string", "minLength": 3}
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetString},
-		ir.Predicate{Guard: plan.SetString, Detail: ir.MinLengthDetail{Value: 3}},
+		&ir.Kinds{Set: plan.SetString},
+		&ir.Predicate{Guard: plan.SetString, Detail: &ir.MinLengthDetail{Value: 3}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
 	require.Equal(t, plan.GoTypeWithValidation, got.Plan.Capability)
 	require.Len(t, got.Plan.ResidualChecks(), 1)
-	require.Equal(t, plan.MinLengthPredicate{Value: 3}, got.Plan.ResidualChecks()[0].Expression)
+	require.Equal(t, &plan.MinLengthPredicate{Value: 3}, got.Plan.ResidualChecks()[0].Expression)
 	require.Equal(t, plan.SetString, got.Plan.ResidualChecks()[0].Applicability)
 }
 
@@ -63,12 +63,12 @@ func TestBuild_BarePredicateWidensToAny(t *testing.T) {
 	// {"minLength": 3}: no type restriction, so every non-string value is also accepted
 	// (design §3, §20.3). Representation must widen to Any, not narrow to string.
 	e := ir.All{Operands: []ir.Expr{
-		ir.Predicate{Guard: plan.SetString, Detail: ir.MinLengthDetail{Value: 3}},
+		&ir.Predicate{Guard: plan.SetString, Detail: &ir.MinLengthDetail{Value: 3}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
+	require.Equal(t, &plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.GoTypeWithValidation, got.Plan.Capability)
 	require.Empty(t, got.Diagnostics,
 		"the kind-guarded MinLength closes the gap the wider representation opens (#95)")
@@ -77,16 +77,16 @@ func TestBuild_BarePredicateWidensToAny(t *testing.T) {
 func TestBuild_StaticDispatch_KindDisjointOneOf(t *testing.T) {
 	// {"oneOf": [{"type": "string"}, {"type": "number"}]}
 	e := ir.All{Operands: []ir.Expr{
-		ir.ExactlyOne{Operands: []ir.Expr{
-			ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}},
-			ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetNumber}}},
+		&ir.ExactlyOne{Operands: []ir.Expr{
+			&ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}},
+			&ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetNumber}}},
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
-	disp, ok := got.Plan.Dispatch.(plan.KindDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.KindDispatch)
 	require.True(t, ok, "expected KindDispatch, got %T", got.Plan.Dispatch)
 	require.Len(t, disp.Cases, 2)
 	require.Contains(t, disp.Cases, plan.KindString)
@@ -97,22 +97,22 @@ func TestBuild_StaticDispatch_KindDisjointOneOf(t *testing.T) {
 func TestBuild_PredicateDispatch_OverlappingOneOf(t *testing.T) {
 	// {"oneOf": [{"type": "string", "pattern": "^a"}, {"type": "string", "minLength": 5}]}
 	branch := func(detail ir.PredicateDetail) ir.Expr {
-		return ir.All{Operands: []ir.Expr{
-			ir.Kinds{Set: plan.SetString},
-			ir.Predicate{Guard: plan.SetString, Detail: detail},
+		return &ir.All{Operands: []ir.Expr{
+			&ir.Kinds{Set: plan.SetString},
+			&ir.Predicate{Guard: plan.SetString, Detail: detail},
 		}}
 	}
 	e := ir.All{Operands: []ir.Expr{
-		ir.ExactlyOne{Operands: []ir.Expr{
-			branch(ir.PatternDetail{Regex: "^a"}),
-			branch(ir.MinLengthDetail{Value: 5}),
+		&ir.ExactlyOne{Operands: []ir.Expr{
+			branch(&ir.PatternDetail{Regex: "^a"}),
+			branch(&ir.MinLengthDetail{Value: 5}),
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
-	disp, ok := got.Plan.Dispatch.(plan.PredicateCountDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PredicateCountDispatch)
 	require.True(t, ok, "expected PredicateCountDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, 1, disp.Minimum)
 	require.Equal(t, 1, disp.Maximum)
@@ -126,23 +126,23 @@ func TestBuild_PredicateDispatch_OverlappingAnyOf(t *testing.T) {
 	// the lowering contract on plan.PredicateCountDispatch (issue #7). oneOf gives [1,1];
 	// anyOf accepts at least one, up to all branches.
 	branch := func(detail ir.PredicateDetail) ir.Expr {
-		return ir.All{Operands: []ir.Expr{
-			ir.Kinds{Set: plan.SetString},
-			ir.Predicate{Guard: plan.SetString, Detail: detail},
+		return &ir.All{Operands: []ir.Expr{
+			&ir.Kinds{Set: plan.SetString},
+			&ir.Predicate{Guard: plan.SetString, Detail: detail},
 		}}
 	}
 	e := ir.All{Operands: []ir.Expr{
-		ir.AnyOf{Operands: []ir.Expr{
-			branch(ir.PatternDetail{Regex: "^a"}),
-			branch(ir.MinLengthDetail{Value: 5}),
-			branch(ir.MaxLengthDetail{Value: 9}),
+		&ir.AnyOf{Operands: []ir.Expr{
+			branch(&ir.PatternDetail{Regex: "^a"}),
+			branch(&ir.MinLengthDetail{Value: 5}),
+			branch(&ir.MaxLengthDetail{Value: 9}),
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
-	disp, ok := got.Plan.Dispatch.(plan.PredicateCountDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PredicateCountDispatch)
 	require.True(t, ok, "expected PredicateCountDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, 1, disp.Minimum)
 	require.Equal(t, 3, disp.Maximum)
@@ -152,11 +152,11 @@ func TestBuild_PredicateDispatch_OverlappingAnyOf(t *testing.T) {
 func TestBuild_EvaluationStateValidation_UnevaluatedProperties(t *testing.T) {
 	// {"type": "object", "unevaluatedProperties": false}
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{UnevaluatedProperties: ir.Never{}}},
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{UnevaluatedProperties: &ir.Never{}}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
 	require.Equal(t, plan.EvaluationStateValidation, got.Plan.Capability)
 	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnsupported))
@@ -165,13 +165,13 @@ func TestBuild_EvaluationStateValidation_UnevaluatedProperties(t *testing.T) {
 
 func TestBuild_DynamicSchemaResolution(t *testing.T) {
 	// {"$dynamicRef": "#node"}
-	e := ir.All{Operands: []ir.Expr{ir.DynamicRef{Anchor: "node"}}}
+	e := ir.All{Operands: []ir.Expr{&ir.DynamicRef{Anchor: "node"}}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
+	require.Equal(t, &plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.DynamicSchemaResolution, got.Plan.Capability)
-	require.IsType(t, plan.DynamicReferenceGraph{}, got.Plan.Resolution)
+	require.IsType(t, &plan.DynamicReferenceGraph{}, got.Plan.Resolution)
 	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnsupported))
 	require.Equal(t, plan.SeverityError, got.Diagnostics[0].Severity)
 }
@@ -237,30 +237,30 @@ func TestBuild_ThreeStatePresenceAndNullable(t *testing.T) {
 	//
 	// "a" is required + nullable -> Nullable[T] territory; "b" is optional + non-null.
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{
 			Properties: []ir.PropertyExpr{
-				{Name: "a", Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString | plan.SetNull}}}},
-				{Name: "b", Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}},
+				{Name: "a", Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString | plan.SetNull}}}},
+				{Name: "b", Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}},
 			},
 		}},
-		ir.Predicate{Guard: plan.SetObject, Detail: ir.RequiredDetail{Properties: []string{"a"}}},
+		&ir.Predicate{Guard: plan.SetObject, Detail: &ir.RequiredDetail{Properties: []string{"a"}}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := got.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "expected ObjectRepresentation, got %T", got.Plan.Representation)
 
 	a := plannerField(t, obj, "a")
 	require.Equal(t, plan.PresenceRequired, a.Presence)
 	require.True(t, a.Nullable)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, a.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, a.Plan.Representation)
 
 	b := plannerField(t, obj, "b")
 	require.Equal(t, plan.PresenceOptional, b.Presence)
 	require.False(t, b.Nullable)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, b.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, b.Plan.Representation)
 }
 
 func TestBuild_TaggedUnionPropertyDispatch(t *testing.T) {
@@ -269,27 +269,27 @@ func TestBuild_TaggedUnionPropertyDispatch(t *testing.T) {
 	//   {"type":"object","properties":{"kind":{"const":"rectangle"}, ...},"required":["kind"]}
 	// ]}
 	branch := func(tag string) ir.Expr {
-		return ir.All{Operands: []ir.Expr{
-			ir.Kinds{Set: plan.SetObject},
-			ir.Shape{Detail: ir.ObjectShape{
+		return &ir.All{Operands: []ir.Expr{
+			&ir.Kinds{Set: plan.SetObject},
+			&ir.Shape{Detail: &ir.ObjectShape{
 				Properties: []ir.PropertyExpr{
-					{Name: "kind", Schema: ir.Literal{Value: tag}},
+					{Name: "kind", Schema: &ir.Literal{Value: tag}},
 				},
 			}},
-			ir.Predicate{Guard: plan.SetObject, Detail: ir.RequiredDetail{Properties: []string{"kind"}}},
+			&ir.Predicate{Guard: plan.SetObject, Detail: &ir.RequiredDetail{Properties: []string{"kind"}}},
 		}}
 	}
 	e := ir.All{Operands: []ir.Expr{
-		ir.ExactlyOne{Operands: []ir.Expr{
+		&ir.ExactlyOne{Operands: []ir.Expr{
 			branch("circle"),
 			branch("rectangle"),
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "kind", disp.Property)
 	require.Len(t, disp.Cases, 2)
@@ -324,7 +324,7 @@ func TestBuild_TaggedUnionPropertyDispatch_ThroughRefs(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "kind", disp.Property)
 	values := []any{disp.Cases[0].Value, disp.Cases[1].Value}
@@ -347,7 +347,7 @@ func TestBuild_TaggedUnionPropertyDispatch_AnyOfThroughRefs(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "kind", disp.Property)
 }
@@ -371,7 +371,7 @@ func TestBuild_TaggedUnionPropertyDispatch_TransitiveRef(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "kind", disp.Property)
 }
@@ -392,7 +392,7 @@ func TestBuild_TaggedUnionPropertyDispatch_MixedInlineAndRef(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "kind", disp.Property)
 }
@@ -415,7 +415,7 @@ func TestBuild_TaggedUnion_SharedConstNotPropertyDispatch(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	_, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	_, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.False(t, ok, "shared const value must not yield PropertyDispatch")
 }
 
@@ -437,7 +437,7 @@ func TestBuild_TaggedUnion_RefCycleTerminates(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	_, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	_, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.False(t, ok, "cyclic ref union has no discriminator")
 }
 
@@ -450,7 +450,7 @@ func TestBuild_LiteralPreservesRawPrecision(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	disp, ok := got.Plan.Dispatch.(plan.LiteralDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.LiteralDispatch)
 	require.True(t, ok, "expected LiteralDispatch, got %T", got.Plan.Dispatch)
 	require.Len(t, disp.Cases, 1)
 	require.JSONEq(t, "9007199254740993", string(disp.Cases[0].Raw))
@@ -464,7 +464,7 @@ func TestBuild_LiteralDispatchPreservesRawPrecision(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	disp, ok := got.Plan.Dispatch.(plan.LiteralDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.LiteralDispatch)
 	require.True(t, ok, "expected LiteralDispatch, got %T", got.Plan.Dispatch)
 	require.Len(t, disp.Cases, 2)
 	var raws []string
@@ -485,7 +485,7 @@ func TestBuild_PropertyDispatchPreservesRawPrecision(t *testing.T) {
 
 	got := planner.Build(ir.Compile(s.Root), s.Registry)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "tag", disp.Property)
 	var raws []string
@@ -497,21 +497,21 @@ func TestBuild_PropertyDispatchPreservesRawPrecision(t *testing.T) {
 
 func TestBuild_PresenceDispatch_DependentSchemas(t *testing.T) {
 	// dependentSchemas desugars to AnyOf(Not(Has(p)), All(Has(p), C(S))) (design §12.7).
-	has := ir.Predicate{Guard: plan.SetObject, Detail: ir.RequiredDetail{Properties: []string{"credit_card"}}}
+	has := ir.Predicate{Guard: plan.SetObject, Detail: &ir.RequiredDetail{Properties: []string{"credit_card"}}}
 	sub := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Predicate{Guard: plan.SetObject, Detail: ir.RequiredDetail{Properties: []string{"billing_address"}}},
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Predicate{Guard: plan.SetObject, Detail: &ir.RequiredDetail{Properties: []string{"billing_address"}}},
 	}}
 	e := ir.All{Operands: []ir.Expr{
-		ir.AnyOf{Operands: []ir.Expr{
-			ir.Not{Operand: has},
-			ir.All{Operands: []ir.Expr{has, sub}},
+		&ir.AnyOf{Operands: []ir.Expr{
+			&ir.Not{Operand: &has},
+			&ir.All{Operands: []ir.Expr{&has, &sub}},
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	disp, ok := got.Plan.Dispatch.(plan.PresenceDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PresenceDispatch)
 	require.True(t, ok, "expected PresenceDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "credit_card", disp.Property)
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
@@ -520,59 +520,59 @@ func TestBuild_PresenceDispatch_DependentSchemas(t *testing.T) {
 func TestBuild_ObjectRepresentation_AdditionalPropertiesFalse(t *testing.T) {
 	// {"type":"object","properties":{"a":{"type":"string"}},"additionalProperties":false}
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{
 			Properties: []ir.PropertyExpr{
-				{Name: "a", Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}},
+				{Name: "a", Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}},
 			},
-			AdditionalProperties: ir.Never{},
+			AdditionalProperties: &ir.Never{},
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := got.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok)
 	require.NotNil(t, obj.Additional)
-	require.Equal(t, plan.NeverRepresentation{}, obj.Additional.Representation)
+	require.Equal(t, &plan.NeverRepresentation{}, obj.Additional.Representation)
 }
 
 func TestBuild_ArrayRepresentation_PrefixAndRest(t *testing.T) {
 	// {"type":"array","prefixItems":[{"type":"string"}],"items":{"type":"number"}}
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetArray},
-		ir.Shape{Detail: ir.ArrayShape{
-			PrefixItems: []ir.ItemExpr{{Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}}}},
-			Items:       ir.ItemExpr{Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetNumber}}}},
+		&ir.Kinds{Set: plan.SetArray},
+		&ir.Shape{Detail: &ir.ArrayShape{
+			PrefixItems: []ir.ItemExpr{{Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}}},
+			Items:       ir.ItemExpr{Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetNumber}}}},
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
-	arr, ok := got.Plan.Representation.(plan.ArrayRepresentation)
+	arr, ok := got.Plan.Representation.(*plan.ArrayRepresentation)
 	require.True(t, ok)
 	require.Len(t, arr.Prefix, 1)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, arr.Prefix[0].Plan.Representation)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindNumber}, arr.Rest.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, arr.Prefix[0].Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindNumber}, arr.Rest.Plan.Representation)
 }
 
 func TestBuild_Never(t *testing.T) {
-	got := planner.Build(ir.Never{}, nil)
-	require.Equal(t, plan.NeverRepresentation{}, got.Plan.Representation)
+	got := planner.Build(&ir.Never{}, nil)
+	require.Equal(t, &plan.NeverRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
 }
 
 func TestBuild_Any(t *testing.T) {
-	got := planner.Build(ir.Any{}, nil)
-	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
+	got := planner.Build(&ir.Any{}, nil)
+	require.Equal(t, &plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
 }
 
 func TestBuild_Literal(t *testing.T) {
 	e := ir.Literal{Value: "circle"}
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
-	disp, ok := got.Plan.Dispatch.(plan.LiteralDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.LiteralDispatch)
 	require.True(t, ok)
 	require.Len(t, disp.Cases, 1)
 	require.Equal(t, "circle", disp.Cases[0].Value)
@@ -581,14 +581,14 @@ func TestBuild_Literal(t *testing.T) {
 func TestBuild_ContainsCount_PredicateDispatchWarning(t *testing.T) {
 	// {"type":"array","contains":{"type":"string"},"minContains":2}
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetArray},
-		ir.Predicate{Guard: plan.SetArray, Detail: ir.ContainsDetail{
-			Schema: ir.All{Operands: []ir.Expr{ir.Kinds{Set: plan.SetString}}},
+		&ir.Kinds{Set: plan.SetArray},
+		&ir.Predicate{Guard: plan.SetArray, Detail: &ir.ContainsDetail{
+			Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}},
 			Min:    ptr(uint64(2)),
 		}},
 	}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
 	require.NotEmpty(t, got.Diagnostics)
@@ -600,19 +600,19 @@ func TestBuild_ContainsCount_PredicateDispatchWarning(t *testing.T) {
 	}
 	require.True(t, found)
 	require.Len(t, got.Plan.ResidualChecks(), 1)
-	cc, ok := got.Plan.ResidualChecks()[0].Expression.(plan.ContainsCountPredicate)
+	cc, ok := got.Plan.ResidualChecks()[0].Expression.(*plan.ContainsCountPredicate)
 	require.True(t, ok)
 	require.Equal(t, uint64(2), cc.Min)
 }
 
 func TestBuildAt_DiagnosticOrigin(t *testing.T) {
-	e := ir.All{Operands: []ir.Expr{ir.DynamicRef{Anchor: "node"}}}
+	e := ir.All{Operands: []ir.Expr{&ir.DynamicRef{Anchor: "node"}}}
 	origin := planner.Origin{
 		Pointer:  "/$defs/A",
 		Position: plan.Position{File: "schema.json", Line: 12, Column: 5},
 	}
 
-	got := planner.BuildAt(e, nil, origin)
+	got := planner.BuildAt(&e, nil, origin)
 
 	require.NotEmpty(t, got.Diagnostics)
 	for _, d := range got.Diagnostics {
@@ -622,9 +622,9 @@ func TestBuildAt_DiagnosticOrigin(t *testing.T) {
 }
 
 func TestBuild_DiagnosticWithoutOrigin(t *testing.T) {
-	e := ir.All{Operands: []ir.Expr{ir.DynamicRef{Anchor: "node"}}}
+	e := ir.All{Operands: []ir.Expr{&ir.DynamicRef{Anchor: "node"}}}
 
-	got := planner.Build(e, nil)
+	got := planner.Build(&e, nil)
 
 	require.NotEmpty(t, got.Diagnostics)
 	for _, d := range got.Diagnostics {
@@ -634,16 +634,16 @@ func TestBuild_DiagnosticWithoutOrigin(t *testing.T) {
 
 func TestBuildAt_DiagnosticPointerEscaping(t *testing.T) {
 	e := ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{
 			Properties: []ir.PropertyExpr{
-				{Name: "a/b", Schema: ir.All{Operands: []ir.Expr{ir.DynamicRef{Anchor: "node"}}}},
+				{Name: "a/b", Schema: &ir.All{Operands: []ir.Expr{&ir.DynamicRef{Anchor: "node"}}}},
 			},
 		}},
 	}}
 	origin := planner.Origin{Pointer: "/$defs/A"}
 
-	got := planner.BuildAt(e, nil, origin)
+	got := planner.BuildAt(&e, nil, origin)
 
 	require.NotEmpty(t, got.Diagnostics)
 	require.Equal(t, "/$defs/A/properties/a~1b", got.Diagnostics[0].Pointer)
@@ -654,14 +654,14 @@ func TestBuildAt_DiagnosticPointerEscaping(t *testing.T) {
 // while staying DirectGoType, since the representation's own domain discharges the
 // second exactly as its kind discharges the first (design §22).
 func TestBuild_IntegerCarriesItsDomain(t *testing.T) {
-	got := planner.Build(ir.Kinds{Set: plan.SetNumber, Numeric: plan.IntegerOnly}, nil)
+	got := planner.Build(&ir.Kinds{Set: plan.SetNumber, Numeric: plan.IntegerOnly}, nil)
 
 	require.Equal(t,
-		plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.IntegerOnly},
+		&plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.IntegerOnly},
 		got.Plan.Representation)
 	require.Equal(t, []plan.GuardedPredicate{
 		{Applicability: plan.SetNumber, Assert: true},
-		{Applicability: plan.SetNumber, Expression: plan.NumericDomainPredicate{Domain: plan.IntegerOnly}},
+		{Applicability: plan.SetNumber, Expression: &plan.NumericDomainPredicate{Domain: plan.IntegerOnly}},
 	}, got.Plan.Validation.Predicates)
 	require.Empty(t, got.Plan.ResidualChecks())
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
@@ -676,16 +676,16 @@ func TestBuild_IntegerCarriesItsDomain(t *testing.T) {
 // the contract, and the two axes of design §6 are separate for a reason — assertKind
 // already emits the domain predicate for numbers alone.
 func TestBuild_NumericDomainIsNumbersOnly(t *testing.T) {
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetString | plan.SetNumber | plan.SetNull, Numeric: plan.IntegerOnly},
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetString | plan.SetNumber | plan.SetNull, Numeric: plan.IntegerOnly},
 	}}, nil)
 
-	union, ok := got.Plan.Representation.(plan.UnionRepresentation)
+	union, ok := got.Plan.Representation.(*plan.UnionRepresentation)
 	require.True(t, ok, "got %T", got.Plan.Representation)
 
 	var sawNumber bool
 	for _, alt := range union.Alternatives {
-		prim, ok := alt.(plan.PrimitiveRepresentation)
+		prim, ok := alt.(*plan.PrimitiveRepresentation)
 		require.True(t, ok, "got %T", alt)
 		if prim.Kind == plan.KindNumber {
 			sawNumber = true

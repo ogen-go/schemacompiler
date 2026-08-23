@@ -13,7 +13,7 @@ import (
 // It shares [interp.objectAgainst] with [interp.object], which reads the same shape off
 // the [plan.ObjectRepresentation]. The two descriptions are emitted together and describe
 // the same object; only where they are read from differs.
-func (in *interp) objectStructure(e plan.ObjectStructurePredicate, value any, f frame) (Verdict, error) {
+func (in *interp) objectStructure(e *plan.ObjectStructurePredicate, value any, f frame) (Verdict, error) {
 	shape, err := structureShapeOf(e, f)
 	if err != nil {
 		return Verdict{}, err
@@ -27,7 +27,7 @@ func (in *interp) objectStructure(e plan.ObjectStructurePredicate, value any, f 
 	return in.objectAgainst(shape, obj, f)
 }
 
-func structureShapeOf(e plan.ObjectStructurePredicate, f frame) (objectShape, error) {
+func structureShapeOf(e *plan.ObjectStructurePredicate, f frame) (objectShape, error) {
 	for _, pc := range e.Properties {
 		if pc.Plan.Representation == nil {
 			return objectShape{}, internalf("property check %q at %s has no plan",
@@ -66,7 +66,7 @@ func structureShapeOf(e plan.ObjectStructurePredicate, f frame) (objectShape, er
 
 // arrayStructure checks an [plan.ArrayStructurePredicate], the validation plan's account
 // of `prefixItems` and `items`.
-func (in *interp) arrayStructure(e plan.ArrayStructurePredicate, value any, f frame) (Verdict, error) {
+func (in *interp) arrayStructure(e *plan.ArrayStructurePredicate, value any, f frame) (Verdict, error) {
 	items, ok := value.([]any)
 	if !ok {
 		return accepted(), nil

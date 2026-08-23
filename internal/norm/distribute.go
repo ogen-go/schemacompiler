@@ -16,9 +16,9 @@ func distributeAll(operands []ir.Expr, st *state) (ir.Expr, bool) {
 	anyIdx, anyCount := -1, 0
 	for i, o := range operands {
 		switch o.(type) {
-		case ir.ExactlyOne:
+		case *ir.ExactlyOne:
 			eoIdx, eoCount = i, eoCount+1
-		case ir.AnyOf:
+		case *ir.AnyOf:
 			anyIdx, anyCount = i, anyCount+1
 		}
 	}
@@ -49,26 +49,26 @@ func distributeAll(operands []ir.Expr, st *state) (ir.Expr, bool) {
 	}
 
 	switch c := operands[idx].(type) {
-	case ir.ExactlyOne:
+	case *ir.ExactlyOne:
 		branches := make([]ir.Expr, 0, len(c.Operands))
 		for _, b := range c.Operands {
-			nb := normalize(ir.All{Operands: append(append([]ir.Expr{}, others...), b)}, st)
-			if _, ok := nb.(ir.Never); ok {
+			nb := normalize(&ir.All{Operands: append(append([]ir.Expr{}, others...), b)}, st)
+			if _, ok := nb.(*ir.Never); ok {
 				continue // impossible branch elimination (design §15.5).
 			}
 			branches = append(branches, nb)
 		}
-		return ir.ExactlyOne{Operands: branches, Discriminator: c.Discriminator}, true
-	case ir.AnyOf:
+		return &ir.ExactlyOne{Operands: branches, Discriminator: c.Discriminator}, true
+	case *ir.AnyOf:
 		branches := make([]ir.Expr, 0, len(c.Operands))
 		for _, b := range c.Operands {
-			nb := normalize(ir.All{Operands: append(append([]ir.Expr{}, others...), b)}, st)
-			if _, ok := nb.(ir.Never); ok {
+			nb := normalize(&ir.All{Operands: append(append([]ir.Expr{}, others...), b)}, st)
+			if _, ok := nb.(*ir.Never); ok {
 				continue
 			}
 			branches = append(branches, nb)
 		}
-		return ir.AnyOf{Operands: branches, Discriminator: c.Discriminator}, true
+		return &ir.AnyOf{Operands: branches, Discriminator: c.Discriminator}, true
 	default:
 		return nil, false // unreachable
 	}

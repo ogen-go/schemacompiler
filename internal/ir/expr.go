@@ -13,6 +13,10 @@ package ir
 import "github.com/ogen-go/schemacompiler/plan"
 
 // Expr is a semantic expression: a predicate over the universe of JSON values.
+//
+// Variants implement this on a pointer receiver, so only *T satisfies it. A value
+// receiver would put the method in both T's and *T's method set, leaving every type
+// switch to match one spelling and silently miss the other (issue #133).
 type Expr interface {
 	isExpr()
 	// Kinds returns the abstract set of JSON kinds this expression can accept (design §6).
@@ -50,6 +54,10 @@ type Predicate struct {
 }
 
 // PredicateDetail carries the concrete keyword and its operands (defined in phase 2).
+//
+// Variants implement this on a pointer receiver, so only *T satisfies it. A value
+// receiver would put the method in both T's and *T's method set, leaving every type
+// switch to match one spelling and silently miss the other (issue #133).
 type PredicateDetail interface {
 	isPredicateDetail()
 }
@@ -61,6 +69,10 @@ type Shape struct {
 }
 
 // ShapeDetail carries the concrete structural constraint (defined in phase 2).
+//
+// Variants implement this on a pointer receiver, so only *T satisfies it. A value
+// receiver would put the method in both T's and *T's method set, leaving every type
+// switch to match one spelling and silently miss the other (issue #133).
 type ShapeDetail interface {
 	isShapeDetail()
 }
@@ -128,16 +140,16 @@ type EvaluationAnnotations struct {
 	// Filled in phase 4; kept as a marker so the contract compiles.
 }
 
-func (Any) isExpr()        {}
-func (Never) isExpr()      {}
-func (Kinds) isExpr()      {}
-func (Literal) isExpr()    {}
-func (Predicate) isExpr()  {}
-func (Shape) isExpr()      {}
-func (All) isExpr()        {}
-func (AnyOf) isExpr()      {}
-func (ExactlyOne) isExpr() {}
-func (Not) isExpr()        {}
-func (Ref) isExpr()        {}
-func (DynamicRef) isExpr() {}
-func (Annotated) isExpr()  {}
+func (*Any) isExpr()        {}
+func (*Never) isExpr()      {}
+func (*Kinds) isExpr()      {}
+func (*Literal) isExpr()    {}
+func (*Predicate) isExpr()  {}
+func (*Shape) isExpr()      {}
+func (*All) isExpr()        {}
+func (*AnyOf) isExpr()      {}
+func (*ExactlyOne) isExpr() {}
+func (*Not) isExpr()        {}
+func (*Ref) isExpr()        {}
+func (*DynamicRef) isExpr() {}
+func (*Annotated) isExpr()  {}

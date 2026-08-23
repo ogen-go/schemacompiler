@@ -114,9 +114,9 @@ func branchID(t *testing.T, p plan.CompilationPlan) string {
 	t.Helper()
 
 	switch r := p.Representation.(type) {
-	case plan.ReferenceRepresentation:
+	case *plan.ReferenceRepresentation:
 		return r.Name
-	case plan.ObjectRepresentation:
+	case *plan.ObjectRepresentation:
 		names := make([]string, 0, len(r.Fields))
 		for _, f := range r.Fields {
 			names = append(names, f.Name)
@@ -484,7 +484,7 @@ func TestBuild_DeclaredDiscriminator(t *testing.T) {
 
 			require.Equal(t, tt.warn, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 
-			disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+			disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 			if tt.property == "" {
 				require.False(t, ok, "expected no PropertyDispatch, got %#v", got.Plan.Dispatch)
 				return
@@ -515,7 +515,7 @@ func TestBuild_AssertedDiscriminatorIsStaticButInexact(t *testing.T) {
 		`+requiredButUnconstrainedPetDefs+`
 	}`)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, plan.TagAsserted, disp.Tag)
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
@@ -536,7 +536,7 @@ func TestBuild_ProvenDiscriminatorIsStatic(t *testing.T) {
 		`+constTaggedPetDefs+`
 	}`)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, plan.TagDeclared, disp.Tag)
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
@@ -556,7 +556,7 @@ func TestBuild_UnrequiredDiscriminatorFallsBackToPredicateCount(t *testing.T) {
 		`+optionalTagPetDefs+`
 	}`)
 
-	disp, ok := got.Plan.Dispatch.(plan.PredicateCountDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PredicateCountDispatch)
 	require.True(t, ok, "expected PredicateCountDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, 1, disp.Minimum)
 	require.Equal(t, 1, disp.Maximum)
@@ -589,13 +589,13 @@ func TestBuild_NestedDeclaredDiscriminators(t *testing.T) {
 		`+constTaggedPetDefs+`
 	}`)
 
-	outer, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	outer, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, "kind", outer.Property)
 	require.Equal(t, plan.TagDeclared, outer.Tag)
 	require.Equal(t, []any{"pet", "vehicle"}, caseValues(outer.Cases))
 
-	inner, ok := outer.Cases[0].Plan.Dispatch.(plan.PropertyDispatch)
+	inner, ok := outer.Cases[0].Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected a nested PropertyDispatch, got %T", outer.Cases[0].Plan.Dispatch)
 	require.Equal(t, "petType", inner.Property)
 	require.Equal(t, plan.TagDeclared, inner.Tag)
@@ -632,11 +632,11 @@ func TestBuild_NestedAssertedDiscriminatorIsAssumed(t *testing.T) {
 		`+requiredButUnconstrainedPetDefs+`
 	}`)
 
-	outer, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	outer, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, plan.TagDeclared, outer.Tag)
 
-	inner, ok := outer.Cases[0].Plan.Dispatch.(plan.PropertyDispatch)
+	inner, ok := outer.Cases[0].Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected a nested PropertyDispatch, got %T", outer.Cases[0].Plan.Dispatch)
 	require.Equal(t, plan.TagAsserted, inner.Tag)
 	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticAssumed))
@@ -656,8 +656,8 @@ func TestBuild_IdenticalBranchesAreUninhabited(t *testing.T) {
 
 	got := planner.Build(norm.Normalize(ir.Compile(s.Root), 64), s.Registry)
 
-	require.IsType(t, plan.NeverRepresentation{}, got.Plan.Representation)
-	require.IsType(t, plan.NoDispatch{}, got.Plan.Dispatch)
+	require.IsType(t, &plan.NeverRepresentation{}, got.Plan.Representation)
+	require.IsType(t, &plan.NoDispatch{}, got.Plan.Dispatch)
 }
 
 // TestBuild_DeclaredDiscriminatorCombinatorShapes locks down the union shapes normalization
@@ -732,7 +732,7 @@ func TestBuild_DeclaredDiscriminatorCombinatorShapes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := buildDoc(t, tt.doc)
 
-			disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+			disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 			require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 			require.Equal(t, "petType", disp.Property)
 			require.Equal(t, plan.TagDeclared, disp.Tag)
@@ -752,7 +752,7 @@ func TestBuild_InferredDiscriminatorTagsAsInferred(t *testing.T) {
 		]
 	}`)
 
-	disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+	disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, plan.TagInferred, disp.Tag)
 }

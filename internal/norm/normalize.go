@@ -64,19 +64,19 @@ func (s *state) spend() bool {
 // already-normalized sub-expressions).
 func normalize(e ir.Expr, st *state) ir.Expr {
 	switch e := e.(type) {
-	case ir.All:
+	case *ir.All:
 		return normalizeAll(e, st)
-	case ir.AnyOf:
+	case *ir.AnyOf:
 		return normalizeAnyOf(e, st)
-	case ir.ExactlyOne:
+	case *ir.ExactlyOne:
 		return normalizeExactlyOne(e, st)
-	case ir.Not:
+	case *ir.Not:
 		return normalizeNot(normalize(e.Operand, st))
-	case ir.Annotated:
-		return ir.Annotated{Expr: normalize(e.Expr, st), Annotations: e.Annotations}
-	case ir.Shape:
+	case *ir.Annotated:
+		return &ir.Annotated{Expr: normalize(e.Expr, st), Annotations: e.Annotations}
+	case *ir.Shape:
 		return normalizeShape(e, st)
-	case ir.Predicate:
+	case *ir.Predicate:
 		return normalizePredicate(e, st)
 	default:
 		// Any, Never, Kinds, Literal, Ref, DynamicRef carry no sub-expressions.
@@ -89,22 +89,22 @@ func normalize(e ir.Expr, st *state) ir.Expr {
 // §11.8: it "remains a residual predicate" otherwise).
 func normalizeNot(operand ir.Expr) ir.Expr {
 	switch o := operand.(type) {
-	case ir.Any:
-		return ir.Never{}
-	case ir.Never:
-		return ir.Any{}
-	case ir.Not:
+	case *ir.Any:
+		return &ir.Never{}
+	case *ir.Never:
+		return &ir.Any{}
+	case *ir.Not:
 		return o.Operand
 	default:
-		return ir.Not{Operand: operand}
+		return &ir.Not{Operand: operand}
 	}
 }
 
 // normalizeShape recurses into every sub-expression a Shape carries so nested
 // property/item/pattern schemas are normalized too (design §12, §13).
-func normalizeShape(e ir.Shape, st *state) ir.Expr {
+func normalizeShape(e *ir.Shape, st *state) ir.Expr {
 	switch d := e.Detail.(type) {
-	case ir.ObjectShape:
+	case *ir.ObjectShape:
 		nd := ir.ObjectShape{}
 		for _, p := range d.Properties {
 			nd.Properties = append(nd.Properties, ir.PropertyExpr{Name: p.Name, Schema: normalize(p.Schema, st), Metadata: p.Metadata})
@@ -118,8 +118,8 @@ func normalizeShape(e ir.Shape, st *state) ir.Expr {
 		if d.UnevaluatedProperties != nil {
 			nd.UnevaluatedProperties = normalize(d.UnevaluatedProperties, st)
 		}
-		return ir.Shape{Detail: nd}
-	case ir.ArrayShape:
+		return &ir.Shape{Detail: &nd}
+	case *ir.ArrayShape:
 		nd := ir.ArrayShape{}
 		for _, it := range d.PrefixItems {
 			nd.PrefixItems = append(nd.PrefixItems, ir.ItemExpr{Schema: normalize(it.Schema, st), Metadata: it.Metadata})
@@ -130,7 +130,7 @@ func normalizeShape(e ir.Shape, st *state) ir.Expr {
 		if d.UnevaluatedItems != nil {
 			nd.UnevaluatedItems = normalize(d.UnevaluatedItems, st)
 		}
-		return ir.Shape{Detail: nd}
+		return &ir.Shape{Detail: &nd}
 	default:
 		return e
 	}
@@ -139,16 +139,16 @@ func normalizeShape(e ir.Shape, st *state) ir.Expr {
 // normalizePredicate recurses into the sub-schemas a predicate detail carries
 // (contains, propertyNames); the rest are leaf scalars with nothing to
 // normalize.
-func normalizePredicate(e ir.Predicate, st *state) ir.Expr {
+func normalizePredicate(e *ir.Predicate, st *state) ir.Expr {
 	switch d := e.Detail.(type) {
-	case ir.ContainsDetail:
+	case *ir.ContainsDetail:
 		nd := d
 		nd.Schema = normalize(d.Schema, st)
-		return ir.Predicate{Guard: e.Guard, Detail: nd}
-	case ir.PropertyNamesDetail:
+		return &ir.Predicate{Guard: e.Guard, Detail: nd}
+	case *ir.PropertyNamesDetail:
 		nd := d
 		nd.Schema = normalize(d.Schema, st)
-		return ir.Predicate{Guard: e.Guard, Detail: nd}
+		return &ir.Predicate{Guard: e.Guard, Detail: nd}
 	default:
 		return e
 	}
@@ -163,25 +163,25 @@ func normalizePredicate(e ir.Predicate, st *state) ir.Expr {
 // stricter than JSON equality, so it can only decline a rewrite, never license a wrong one.
 func exprEqual(a, b ir.Expr) bool {
 	switch a := a.(type) {
-	case ir.Literal:
-		b, ok := b.(ir.Literal)
-		return ok && a.Equal(b)
-	case ir.All:
-		b, ok := b.(ir.All)
+	case *ir.Literal:
+		b, ok := b.(*ir.Literal)
+		return ok && a.Equal(*b)
+	case *ir.All:
+		b, ok := b.(*ir.All)
 		return ok && operandsEqual(a.Operands, b.Operands)
-	case ir.AnyOf:
-		b, ok := b.(ir.AnyOf)
+	case *ir.AnyOf:
+		b, ok := b.(*ir.AnyOf)
 		return ok && reflect.DeepEqual(a.Discriminator, b.Discriminator) &&
 			operandsEqual(a.Operands, b.Operands)
-	case ir.ExactlyOne:
-		b, ok := b.(ir.ExactlyOne)
+	case *ir.ExactlyOne:
+		b, ok := b.(*ir.ExactlyOne)
 		return ok && reflect.DeepEqual(a.Discriminator, b.Discriminator) &&
 			operandsEqual(a.Operands, b.Operands)
-	case ir.Not:
-		b, ok := b.(ir.Not)
+	case *ir.Not:
+		b, ok := b.(*ir.Not)
 		return ok && exprEqual(a.Operand, b.Operand)
-	case ir.Annotated:
-		b, ok := b.(ir.Annotated)
+	case *ir.Annotated:
+		b, ok := b.(*ir.Annotated)
 		return ok && a.Annotations == b.Annotations && exprEqual(a.Expr, b.Expr)
 	default:
 		return reflect.DeepEqual(a, b)

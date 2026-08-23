@@ -54,9 +54,9 @@ func (b *builder) requireNumericBound(val plan.ValidationPlan, path string) {
 	var low, high bool
 	for _, gp := range val.Predicates {
 		switch gp.Expression.(type) {
-		case plan.MinimumPredicate:
+		case *plan.MinimumPredicate:
 			low = true
-		case plan.MaximumPredicate:
+		case *plan.MaximumPredicate:
 			high = true
 		}
 	}

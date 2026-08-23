@@ -37,7 +37,7 @@ func (b *builder) guardedShapes(c components, path string) ([]plan.GuardedPredic
 		sub := b.buildLeaf(kind, components{shapes: c.shapes, numeric: plan.AnyNumber}, path)
 		out = append(out, plan.GuardedPredicate{
 			Applicability: kindBit(kind),
-			Expression:    plan.ShapePredicate{Schema: sub},
+			Expression:    &plan.ShapePredicate{Schema: sub},
 		})
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
@@ -49,11 +49,11 @@ func (b *builder) guardedShapes(c components, path string) ([]plan.GuardedPredic
 func hasShape(shapes []ir.ShapeDetail, kind plan.JSONKind) bool {
 	for _, sd := range shapes {
 		switch sd.(type) {
-		case ir.ObjectShape:
+		case *ir.ObjectShape:
 			if kind == plan.KindObject {
 				return true
 			}
-		case ir.ArrayShape:
+		case *ir.ArrayShape:
 			if kind == plan.KindArray {
 				return true
 			}

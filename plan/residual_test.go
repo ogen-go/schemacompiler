@@ -13,7 +13,7 @@ import (
 func TestResidualChecks(t *testing.T) {
 	stringRep := plan.PrimitiveRepresentation{Kind: plan.KindString}
 	intRep := plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.IntegerOnly}
-	additional := &plan.CompilationPlan{Representation: plan.AnyRepresentation{}}
+	additional := &plan.CompilationPlan{Representation: &plan.AnyRepresentation{}}
 
 	objRep := plan.ObjectRepresentation{
 		Fields:     []plan.FieldRepresentation{{Name: "a", Presence: plan.PresenceRequired}},
@@ -25,9 +25,9 @@ func TestResidualChecks(t *testing.T) {
 	}
 
 	arrRep := plan.ArrayRepresentation{
-		Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: stringRep}}},
+		Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: &stringRep}}},
 	}
-	arrCheck := plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{{Representation: stringRep}}}
+	arrCheck := plan.ArrayStructurePredicate{Prefix: []plan.CompilationPlan{{Representation: &stringRep}}}
 
 	tests := []struct {
 		name     string
@@ -37,38 +37,38 @@ func TestResidualChecks(t *testing.T) {
 	}{
 		{
 			name:     "a kind assertion is discharged",
-			rep:      stringRep,
+			rep:      &stringRep,
 			pred:     plan.GuardedPredicate{Applicability: plan.SetString, Assert: true},
 			residual: false,
 		},
 		{
 			name:     "a real check is not",
-			rep:      stringRep,
-			pred:     plan.GuardedPredicate{Applicability: plan.SetString, Expression: plan.MinLengthPredicate{Value: 3}},
+			rep:      &stringRep,
+			pred:     plan.GuardedPredicate{Applicability: plan.SetString, Expression: &plan.MinLengthPredicate{Value: 3}},
 			residual: true,
 		},
 		{
 			name:     "a numeric domain matching the representation is discharged",
-			rep:      intRep,
-			pred:     plan.GuardedPredicate{Expression: plan.NumericDomainPredicate{Domain: plan.IntegerOnly}},
+			rep:      &intRep,
+			pred:     plan.GuardedPredicate{Expression: &plan.NumericDomainPredicate{Domain: plan.IntegerOnly}},
 			residual: false,
 		},
 		{
 			name:     "a numeric domain the representation does not carry is not",
-			rep:      plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.AnyNumber},
-			pred:     plan.GuardedPredicate{Expression: plan.NumericDomainPredicate{Domain: plan.IntegerOnly}},
+			rep:      &plan.PrimitiveRepresentation{Kind: plan.KindNumber, Numeric: plan.AnyNumber},
+			pred:     plan.GuardedPredicate{Expression: &plan.NumericDomainPredicate{Domain: plan.IntegerOnly}},
 			residual: true,
 		},
 		{
 			name:     "a structure predicate restating the representation is discharged",
-			rep:      objRep,
-			pred:     plan.GuardedPredicate{Applicability: plan.SetObject, Expression: objCheck},
+			rep:      &objRep,
+			pred:     plan.GuardedPredicate{Applicability: plan.SetObject, Expression: &objCheck},
 			residual: false,
 		},
 		{
 			name: "one naming a different property is not",
-			rep:  objRep,
-			pred: plan.GuardedPredicate{Applicability: plan.SetObject, Expression: plan.ObjectStructurePredicate{
+			rep:  &objRep,
+			pred: plan.GuardedPredicate{Applicability: plan.SetObject, Expression: &plan.ObjectStructurePredicate{
 				Properties: []plan.PropertyCheck{{Name: "b", Presence: plan.PresenceRequired}},
 				Additional: additional,
 			}},
@@ -76,8 +76,8 @@ func TestResidualChecks(t *testing.T) {
 		},
 		{
 			name: "one requiring what the representation makes optional is not",
-			rep:  objRep,
-			pred: plan.GuardedPredicate{Applicability: plan.SetObject, Expression: plan.ObjectStructurePredicate{
+			rep:  &objRep,
+			pred: plan.GuardedPredicate{Applicability: plan.SetObject, Expression: &plan.ObjectStructurePredicate{
 				Properties: []plan.PropertyCheck{{Name: "a", Presence: plan.PresenceOptional}},
 				Additional: additional,
 			}},
@@ -85,43 +85,43 @@ func TestResidualChecks(t *testing.T) {
 		},
 		{
 			name: "one bounding an Additional the representation leaves open is not",
-			rep:  objRep,
-			pred: plan.GuardedPredicate{Applicability: plan.SetObject, Expression: plan.ObjectStructurePredicate{
+			rep:  &objRep,
+			pred: plan.GuardedPredicate{Applicability: plan.SetObject, Expression: &plan.ObjectStructurePredicate{
 				Properties: []plan.PropertyCheck{{Name: "a", Presence: plan.PresenceRequired}},
 			}},
 			residual: true,
 		},
 		{
 			name:     "an array structure restating the representation is discharged",
-			rep:      arrRep,
-			pred:     plan.GuardedPredicate{Applicability: plan.SetArray, Expression: arrCheck},
+			rep:      &arrRep,
+			pred:     plan.GuardedPredicate{Applicability: plan.SetArray, Expression: &arrCheck},
 			residual: false,
 		},
 		{
 			name: "one closing a tuple the representation leaves open is not",
-			rep: plan.ArrayRepresentation{
+			rep: &plan.ArrayRepresentation{
 				Prefix: arrRep.Prefix,
-				Rest:   plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.AnyRepresentation{}}},
+				Rest:   plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: &plan.AnyRepresentation{}}},
 			},
-			pred:     plan.GuardedPredicate{Applicability: plan.SetArray, Expression: arrCheck},
+			pred:     plan.GuardedPredicate{Applicability: plan.SetArray, Expression: &arrCheck},
 			residual: true,
 		},
 		{
 			name:     "a reference naming the same target is discharged",
-			rep:      plan.ReferenceRepresentation{Name: "#/$defs/A"},
-			pred:     plan.GuardedPredicate{Applicability: plan.SetAny, Expression: plan.ReferencePredicate{Name: "#/$defs/A"}},
+			rep:      &plan.ReferenceRepresentation{Name: "#/$defs/A"},
+			pred:     plan.GuardedPredicate{Applicability: plan.SetAny, Expression: &plan.ReferencePredicate{Name: "#/$defs/A"}},
 			residual: false,
 		},
 		{
 			name:     "one naming a different target is not",
-			rep:      plan.ReferenceRepresentation{Name: "#/$defs/A"},
-			pred:     plan.GuardedPredicate{Applicability: plan.SetAny, Expression: plan.ReferencePredicate{Name: "#/$defs/B"}},
+			rep:      &plan.ReferenceRepresentation{Name: "#/$defs/A"},
+			pred:     plan.GuardedPredicate{Applicability: plan.SetAny, Expression: &plan.ReferencePredicate{Name: "#/$defs/B"}},
 			residual: true,
 		},
 		{
 			name:     "a structure predicate beside the wrong representation is not discharged",
-			rep:      stringRep,
-			pred:     plan.GuardedPredicate{Applicability: plan.SetObject, Expression: objCheck},
+			rep:      &stringRep,
+			pred:     plan.GuardedPredicate{Applicability: plan.SetObject, Expression: &objCheck},
 			residual: true,
 		},
 	}

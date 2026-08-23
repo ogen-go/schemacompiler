@@ -11,9 +11,9 @@ import (
 
 func anyPlan() plan.CompilationPlan {
 	return plan.CompilationPlan{
-		Representation: plan.AnyRepresentation{},
-		Dispatch:       plan.NoDispatch{},
-		Resolution:     plan.FullyResolved{},
+		Representation: &plan.AnyRepresentation{},
+		Dispatch:       &plan.NoDispatch{},
+		Resolution:     &plan.FullyResolved{},
 	}
 }
 
@@ -38,10 +38,10 @@ func checking(e plan.PredicateExpr, guard plan.KindSet) plan.CompilationPlan {
 
 func TestObjectStructurePredicate(t *testing.T) {
 	never := plan.CompilationPlan{
-		Representation: plan.NeverRepresentation{},
+		Representation: &plan.NeverRepresentation{},
 		Validation:     plan.ValidationPlan{Predicates: []plan.GuardedPredicate{{Applicability: 0, Assert: true}}},
-		Dispatch:       plan.NoDispatch{},
-		Resolution:     plan.FullyResolved{},
+		Dispatch:       &plan.NoDispatch{},
+		Resolution:     &plan.FullyResolved{},
 	}
 
 	tests := []struct {
@@ -139,7 +139,7 @@ func TestObjectStructurePredicate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v, err := planterp.Interpret(checking(tt.predicate, plan.SetObject), tt.value)
+			v, err := planterp.Interpret(checking(&tt.predicate, plan.SetObject), tt.value)
 			require.NoError(t, err)
 			require.Equal(t, tt.accepted, v.Accepted, "reason: %v", v.Reason)
 		})
@@ -195,7 +195,7 @@ func TestArrayStructurePredicate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v, err := planterp.Interpret(checking(tt.predicate, plan.SetArray), tt.value)
+			v, err := planterp.Interpret(checking(&tt.predicate, plan.SetArray), tt.value)
 			require.NoError(t, err)
 			require.Equal(t, tt.accepted, v.Accepted, "reason: %v", v.Reason)
 		})
@@ -206,8 +206,8 @@ func TestArrayStructurePredicate(t *testing.T) {
 // (issue #115): the referring plan's representation is Any, so the verdict can only have
 // come from resolving the name against the document's graph.
 func TestReferencePredicate(t *testing.T) {
-	root := checking(plan.ReferencePredicate{Name: "#/$defs/S"}, plan.SetAny)
-	root.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+	root := checking(&plan.ReferencePredicate{Name: "#/$defs/S"}, plan.SetAny)
+	root.Resolution = &plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
 		"#/$defs/S": stringPlan(),
 	}}
 
@@ -224,16 +224,16 @@ func TestReferencePredicate(t *testing.T) {
 	})
 
 	t.Run("an unresolvable name is an internal error, never an acceptance", func(t *testing.T) {
-		dangling := checking(plan.ReferencePredicate{Name: "#/$defs/missing"}, plan.SetAny)
-		dangling.Resolution = plan.StaticReferenceGraph{}
+		dangling := checking(&plan.ReferencePredicate{Name: "#/$defs/missing"}, plan.SetAny)
+		dangling.Resolution = &plan.StaticReferenceGraph{}
 		_, err := planterp.Interpret(dangling, "a")
 		require.Error(t, err)
 	})
 
 	t.Run("a cycle with no instance descent is an internal error", func(t *testing.T) {
-		loop := checking(plan.ReferencePredicate{Name: "#/$defs/L"}, plan.SetAny)
-		loop.Resolution = plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
-			"#/$defs/L": checking(plan.ReferencePredicate{Name: "#/$defs/L"}, plan.SetAny),
+		loop := checking(&plan.ReferencePredicate{Name: "#/$defs/L"}, plan.SetAny)
+		loop.Resolution = &plan.StaticReferenceGraph{Definitions: map[plan.SchemaID]plan.CompilationPlan{
+			"#/$defs/L": checking(&plan.ReferencePredicate{Name: "#/$defs/L"}, plan.SetAny),
 		}}
 		_, err := planterp.Interpret(loop, "a")
 		require.Error(t, err)

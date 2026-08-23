@@ -91,7 +91,7 @@ func (b *builder) tagFacts(e ir.Expr, name string, seen map[plan.SchemaID]bool) 
 		f = f.and(tagFacts{values: values, pinned: true})
 	}
 	for _, r := range c.refs {
-		ref, ok := r.(ir.Ref)
+		ref, ok := r.(*ir.Ref)
 		if !ok || !ref.KindsKnown || seen[ref.Target] {
 			// DynamicRef, unresolved static ref or a cycle: not statically knowable.
 			continue
@@ -109,9 +109,9 @@ func (b *builder) tagFacts(e ir.Expr, name string, seen map[plan.SchemaID]bool) 
 	for _, comb := range c.combinators {
 		var operands []ir.Expr
 		switch v := comb.(type) {
-		case ir.AnyOf:
+		case *ir.AnyOf:
 			operands = v.Operands
-		case ir.ExactlyOne:
+		case *ir.ExactlyOne:
 			operands = v.Operands
 		default:
 			continue
@@ -133,7 +133,7 @@ func shapeLiteralValues(c components, name string) ([]ir.Literal, bool) {
 	var acc []ir.Literal
 	found := false
 	for _, sd := range c.shapes {
-		os, ok := sd.(ir.ObjectShape)
+		os, ok := sd.(*ir.ObjectShape)
 		if !ok {
 			continue
 		}

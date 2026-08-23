@@ -16,32 +16,32 @@ func TestNot_Kinds(t *testing.T) {
 	}{
 		{
 			"pure kind restriction complements exactly",
-			Not{Operand: Kinds{Set: plan.SetString, Numeric: plan.AnyNumber}},
+			Not{Operand: &Kinds{Set: plan.SetString, Numeric: plan.AnyNumber}},
 			plan.SetAny &^ plan.SetString,
 		},
 		{
 			"wrapped in single-operand All still exact",
-			Not{Operand: All{Operands: []Expr{Kinds{Set: plan.SetNumber, Numeric: plan.AnyNumber}}}},
+			Not{Operand: &All{Operands: []Expr{&Kinds{Set: plan.SetNumber, Numeric: plan.AnyNumber}}}},
 			plan.SetAny &^ plan.SetNumber,
 		},
 		{
 			"integer-only numeric refinement is NOT pure: conservative",
-			Not{Operand: Kinds{Set: plan.SetNumber, Numeric: plan.IntegerOnly}},
+			Not{Operand: &Kinds{Set: plan.SetNumber, Numeric: plan.IntegerOnly}},
 			plan.SetAny,
 		},
 		{
 			"residual predicate is not a kind restriction: conservative",
-			Not{Operand: Predicate{Guard: plan.SetString, Detail: MinLengthDetail{Value: 5}}},
+			Not{Operand: &Predicate{Guard: plan.SetString, Detail: &MinLengthDetail{Value: 5}}},
 			plan.SetAny,
 		},
 		{
 			"Any operand complements to empty",
-			Not{Operand: Any{}},
+			Not{Operand: &Any{}},
 			0,
 		},
 		{
 			"Never operand complements to SetAny",
-			Not{Operand: Never{}},
+			Not{Operand: &Never{}},
 			plan.SetAny,
 		},
 	}

@@ -20,7 +20,7 @@ func compile(t *testing.T, schema string) plan.CompilationPlan {
 
 func objectFields(t *testing.T, p plan.CompilationPlan) map[string]plan.FieldRepresentation {
 	t.Helper()
-	obj, ok := p.Representation.(plan.ObjectRepresentation)
+	obj, ok := p.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "expected object representation, got %T", p.Representation)
 	byName := make(map[string]plan.FieldRepresentation, len(obj.Fields))
 	for _, f := range obj.Fields {
@@ -31,7 +31,7 @@ func objectFields(t *testing.T, p plan.CompilationPlan) map[string]plan.FieldRep
 
 // fieldByName looks one field up by property name. plan.ObjectRepresentation.Fields is
 // ordered (issue #89), so a test that wants one field scans for it.
-func fieldByName(t *testing.T, obj plan.ObjectRepresentation, name string) (plan.FieldRepresentation, bool) {
+func fieldByName(t *testing.T, obj *plan.ObjectRepresentation, name string) (plan.FieldRepresentation, bool) {
 	t.Helper()
 	for _, f := range obj.Fields {
 		if f.Name == name {
@@ -42,7 +42,7 @@ func fieldByName(t *testing.T, obj plan.ObjectRepresentation, name string) (plan
 }
 
 // mustField is [fieldByName] for a field the test knows is there.
-func mustField(t *testing.T, obj plan.ObjectRepresentation, name string) plan.FieldRepresentation {
+func mustField(t *testing.T, obj *plan.ObjectRepresentation, name string) plan.FieldRepresentation {
 	t.Helper()
 	f, ok := fieldByName(t, obj, name)
 	require.True(t, ok, "no field %q", name)
@@ -108,7 +108,7 @@ func TestCompile_NestedFieldMetadata(t *testing.T) {
 		}
 	}`))
 
-	nested, ok := fields["nested"].Plan.Representation.(plan.ObjectRepresentation)
+	nested, ok := fields["nested"].Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok)
 	require.Equal(t, "Inner", mustField(t, nested, "inner").Metadata.Title)
 }
@@ -132,9 +132,9 @@ func TestCompile_ArrayItemMetadata(t *testing.T) {
 			"properties": {"a": {"type": "string", "x-tag": "t"}}
 		}
 	}`)
-	arr, ok := p.Representation.(plan.ArrayRepresentation)
+	arr, ok := p.Representation.(*plan.ArrayRepresentation)
 	require.True(t, ok, "got %T", p.Representation)
-	obj, ok := arr.Rest.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := arr.Rest.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", arr.Rest.Plan.Representation)
 	require.Equal(t, map[string]any{"x-tag": "t"}, mustField(t, obj, "a").Metadata.Extensions)
 }
@@ -144,7 +144,7 @@ func TestCompile_DefinitionMetadata(t *testing.T) {
 		"$defs": {"Named": {"type": "string", "title": "Named", "x-ogen-name": "N"}},
 		"$ref": "#/$defs/Named"
 	}`)
-	graph, ok := p.Resolution.(plan.StaticReferenceGraph)
+	graph, ok := p.Resolution.(*plan.StaticReferenceGraph)
 	require.True(t, ok, "got %T", p.Resolution)
 	def, ok := graph.Definitions["/$defs/Named"]
 	require.True(t, ok)

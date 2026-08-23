@@ -48,5 +48,5 @@ type ArrayShape struct {
 	UnevaluatedItems Expr
 }
 
-func (ObjectShape) isShapeDetail() {}
-func (ArrayShape) isShapeDetail()  {}
+func (*ObjectShape) isShapeDetail() {}
+func (*ArrayShape) isShapeDetail()  {}

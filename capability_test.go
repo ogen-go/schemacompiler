@@ -10,9 +10,9 @@ import (
 
 func refPlan(target string, level plan.CapabilityLevel) plan.CompilationPlan {
 	return plan.CompilationPlan{
-		Representation: plan.ObjectRepresentation{
+		Representation: &plan.ObjectRepresentation{
 			Fields: []plan.FieldRepresentation{
-				{Name: "f", Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: target}}},
+				{Name: "f", Plan: plan.CompilationPlan{Representation: &plan.ReferenceRepresentation{Name: target}}},
 			},
 		},
 		Capability: level,
@@ -102,26 +102,26 @@ func TestRollUpCapabilities(t *testing.T) {
 
 func TestPlanReferencesNested(t *testing.T) {
 	p := plan.CompilationPlan{
-		Representation: plan.ArrayRepresentation{
-			Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "P"}}}},
-			Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: plan.UnionRepresentation{
+		Representation: &plan.ArrayRepresentation{
+			Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: &plan.ReferenceRepresentation{Name: "P"}}}},
+			Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: &plan.UnionRepresentation{
 				Alternatives: []plan.Representation{
-					plan.ReferenceRepresentation{Name: "U"},
-					plan.RecursiveRepresentation{Name: "R", Body: plan.ReferenceRepresentation{Name: "B"}},
+					&plan.ReferenceRepresentation{Name: "U"},
+					&plan.RecursiveRepresentation{Name: "R", Body: &plan.ReferenceRepresentation{Name: "B"}},
 				},
 			}}},
 		},
-		Dispatch: plan.PredicateCountDispatch{
+		Dispatch: &plan.PredicateCountDispatch{
 			Branches: []plan.CompilationPlan{
-				{Representation: plan.ReferenceRepresentation{Name: "D"}},
+				{Representation: &plan.ReferenceRepresentation{Name: "D"}},
 			},
 		},
 		Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
-			{Expression: plan.ContainsCountPredicate{
-				Schema: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "C"}},
+			{Expression: &plan.ContainsCountPredicate{
+				Schema: plan.CompilationPlan{Representation: &plan.ReferenceRepresentation{Name: "C"}},
 			}},
-			{Expression: plan.PropertyNamesPredicate{
-				Schema: plan.CompilationPlan{Representation: plan.ReferenceRepresentation{Name: "N"}},
+			{Expression: &plan.PropertyNamesPredicate{
+				Schema: plan.CompilationPlan{Representation: &plan.ReferenceRepresentation{Name: "N"}},
 			}},
 		}},
 	}

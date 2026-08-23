@@ -35,7 +35,7 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 
 	n := 0
 	for _, gp := range p.ResidualChecks() {
-		if _, ok := gp.Expression.(plan.NegationPredicate); ok {
+		if _, ok := gp.Expression.(*plan.NegationPredicate); ok {
 			n++
 		}
 	}
@@ -111,7 +111,7 @@ func TestBuild_SubsumedOneOfBranchAmongThree(t *testing.T) {
 
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
 	require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced))
-	require.IsType(t, plan.PredicateCountDispatch{}, got.Plan.Dispatch)
+	require.IsType(t, &plan.PredicateCountDispatch{}, got.Plan.Dispatch)
 }
 
 // TestBuild_DisjointNestedCombinatorBranchesStayStatic pins the shapes #67 legitimately
@@ -135,7 +135,7 @@ func TestBuild_DisjointNestedCombinatorBranchesStayStatic(t *testing.T) {
 
 			require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
 			require.Zero(t, countNegations(t, got.Plan))
-			disp, ok := got.Plan.Dispatch.(plan.PropertyDispatch)
+			disp, ok := got.Plan.Dispatch.(*plan.PropertyDispatch)
 			require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 			require.Equal(t, plan.TagDeclared, disp.Tag)
 			require.Equal(t, []any{"cat", "kitten", "dog"}, caseValues(disp.Cases))

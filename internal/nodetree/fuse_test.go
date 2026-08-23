@@ -12,8 +12,8 @@ func guarded(e plan.PredicateExpr) plan.GuardedPredicate {
 	return plan.GuardedPredicate{Applicability: plan.SetObject, Expression: e}
 }
 
-func structureOf(required ...string) plan.ObjectStructurePredicate {
-	s := plan.ObjectStructurePredicate{}
+func structureOf(required ...string) *plan.ObjectStructurePredicate {
+	s := &plan.ObjectStructurePredicate{}
 	for _, n := range required {
 		s.Properties = append(s.Properties, plan.PropertyCheck{Name: n, Presence: plan.PresenceRequired})
 	}
@@ -35,34 +35,34 @@ func TestWithoutRestatedRequired(t *testing.T) {
 	}{
 		{
 			name:  "the structure requires the same name",
-			preds: []plan.GuardedPredicate{guarded(structureOf("a")), guarded(plan.RequiredPredicate{Properties: []string{"a"}})},
+			preds: []plan.GuardedPredicate{guarded(structureOf("a")), guarded(&plan.RequiredPredicate{Properties: []string{"a"}})},
 			want:  1,
 		},
 		{
 			name:  "the structure requires a superset",
-			preds: []plan.GuardedPredicate{guarded(structureOf("a", "b")), guarded(plan.RequiredPredicate{Properties: []string{"a"}})},
+			preds: []plan.GuardedPredicate{guarded(structureOf("a", "b")), guarded(&plan.RequiredPredicate{Properties: []string{"a"}})},
 			want:  1,
 		},
 		{
 			name:  "the structure requires only some of the names",
-			preds: []plan.GuardedPredicate{guarded(structureOf("a")), guarded(plan.RequiredPredicate{Properties: []string{"a", "b"}})},
+			preds: []plan.GuardedPredicate{guarded(structureOf("a")), guarded(&plan.RequiredPredicate{Properties: []string{"a", "b"}})},
 			want:  2,
 		},
 		{
 			name:  "the structure declares the name but does not require it",
-			preds: []plan.GuardedPredicate{guarded(optional), guarded(plan.RequiredPredicate{Properties: []string{"a"}})},
+			preds: []plan.GuardedPredicate{guarded(&optional), guarded(&plan.RequiredPredicate{Properties: []string{"a"}})},
 			want:  2,
 		},
 		{
 			name:  "there is no structure at all",
-			preds: []plan.GuardedPredicate{guarded(plan.RequiredPredicate{Properties: []string{"a"}})},
+			preds: []plan.GuardedPredicate{guarded(&plan.RequiredPredicate{Properties: []string{"a"}})},
 			want:  1,
 		},
 		{
 			name: "the structure guards a different kind",
 			preds: []plan.GuardedPredicate{
 				{Applicability: plan.SetAny, Expression: structureOf("a")},
-				guarded(plan.RequiredPredicate{Properties: []string{"a"}}),
+				guarded(&plan.RequiredPredicate{Properties: []string{"a"}}),
 			},
 			want: 2,
 		},
@@ -70,7 +70,7 @@ func TestWithoutRestatedRequired(t *testing.T) {
 			name: "the structure is an assertion, not a guard",
 			preds: []plan.GuardedPredicate{
 				{Applicability: plan.SetObject, Assert: true, Expression: structureOf("a")},
-				guarded(plan.RequiredPredicate{Properties: []string{"a"}}),
+				guarded(&plan.RequiredPredicate{Properties: []string{"a"}}),
 			},
 			want: 2,
 		},
@@ -78,7 +78,7 @@ func TestWithoutRestatedRequired(t *testing.T) {
 			name: "the required check is an assertion, so it also rejects a non-object",
 			preds: []plan.GuardedPredicate{
 				guarded(structureOf("a")),
-				{Applicability: plan.SetObject, Assert: true, Expression: plan.RequiredPredicate{Properties: []string{"a"}}},
+				{Applicability: plan.SetObject, Assert: true, Expression: &plan.RequiredPredicate{Properties: []string{"a"}}},
 			},
 			want: 2,
 		},
@@ -86,8 +86,8 @@ func TestWithoutRestatedRequired(t *testing.T) {
 			name: "two restatements are both dropped",
 			preds: []plan.GuardedPredicate{
 				guarded(structureOf("a", "b")),
-				guarded(plan.RequiredPredicate{Properties: []string{"a"}}),
-				guarded(plan.RequiredPredicate{Properties: []string{"b"}}),
+				guarded(&plan.RequiredPredicate{Properties: []string{"a"}}),
+				guarded(&plan.RequiredPredicate{Properties: []string{"b"}}),
 			},
 			want: 1,
 		},
@@ -114,11 +114,11 @@ func TestPlanFusionFoldsCountBounds(t *testing.T) {
 	objectStruct := guarded(structureOf())
 	arrayStruct := plan.GuardedPredicate{
 		Applicability: plan.SetArray,
-		Expression:    plan.ArrayStructurePredicate{},
+		Expression:    &plan.ArrayStructurePredicate{},
 	}
 	maxItems := plan.GuardedPredicate{
 		Applicability: plan.SetArray,
-		Expression:    plan.MaxItemsPredicate{Value: 10},
+		Expression:    &plan.MaxItemsPredicate{Value: 10},
 	}
 
 	for _, tt := range []struct {
@@ -130,7 +130,7 @@ func TestPlanFusionFoldsCountBounds(t *testing.T) {
 	}{
 		{
 			name:   "minProperties folds into the object structure",
-			preds:  []plan.GuardedPredicate{objectStruct, guarded(plan.MinPropertiesPredicate{Value: 2})},
+			preds:  []plan.GuardedPredicate{objectStruct, guarded(&plan.MinPropertiesPredicate{Value: 2})},
 			object: countBounds{min: 2, hasMin: true},
 			kept:   1,
 		},
@@ -138,8 +138,8 @@ func TestPlanFusionFoldsCountBounds(t *testing.T) {
 			name: "both object bounds fold",
 			preds: []plan.GuardedPredicate{
 				objectStruct,
-				guarded(plan.MinPropertiesPredicate{Value: 2}),
-				guarded(plan.MaxPropertiesPredicate{Value: 5}),
+				guarded(&plan.MinPropertiesPredicate{Value: 2}),
+				guarded(&plan.MaxPropertiesPredicate{Value: 5}),
 			},
 			object: countBounds{min: 2, max: 5, hasMin: true, hasMax: true},
 			kept:   1,
@@ -158,7 +158,7 @@ func TestPlanFusionFoldsCountBounds(t *testing.T) {
 		{
 			name: "the structure guards a different kind",
 			preds: []plan.GuardedPredicate{
-				{Applicability: plan.SetAny, Expression: plan.ArrayStructurePredicate{}},
+				{Applicability: plan.SetAny, Expression: &plan.ArrayStructurePredicate{}},
 				maxItems,
 			},
 			kept: 2,
@@ -167,7 +167,7 @@ func TestPlanFusionFoldsCountBounds(t *testing.T) {
 			name: "the bound is an assertion, so it also rejects a non-array",
 			preds: []plan.GuardedPredicate{
 				arrayStruct,
-				{Applicability: plan.SetArray, Assert: true, Expression: plan.MaxItemsPredicate{Value: 10}},
+				{Applicability: plan.SetArray, Assert: true, Expression: &plan.MaxItemsPredicate{Value: 10}},
 			},
 			kept: 2,
 		},
@@ -175,7 +175,7 @@ func TestPlanFusionFoldsCountBounds(t *testing.T) {
 			name: "two structures leave no single walk to fold into",
 			preds: []plan.GuardedPredicate{
 				arrayStruct,
-				{Applicability: plan.SetArray, Expression: plan.ArrayStructurePredicate{}},
+				{Applicability: plan.SetArray, Expression: &plan.ArrayStructurePredicate{}},
 				maxItems,
 			},
 			kept: 3,
@@ -185,7 +185,7 @@ func TestPlanFusionFoldsCountBounds(t *testing.T) {
 			preds: []plan.GuardedPredicate{
 				arrayStruct,
 				maxItems,
-				{Applicability: plan.SetArray, Expression: plan.MaxItemsPredicate{Value: 3}},
+				{Applicability: plan.SetArray, Expression: &plan.MaxItemsPredicate{Value: 3}},
 			},
 			array: countBounds{max: 10, hasMax: true},
 			kept:  2,

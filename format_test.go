@@ -56,7 +56,7 @@ func TestFormatApplicability(t *testing.T) {
 					require.Empty(t, res.Diagnostics)
 
 					if k.typ != group.applicable {
-						require.NotEqual(t, plan.PrimitiveRepresentation{
+						require.NotEqual(t, &plan.PrimitiveRepresentation{
 							Kind:   k.kind,
 							Format: name,
 						}, res.Plan.Representation, "format must not reach an inapplicable kind")
@@ -64,7 +64,7 @@ func TestFormatApplicability(t *testing.T) {
 						return
 					}
 
-					require.Equal(t, plan.PrimitiveRepresentation{
+					require.Equal(t, &plan.PrimitiveRepresentation{
 						Kind:    k.kind,
 						Numeric: group.numericKind,
 						Format:  name,
@@ -72,7 +72,7 @@ func TestFormatApplicability(t *testing.T) {
 					require.Len(t, res.Plan.ResidualChecks(), 1)
 					require.Equal(t, plan.GuardedPredicate{
 						Applicability: kindSet(k.kind),
-						Expression:    plan.FormatPredicate{Format: name},
+						Expression:    &plan.FormatPredicate{Format: name},
 					}, res.Plan.ResidualChecks()[0])
 				})
 			}
@@ -109,11 +109,11 @@ func TestFormatWithoutType(t *testing.T) {
 		t.Run(tt.format, func(t *testing.T) {
 			res := compileString(t, `{"format":"`+tt.format+`"}`)
 
-			require.Equal(t, plan.AnyRepresentation{}, res.Plan.Representation)
+			require.Equal(t, &plan.AnyRepresentation{}, res.Plan.Representation)
 			require.Len(t, res.Plan.ResidualChecks(), 1)
 			require.Equal(t, plan.GuardedPredicate{
 				Applicability: tt.guard,
-				Expression:    plan.FormatPredicate{Format: tt.format},
+				Expression:    &plan.FormatPredicate{Format: tt.format},
 			}, res.Plan.ResidualChecks()[0])
 		})
 	}
@@ -124,25 +124,25 @@ func TestFormatWithoutType(t *testing.T) {
 func TestFormatOnTypeArray(t *testing.T) {
 	res := compileString(t, `{"type":["string","number"],"format":"uuid"}`)
 
-	dispatch, ok := res.Plan.Dispatch.(plan.KindDispatch)
+	dispatch, ok := res.Plan.Dispatch.(*plan.KindDispatch)
 	require.True(t, ok)
 	for kind, c := range dispatch.Cases {
 		if kind == plan.KindString {
 			require.Equal(t, []plan.GuardedPredicate{{
 				Applicability: plan.SetString,
-				Expression:    plan.FormatPredicate{Format: "uuid"},
+				Expression:    &plan.FormatPredicate{Format: "uuid"},
 			}}, c.ResidualChecks())
 			continue
 		}
 		require.Empty(t, c.ResidualChecks(), "format is vacuous for kind %d", kind)
 	}
 
-	union, ok := res.Plan.Representation.(plan.UnionRepresentation)
+	union, ok := res.Plan.Representation.(*plan.UnionRepresentation)
 	require.True(t, ok)
-	require.Contains(t, union.Alternatives, plan.Representation(plan.PrimitiveRepresentation{
+	require.Contains(t, union.Alternatives, plan.Representation(&plan.PrimitiveRepresentation{
 		Kind: plan.KindString, Format: "uuid",
 	}))
-	require.Contains(t, union.Alternatives, plan.Representation(plan.PrimitiveRepresentation{
+	require.Contains(t, union.Alternatives, plan.Representation(&plan.PrimitiveRepresentation{
 		Kind: plan.KindNumber,
 	}))
 }
@@ -156,7 +156,7 @@ func TestFormatAllOfOrderIndependent(t *testing.T) {
 		`{"allOf":[{"type":"string","format":"uuid"},{"format":"date-time"}]}`)
 
 	require.Equal(t, forward.Plan.Representation, reverse.Plan.Representation)
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, forward.Plan.Representation)
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, forward.Plan.Representation)
 
 	for _, res := range []*schemacompiler.Result{forward, reverse} {
 		require.Len(t, res.Plan.ResidualChecks(), 2, "both formats stay in the validation plan")
@@ -174,7 +174,7 @@ func TestFormatAllOfDisjointKinds(t *testing.T) {
 	res := compileString(t,
 		`{"type":"number","allOf":[{"format":"uuid"},{"format":"int32"}]}`)
 
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindNumber, Format: "int32"},
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindNumber, Format: "int32"},
 		res.Plan.Representation)
 	require.Len(t, res.Plan.ResidualChecks(), 1)
 	require.Empty(t, res.Diagnostics)
@@ -185,7 +185,7 @@ func TestFormatSameNameTwice(t *testing.T) {
 	res := compileString(t,
 		`{"allOf":[{"type":"string","format":"uuid"},{"format":"uuid"}]}`)
 
-	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString, Format: "uuid"},
+	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString, Format: "uuid"},
 		res.Plan.Representation)
 	require.Empty(t, res.Diagnostics)
 }

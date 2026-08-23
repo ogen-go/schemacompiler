@@ -11,7 +11,7 @@ import (
 // know the reference's identity and, via the registry, its recursion class (design
 // §19). Enforces the v1 scope: unguarded recursion has no structural base case and is
 // classified Unsupported.
-func (b *builder) buildRef(v ir.Ref, path string) plan.CompilationPlan {
+func (b *builder) buildRef(v *ir.Ref, path string) plan.CompilationPlan {
 	capLevel := plan.DirectGoType
 	class := frontend.NotRecursive
 	if b.recur != nil {
@@ -23,12 +23,12 @@ func (b *builder) buildRef(v ir.Ref, path string) plan.CompilationPlan {
 		capLevel = plan.Unsupported
 	}
 	return plan.CompilationPlan{
-		Representation: plan.ReferenceRepresentation{Name: string(v.Target)},
+		Representation: &plan.ReferenceRepresentation{Name: string(v.Target)},
 		Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
-			{Applicability: plan.SetAny, Expression: plan.ReferencePredicate{Name: string(v.Target)}},
+			{Applicability: plan.SetAny, Expression: &plan.ReferencePredicate{Name: string(v.Target)}},
 		}},
-		Dispatch:   plan.NoDispatch{},
-		Resolution: plan.StaticReferenceGraph{},
+		Dispatch:   &plan.NoDispatch{},
+		Resolution: &plan.StaticReferenceGraph{},
 		Capability: capLevel,
 	}
 }
@@ -37,12 +37,12 @@ func (b *builder) buildRef(v ir.Ref, path string) plan.CompilationPlan {
 // depend on runtime dynamic scope and are not resolved in v1, so the plan widens to
 // AnyRepresentation (design §24 invariant 4: never guess a narrow representation) and
 // is classified Unsupported-adjacent DynamicSchemaResolution.
-func (b *builder) buildDynamicRef(_ ir.DynamicRef, path string) plan.CompilationPlan {
+func (b *builder) buildDynamicRef(_ *ir.DynamicRef, path string) plan.CompilationPlan {
 	b.diag(path, plan.DiagnosticUnsupported, plan.SeverityError, "$dynamicRef target depends on dynamic scope")
 	return plan.CompilationPlan{
-		Representation: plan.AnyRepresentation{},
-		Dispatch:       plan.NoDispatch{},
-		Resolution:     plan.DynamicReferenceGraph{},
+		Representation: &plan.AnyRepresentation{},
+		Dispatch:       &plan.NoDispatch{},
+		Resolution:     &plan.DynamicReferenceGraph{},
 		Capability:     plan.DynamicSchemaResolution,
 	}
 }

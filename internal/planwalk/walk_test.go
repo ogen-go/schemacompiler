@@ -73,13 +73,13 @@ func TestNilVisitsNothing(t *testing.T) {
 // TestPlanReachesEveryNestingSite pins that a reference is found in every position the
 // plan structure can hide one, which is what the capability roll-up depends on.
 func TestPlanReachesEveryNestingSite(t *testing.T) {
-	ref := func(name string) plan.Representation { return plan.ReferenceRepresentation{Name: name} }
+	ref := func(name string) plan.Representation { return &plan.ReferenceRepresentation{Name: name} }
 	leaf := func(name string) plan.CompilationPlan {
 		return plan.CompilationPlan{Representation: ref(name)}
 	}
 
 	p := plan.CompilationPlan{
-		Representation: plan.ObjectRepresentation{
+		Representation: &plan.ObjectRepresentation{
 			Fields: []plan.FieldRepresentation{
 				{Name: "f", Plan: plan.CompilationPlan{Representation: ref("field")}},
 			},
@@ -88,31 +88,31 @@ func TestPlanReachesEveryNestingSite(t *testing.T) {
 				{Pattern: "^x", Plan: plan.CompilationPlan{Representation: ref("pattern")}},
 			},
 		},
-		Dispatch: plan.KindDispatch{Cases: map[plan.JSONKind]plan.CompilationPlan{
+		Dispatch: &plan.KindDispatch{Cases: map[plan.JSONKind]plan.CompilationPlan{
 			plan.KindObject: {
-				Representation: plan.ArrayRepresentation{
+				Representation: &plan.ArrayRepresentation{
 					Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: ref("prefix")}}},
 					Rest:   plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: ref("rest")}},
 				},
-				Dispatch: plan.PresenceDispatch{
+				Dispatch: &plan.PresenceDispatch{
 					Present: leaf("present"),
 					Absent:  leaf("absent"),
 				},
 			},
 		}},
 		Validation: plan.ValidationPlan{Predicates: []plan.GuardedPredicate{
-			{Expression: plan.ContainsCountPredicate{Schema: plan.CompilationPlan{
-				Representation: plan.UnionRepresentation{Alternatives: []plan.Representation{ref("alternative")}},
+			{Expression: &plan.ContainsCountPredicate{Schema: plan.CompilationPlan{
+				Representation: &plan.UnionRepresentation{Alternatives: []plan.Representation{ref("alternative")}},
 			}}},
-			{Expression: plan.PropertyNamesPredicate{Schema: plan.CompilationPlan{
-				Representation: plan.RecursiveRepresentation{Name: "r", Body: ref("body")},
+			{Expression: &plan.PropertyNamesPredicate{Schema: plan.CompilationPlan{
+				Representation: &plan.RecursiveRepresentation{Name: "r", Body: ref("body")},
 			}}},
 		}},
 	}
 
 	var names []string
 	planwalk.Plan(p, func(r plan.Representation) {
-		if v, ok := r.(plan.ReferenceRepresentation); ok {
+		if v, ok := r.(*plan.ReferenceRepresentation); ok {
 			names = append(names, v.Name)
 		}
 	})

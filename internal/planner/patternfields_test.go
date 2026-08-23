@@ -13,10 +13,10 @@ import (
 // patternedObject is {"type":"object","properties":{name:{"type":"string"}},
 // "patternProperties":{pattern:{"type":"string","minLength":1}}}.
 func patternedObject(name, pattern string) ir.Expr {
-	return ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Shape{Detail: ir.ObjectShape{
-			Properties:        []ir.PropertyExpr{{Name: name, Schema: ir.Kinds{Set: plan.SetString}}},
+	return &ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Shape{Detail: &ir.ObjectShape{
+			Properties:        []ir.PropertyExpr{{Name: name, Schema: &ir.Kinds{Set: plan.SetString}}},
 			PatternProperties: []ir.PatternPropertyExpr{{Pattern: pattern, Schema: constrainedString()}},
 		}},
 	}}
@@ -54,14 +54,14 @@ func TestConstraintsFor_ECMASemantics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := planner.Build(patternedObject(tt.property, tt.pattern), nil)
 
-			obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
+			obj, ok := got.Plan.Representation.(*plan.ObjectRepresentation)
 			require.True(t, ok, "got %T", got.Plan.Representation)
 
 			field := plannerField(t, obj, tt.property).Plan
-			require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Representation)
+			require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindString}, field.Representation)
 			require.Len(t, field.ResidualChecks(), 1,
 				"the pattern schema must be intersected into the field it covers")
-			require.Equal(t, plan.MinLengthPredicate{Value: 1}, field.ResidualChecks()[0].Expression)
+			require.Equal(t, &plan.MinLengthPredicate{Value: 1}, field.ResidualChecks()[0].Expression)
 
 			require.Empty(t, got.Diagnostics)
 		})
@@ -77,7 +77,7 @@ func TestConstraintsFor_ECMASemantics(t *testing.T) {
 func TestConstraintsFor_UndecidablePatternDrops(t *testing.T) {
 	got := planner.Build(patternedObject("a", `\p{Letter}`), nil)
 
-	obj, ok := got.Plan.Representation.(plan.ObjectRepresentation)
+	obj, ok := got.Plan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", got.Plan.Representation)
 
 	field := plannerField(t, obj, "a").Plan

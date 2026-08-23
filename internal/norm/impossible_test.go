@@ -21,30 +21,30 @@ func TestNormalizeAll_EmptyKindIntersection(t *testing.T) {
 		expr  ir.Expr
 		never bool
 	}{
-		{name: "declared kinds disjoint", expr: ir.All{Operands: []ir.Expr{str, num}}, never: true},
-		{name: "literal excluded by kinds", expr: ir.All{Operands: []ir.Expr{str, ir.Literal{Value: 1.0}}}, never: true},
-		{name: "literal admitted by kinds", expr: ir.All{Operands: []ir.Expr{str, ir.Literal{Value: "a"}}}},
+		{name: "declared kinds disjoint", expr: &ir.All{Operands: []ir.Expr{&str, &num}}, never: true},
+		{name: "literal excluded by kinds", expr: &ir.All{Operands: []ir.Expr{&str, &ir.Literal{Value: 1.0}}}, never: true},
+		{name: "literal admitted by kinds", expr: &ir.All{Operands: []ir.Expr{&str, &ir.Literal{Value: "a"}}}},
 		{
 			name:  "literals of different kinds",
-			expr:  ir.All{Operands: []ir.Expr{ir.Literal{Value: "a"}, ir.Literal{Value: 1.0}}},
+			expr:  &ir.All{Operands: []ir.Expr{&ir.Literal{Value: "a"}, &ir.Literal{Value: 1.0}}},
 			never: true,
 		},
 		{
 			name: "shape restricts no kind",
-			expr: ir.All{Operands: []ir.Expr{str, ir.Shape{Detail: ir.ObjectShape{}}}},
+			expr: &ir.All{Operands: []ir.Expr{&str, &ir.Shape{Detail: &ir.ObjectShape{}}}},
 		},
 		{
 			name: "one dead branch drops out of the union",
-			expr: ir.All{Operands: []ir.Expr{str, ir.AnyOf{Operands: []ir.Expr{
-				ir.Literal{Value: "a"},
-				ir.Literal{Value: 1.0},
+			expr: &ir.All{Operands: []ir.Expr{&str, &ir.AnyOf{Operands: []ir.Expr{
+				&ir.Literal{Value: "a"},
+				&ir.Literal{Value: 1.0},
 			}}}},
 		},
 		{
 			name: "every branch dead makes the whole expression never",
-			expr: ir.All{Operands: []ir.Expr{str, ir.AnyOf{Operands: []ir.Expr{
-				ir.Literal{Value: 1.0},
-				ir.Literal{Value: 2.0},
+			expr: &ir.All{Operands: []ir.Expr{&str, &ir.AnyOf{Operands: []ir.Expr{
+				&ir.Literal{Value: 1.0},
+				&ir.Literal{Value: 2.0},
 			}}}},
 			never: true,
 		},
@@ -53,10 +53,10 @@ func TestNormalizeAll_EmptyKindIntersection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := Normalize(tt.expr, 100)
 			if tt.never {
-				require.IsType(t, ir.Never{}, got)
+				require.IsType(t, &ir.Never{}, got)
 				return
 			}
-			require.NotEqual(t, ir.Expr(ir.Never{}), got)
+			require.NotEqual(t, ir.Expr(&ir.Never{}), got)
 		})
 	}
 }
@@ -65,13 +65,13 @@ func TestNormalizeAll_EmptyKindIntersection(t *testing.T) {
 // outer kind restriction into each branch removes the branch it excludes, leaving the
 // single survivor rather than a Never alongside it.
 func TestNormalizeAll_DeadBranchDropped(t *testing.T) {
-	got := Normalize(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetString},
-		ir.AnyOf{Operands: []ir.Expr{ir.Literal{Value: "a"}, ir.Literal{Value: 1.0}}},
+	got := Normalize(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetString},
+		&ir.AnyOf{Operands: []ir.Expr{&ir.Literal{Value: "a"}, &ir.Literal{Value: 1.0}}},
 	}}, 100)
-	want := ir.Expr(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetString},
-		ir.Literal{Value: "a"},
+	want := ir.Expr(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetString},
+		&ir.Literal{Value: "a"},
 	}})
 	require.Truef(t, exprEqual(want, got), "got %#v", got)
 }

@@ -26,7 +26,7 @@ func objectStructure(rep plan.ObjectRepresentation) plan.GuardedPredicate {
 	for _, r := range rep.PatternRules {
 		e.Patterns = append(e.Patterns, plan.PatternCheck{Pattern: r.Pattern, Plan: r.Plan})
 	}
-	return plan.GuardedPredicate{Applicability: plan.SetObject, Expression: e}
+	return plan.GuardedPredicate{Applicability: plan.SetObject, Expression: &e}
 }
 
 // arrayStructure is [objectStructure] for an [plan.ArrayRepresentation]. A Rest slot with
@@ -41,5 +41,5 @@ func arrayStructure(rep plan.ArrayRepresentation) plan.GuardedPredicate {
 		rest := rep.Rest.Plan
 		e.Rest = &rest
 	}
-	return plan.GuardedPredicate{Applicability: plan.SetArray, Expression: e}
+	return plan.GuardedPredicate{Applicability: plan.SetArray, Expression: &e}
 }

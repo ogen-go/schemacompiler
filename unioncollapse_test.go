@@ -17,13 +17,13 @@ import (
 func requireNoNever(t *testing.T, p plan.CompilationPlan) {
 	t.Helper()
 	planwalk.Plan(p, func(r plan.Representation) {
-		require.NotEqual(t, plan.Representation(plan.NeverRepresentation{}), r, "hollow Never left in the plan")
+		require.NotEqual(t, plan.Representation(&plan.NeverRepresentation{}), r, "hollow Never left in the plan")
 	})
 }
 
 func fieldOf(t *testing.T, r plan.Representation, name string) plan.FieldRepresentation {
 	t.Helper()
-	obj, ok := r.(plan.ObjectRepresentation)
+	obj, ok := r.(*plan.ObjectRepresentation)
 	require.True(t, ok, "expected an ObjectRepresentation, got %s", repShape(r))
 	return mustField(t, obj, name)
 }
@@ -118,7 +118,7 @@ func TestNullableUnionRootAndItems(t *testing.T) {
 	res, err := schemacompiler.Compile(context.Background(),
 		[]byte(`{"type":"array","items":{"anyOf":[{"type":"string"},{"type":"null"}]}}`), schemacompiler.Options{})
 	require.NoError(t, err)
-	arr, ok := res.Plan.Representation.(plan.ArrayRepresentation)
+	arr, ok := res.Plan.Representation.(*plan.ArrayRepresentation)
 	require.True(t, ok)
 	require.Equal(t, "union(primitive:string,primitive:null)", repShape(arr.Rest.Plan.Representation))
 	requireNoNever(t, res.Plan)

@@ -5,6 +5,10 @@ type SchemaID string
 
 // ResolutionPlan describes how references are resolved (design §10). Static $ref
 // resolution happens at compile time; $dynamicRef may need runtime scope.
+//
+// Variants implement this on a pointer receiver, so only *T satisfies it. A value
+// receiver would put the method in both T's and *T's method set, leaving every type
+// switch to match one spelling and silently miss the other (issue #133).
 type ResolutionPlan interface {
 	isResolutionPlan()
 }
@@ -25,6 +29,6 @@ type DynamicReferenceGraph struct {
 	DynamicAnchors    map[string][]SchemaID
 }
 
-func (FullyResolved) isResolutionPlan()         {}
-func (StaticReferenceGraph) isResolutionPlan()  {}
-func (DynamicReferenceGraph) isResolutionPlan() {}
+func (*FullyResolved) isResolutionPlan()         {}
+func (*StaticReferenceGraph) isResolutionPlan()  {}
+func (*DynamicReferenceGraph) isResolutionPlan() {}

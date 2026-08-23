@@ -55,7 +55,7 @@ func (v *Validator) IsValid(data []byte) bool {
 }
 
 func (v *Validator) collectDefs(p plan.CompilationPlan) error {
-	graph, ok := p.Resolution.(plan.StaticReferenceGraph)
+	graph, ok := p.Resolution.(*plan.StaticReferenceGraph)
 	if !ok {
 		return nil
 	}

@@ -15,24 +15,24 @@ func (in *interp) dispatch(d plan.DispatchPlan, value any, f frame) (Verdict, er
 	}
 
 	switch d := d.(type) {
-	case plan.NoDispatch:
+	case *plan.NoDispatch:
 		return accepted(), nil
-	case plan.KindDispatch:
+	case *plan.KindDispatch:
 		return in.kindDispatch(d, value, f)
-	case plan.LiteralDispatch:
+	case *plan.LiteralDispatch:
 		return in.literalDispatch(planwalk.DispatchNode(d), value, value, "literal dispatch", f)
-	case plan.PropertyDispatch:
+	case *plan.PropertyDispatch:
 		return in.propertyDispatch(d, value, f)
-	case plan.PresenceDispatch:
+	case *plan.PresenceDispatch:
 		return in.presenceDispatch(d, value, f)
-	case plan.PredicateCountDispatch:
+	case *plan.PredicateCountDispatch:
 		return in.predicateCountDispatch(d, value, f)
 	default:
 		return Verdict{}, internalf("unhandled plan.DispatchPlan variant %T", d)
 	}
 }
 
-func (in *interp) kindDispatch(d plan.KindDispatch, value any, f frame) (Verdict, error) {
+func (in *interp) kindDispatch(d *plan.KindDispatch, value any, f frame) (Verdict, error) {
 	k, err := kindOf(value)
 	if err != nil {
 		return Verdict{}, withPath(f.path, err)
@@ -88,7 +88,7 @@ func (in *interp) literalDispatch(n planwalk.Node, selector, value any, what str
 	return rejected(f, what, "no case matches the value"), nil
 }
 
-func (in *interp) propertyDispatch(d plan.PropertyDispatch, value any, f frame) (Verdict, error) {
+func (in *interp) propertyDispatch(d *plan.PropertyDispatch, value any, f frame) (Verdict, error) {
 	switch d.Tag {
 	case plan.TagInferred, plan.TagDeclared, plan.TagAsserted:
 	default:
@@ -111,7 +111,7 @@ func (in *interp) propertyDispatch(d plan.PropertyDispatch, value any, f frame) 
 	return in.literalDispatch(planwalk.DispatchNode(d), sel, value, what, f)
 }
 
-func (in *interp) presenceDispatch(d plan.PresenceDispatch, value any, f frame) (Verdict, error) {
+func (in *interp) presenceDispatch(d *plan.PresenceDispatch, value any, f frame) (Verdict, error) {
 	var present, absent plan.CompilationPlan
 	for c := range planwalk.Children(planwalk.DispatchNode(d)) {
 		switch c.Edge.Kind {
@@ -150,7 +150,7 @@ func (in *interp) presenceDispatch(d plan.PresenceDispatch, value any, f frame) 
 
 // predicateCountDispatch is the runtime match-count of docs/integration.md §3: every
 // branch is trial-validated and the number of accepting branches must fall in range.
-func (in *interp) predicateCountDispatch(d plan.PredicateCountDispatch, value any, f frame) (Verdict, error) {
+func (in *interp) predicateCountDispatch(d *plan.PredicateCountDispatch, value any, f frame) (Verdict, error) {
 	matches := 0
 	var last *ValidateError
 	for c := range planwalk.Children(planwalk.DispatchNode(d)) {

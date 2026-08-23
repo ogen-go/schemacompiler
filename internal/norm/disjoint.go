@@ -13,14 +13,14 @@ func disjoint(a, b ir.Expr) bool {
 	if a.Kinds()&b.Kinds() == 0 {
 		return true
 	}
-	if la, ok := a.(ir.Literal); ok {
-		if lb, ok := b.(ir.Literal); ok {
-			return !la.Equal(lb)
+	if la, ok := a.(*ir.Literal); ok {
+		if lb, ok := b.(*ir.Literal); ok {
+			return !la.Equal(*lb)
 		}
 	}
 	// enum desugars to AnyOf(Literal...); a value satisfies the AnyOf if it
 	// satisfies some operand, so it is disjoint from b if every operand is.
-	if aa, ok := a.(ir.AnyOf); ok {
+	if aa, ok := a.(*ir.AnyOf); ok {
 		for _, o := range aa.Operands {
 			if !disjoint(o, b) {
 				return false
@@ -28,7 +28,7 @@ func disjoint(a, b ir.Expr) bool {
 		}
 		return true
 	}
-	if bb, ok := b.(ir.AnyOf); ok {
+	if bb, ok := b.(*ir.AnyOf); ok {
 		for _, o := range bb.Operands {
 			if !disjoint(a, o) {
 				return false

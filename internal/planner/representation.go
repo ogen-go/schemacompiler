@@ -21,7 +21,7 @@ func unionRepresentation(alts []plan.Representation) plan.Representation {
 	if len(alts) == 1 {
 		return alts[0]
 	}
-	return plan.UnionRepresentation{Alternatives: alts}
+	return &plan.UnionRepresentation{Alternatives: alts}
 }
 
 // buildKindRestricted infers the representation for an expression already narrowed to
@@ -57,7 +57,7 @@ func (b *builder) buildKindRestricted(k plan.KindSet, c components, path string)
 	}
 	return plan.CompilationPlan{
 		Representation: unionRepresentation(alts),
-		Dispatch:       plan.KindDispatch{Cases: cases},
+		Dispatch:       &plan.KindDispatch{Cases: cases},
 		Resolution:     mergeResolution(resParts...),
 		Capability:     capLevel,
 	}
@@ -93,8 +93,8 @@ func (b *builder) buildUnrestricted(c components, path string) plan.CompilationP
 	capLevel = maxCapability(capLevel, shapeCap)
 	resParts = append(resParts, shapeRes...)
 
-	rep := plan.Representation(plan.AnyRepresentation{})
-	var disp plan.DispatchPlan = plan.NoDispatch{}
+	rep := plan.Representation(&plan.AnyRepresentation{})
+	var disp plan.DispatchPlan = &plan.NoDispatch{}
 	res := mergeResolution(resParts...)
 	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))
 	return plan.CompilationPlan{Representation: rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
@@ -139,7 +139,7 @@ func assertKind(p plan.CompilationPlan, kind plan.JSONKind, numeric plan.Numeric
 	if kind == plan.KindNumber && numeric != plan.AnyNumber {
 		head = append(head, plan.GuardedPredicate{
 			Applicability: guard,
-			Expression:    plan.NumericDomainPredicate{Domain: numeric},
+			Expression:    &plan.NumericDomainPredicate{Domain: numeric},
 		})
 	}
 	p.Validation.Predicates = append(head, p.Validation.Predicates...)
@@ -156,16 +156,16 @@ func pinLiteral(p plan.CompilationPlan, kind plan.JSONKind, lit *ir.Literal) pla
 	if lit == nil || literalKind(lit.Value) != kind {
 		return p
 	}
-	if _, plain := p.Dispatch.(plan.NoDispatch); !plain {
+	if _, plain := p.Dispatch.(*plan.NoDispatch); !plain {
 		return p
 	}
-	p.Dispatch = plan.LiteralDispatch{Cases: []plan.LiteralCase{{
+	p.Dispatch = &plan.LiteralDispatch{Cases: []plan.LiteralCase{{
 		Value: lit.Value,
 		Raw:   lit.Raw,
 		Plan: plan.CompilationPlan{
 			Representation: p.Representation,
-			Dispatch:       plan.NoDispatch{},
-			Resolution:     plan.FullyResolved{},
+			Dispatch:       &plan.NoDispatch{},
+			Resolution:     &plan.FullyResolved{},
 			Capability:     plan.DirectGoType,
 		},
 	}}}
@@ -183,7 +183,7 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 		if p.Guard&guard == 0 {
 			continue // vacuous for this kind: the guard never fires, safe to drop.
 		}
-		if fd, ok := p.Detail.(ir.FormatDetail); ok {
+		if fd, ok := p.Detail.(*ir.FormatDetail); ok {
 			formats = append(formats, fd.Format)
 		}
 		m := b.mapPredicate(p, path)
@@ -204,12 +204,12 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 		numeric = c.numeric
 		b.requireNumericBound(val, path)
 	}
-	rep := plan.Representation(plan.PrimitiveRepresentation{
+	rep := plan.Representation(&plan.PrimitiveRepresentation{
 		Kind:    kind,
 		Numeric: numeric,
 		Format:  b.pickFormat(formats, path),
 	})
-	var disp plan.DispatchPlan = plan.NoDispatch{}
+	var disp plan.DispatchPlan = &plan.NoDispatch{}
 	res := mergeResolution(resParts...)
 	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))
 	return plan.CompilationPlan{Representation: rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
@@ -223,8 +223,8 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 // builders a sibling `type` would go through, so an object- or array-valued literal
 // yields an Object/ArrayRepresentation rather than a PrimitiveRepresentation, which
 // docs/integration.md §1 reserves for Go scalars (issue #58).
-func (b *builder) buildLiteral(v ir.Literal, path string) plan.CompilationPlan {
-	return b.buildLeaf(literalKind(v.Value), components{numeric: plan.AnyNumber, literal: &v}, path)
+func (b *builder) buildLiteral(v *ir.Literal, path string) plan.CompilationPlan {
+	return b.buildLeaf(literalKind(v.Value), components{numeric: plan.AnyNumber, literal: v}, path)
 }
 
 // buildObject infers an ObjectRepresentation (design §7, §12): fields carry the
@@ -240,7 +240,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 		if p.Guard&plan.SetObject == 0 {
 			continue
 		}
-		if rd, ok := p.Detail.(ir.RequiredDetail); ok {
+		if rd, ok := p.Detail.(*ir.RequiredDetail); ok {
 			for _, name := range rd.Properties {
 				required[name] = true
 			}
@@ -272,7 +272,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 				// re-normalized: otherwise the null branch of a union survives as a
 				// hollow Never alternative instead of being dropped (design §15.4-15.5,
 				// issue #50).
-				buildExpr = norm.Normalize(ir.All{Operands: []ir.Expr{subExpr, ir.Kinds{Set: nonNull}}}, renormalizeBudget)
+				buildExpr = norm.Normalize(&ir.All{Operands: []ir.Expr{subExpr, &ir.Kinds{Set: nonNull}}}, renormalizeBudget)
 			}
 		}
 		sub := b.build(buildExpr, pointerAppend(path+"/properties", name))
@@ -293,9 +293,9 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 		// additionalProperties absent defaults to true (arbitrary extra values allowed);
 		// keep the representation sound by admitting any value there (design §24).
 		additional = &plan.CompilationPlan{
-			Representation: plan.AnyRepresentation{},
-			Dispatch:       plan.NoDispatch{},
-			Resolution:     plan.FullyResolved{},
+			Representation: &plan.AnyRepresentation{},
+			Dispatch:       &plan.NoDispatch{},
+			Resolution:     &plan.FullyResolved{},
 			Capability:     plan.DirectGoType,
 		}
 	case isNever(merged.additional):
@@ -333,10 +333,10 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 
 	rep := plan.ObjectRepresentation{Fields: fields, Additional: additional, PatternRules: patternRules}
 	val.Predicates = append([]plan.GuardedPredicate{objectStructure(rep)}, val.Predicates...)
-	var disp plan.DispatchPlan = plan.NoDispatch{}
+	var disp plan.DispatchPlan = &plan.NoDispatch{}
 	res := mergeResolution(resParts...)
-	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))
-	return plan.CompilationPlan{Representation: rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
+	capLevel = maxCapability(capLevel, classify(&rep, val, disp, res))
+	return plan.CompilationPlan{Representation: &rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
 }
 
 // buildArray infers an ArrayRepresentation (design §7, §13): a tuple prefix plus a
@@ -379,9 +379,9 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 		resParts = append(resParts, sub.Resolution)
 	default:
 		rest = plan.ItemRepresentation{Plan: plan.CompilationPlan{
-			Representation: plan.AnyRepresentation{},
-			Dispatch:       plan.NoDispatch{},
-			Resolution:     plan.FullyResolved{},
+			Representation: &plan.AnyRepresentation{},
+			Dispatch:       &plan.NoDispatch{},
+			Resolution:     &plan.FullyResolved{},
 			Capability:     plan.DirectGoType,
 		}}
 	}
@@ -394,15 +394,15 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 
 	rep := plan.ArrayRepresentation{Prefix: prefix, Rest: rest}
 	val.Predicates = append([]plan.GuardedPredicate{arrayStructure(rep)}, val.Predicates...)
-	var disp plan.DispatchPlan = plan.NoDispatch{}
+	var disp plan.DispatchPlan = &plan.NoDispatch{}
 	res := mergeResolution(resParts...)
-	capLevel = maxCapability(capLevel, classify(rep, val, disp, res))
-	return plan.CompilationPlan{Representation: rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
+	capLevel = maxCapability(capLevel, classify(&rep, val, disp, res))
+	return plan.CompilationPlan{Representation: &rep, Validation: val, Dispatch: disp, Resolution: res, Capability: capLevel}
 }
 
 // isNever reports whether e is the unsatisfiable expression, which `additionalProperties:
 // false` normalizes to.
 func isNever(e ir.Expr) bool {
-	_, never := e.(ir.Never)
+	_, never := e.(*ir.Never)
 	return never
 }

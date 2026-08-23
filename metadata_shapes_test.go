@@ -16,7 +16,7 @@ import (
 // planner picked.
 func collectMetadata(r plan.Representation, prefix string, out map[string]plan.Metadata) {
 	switch r := r.(type) {
-	case plan.ObjectRepresentation:
+	case *plan.ObjectRepresentation:
 		for _, f := range r.Fields {
 			key := prefix + "field:" + f.Name
 			out[key] = f.Metadata
@@ -30,7 +30,7 @@ func collectMetadata(r plan.Representation, prefix string, out map[string]plan.M
 		if r.Additional != nil {
 			collectMetadata(r.Additional.Representation, prefix+"additional/", out)
 		}
-	case plan.ArrayRepresentation:
+	case *plan.ArrayRepresentation:
 		for i, p := range r.Prefix {
 			key := fmt.Sprintf("%sprefix:%d", prefix, i)
 			out[key] = p.Metadata
@@ -41,11 +41,11 @@ func collectMetadata(r plan.Representation, prefix string, out map[string]plan.M
 			out[key] = r.Rest.Metadata
 			collectMetadata(r.Rest.Plan.Representation, key+"/", out)
 		}
-	case plan.UnionRepresentation:
+	case *plan.UnionRepresentation:
 		for _, alt := range r.Alternatives {
 			collectMetadata(alt, prefix, out)
 		}
-	case plan.RecursiveRepresentation:
+	case *plan.RecursiveRepresentation:
 		collectMetadata(r.Body, prefix, out)
 	}
 }
@@ -185,7 +185,7 @@ func TestCompile_PatternRuleMetadataIsPositional(t *testing.T) {
 		{"type":"object","patternProperties":{"^a":{"type":"string","title":"PatA"}}},
 		{"type":"object","patternProperties":{"^b":{"type":"number","title":"PatB"}}}
 	]}`)
-	obj, ok := p.Representation.(plan.ObjectRepresentation)
+	obj, ok := p.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", p.Representation)
 	require.Len(t, obj.PatternRules, 2)
 	for _, pr := range obj.PatternRules {
@@ -225,7 +225,7 @@ func TestCompile_MetadataIsNotSharedBetweenPlans(t *testing.T) {
 			"b":{"$ref":"#/$defs/A/properties/x"}
 		}
 	}`)
-	graph, ok := res.Plan.Resolution.(plan.StaticReferenceGraph)
+	graph, ok := res.Plan.Resolution.(*plan.StaticReferenceGraph)
 	require.True(t, ok, "got %T", res.Plan.Resolution)
 
 	own, ok := graph.Definitions["/$defs/A/properties/x"]
@@ -234,7 +234,7 @@ func TestCompile_MetadataIsNotSharedBetweenPlans(t *testing.T) {
 
 	aPlan, ok := graph.Definitions["/$defs/A"]
 	require.True(t, ok)
-	aObj, ok := aPlan.Representation.(plan.ObjectRepresentation)
+	aObj, ok := aPlan.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok, "got %T", aPlan.Representation)
 	field := mustField(t, aObj, "x")
 	require.Equal(t, "X", field.Metadata.Title)
@@ -250,7 +250,7 @@ func TestCompile_MetadataIsNotSharedBetweenPlans(t *testing.T) {
 
 func TestCompile_MetadataKeysAreDeterministic(t *testing.T) {
 	p := compile(t, `{"type":"object","properties":{"a":{"type":"string","x-b":1,"x-a":2,"x-c":3}}}`)
-	obj, ok := p.Representation.(plan.ObjectRepresentation)
+	obj, ok := p.Representation.(*plan.ObjectRepresentation)
 	require.True(t, ok)
 	ext := mustField(t, obj, "a").Metadata.Extensions
 	keys := make([]string, 0, len(ext))

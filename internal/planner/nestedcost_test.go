@@ -26,21 +26,21 @@ func TestBuild_NestedPlanPredicatesCostTheSame(t *testing.T) {
 	}{
 		{
 			name: "contains",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetArray},
-				ir.Predicate{Guard: plan.SetArray, Detail: ir.ContainsDetail{Schema: constrainedString()}},
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetArray},
+				&ir.Predicate{Guard: plan.SetArray, Detail: &ir.ContainsDetail{Schema: constrainedString()}},
 			}},
 		},
 		{
 			name: "propertyNames",
-			expr: ir.All{Operands: []ir.Expr{
-				ir.Kinds{Set: plan.SetObject},
-				ir.Predicate{Guard: plan.SetObject, Detail: ir.PropertyNamesDetail{Schema: constrainedString()}},
+			expr: &ir.All{Operands: []ir.Expr{
+				&ir.Kinds{Set: plan.SetObject},
+				&ir.Predicate{Guard: plan.SetObject, Detail: &ir.PropertyNamesDetail{Schema: constrainedString()}},
 			}},
 		},
 		{
 			name: "not",
-			expr: ir.All{Operands: []ir.Expr{ir.Not{Operand: constrainedString()}}},
+			expr: &ir.All{Operands: []ir.Expr{&ir.Not{Operand: constrainedString()}}},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,20 +59,20 @@ func TestBuild_NestedPlanPredicatesCostTheSame(t *testing.T) {
 // TestBuild_PropertyNamesKeepsItsSubPlan keeps the floor from being satisfied by dropping
 // the check: the nested plan must still reach the predicate, constraints and all.
 func TestBuild_PropertyNamesKeepsItsSubPlan(t *testing.T) {
-	got := planner.Build(ir.All{Operands: []ir.Expr{
-		ir.Kinds{Set: plan.SetObject},
-		ir.Predicate{Guard: plan.SetObject, Detail: ir.PropertyNamesDetail{Schema: constrainedString()}},
+	got := planner.Build(&ir.All{Operands: []ir.Expr{
+		&ir.Kinds{Set: plan.SetObject},
+		&ir.Predicate{Guard: plan.SetObject, Detail: &ir.PropertyNamesDetail{Schema: constrainedString()}},
 	}}, nil)
 
 	var found *plan.PropertyNamesPredicate
 	for _, gp := range got.Plan.Validation.Predicates {
-		if p, ok := gp.Expression.(plan.PropertyNamesPredicate); ok {
-			found = &p
+		if p, ok := gp.Expression.(*plan.PropertyNamesPredicate); ok {
+			found = p
 		}
 	}
 	require.NotNil(t, found, "predicates: %+v", got.Plan.Validation.Predicates)
 	require.Len(t, found.Schema.ResidualChecks(), 1)
-	require.Equal(t, plan.MinLengthPredicate{Value: 1}, found.Schema.ResidualChecks()[0].Expression)
+	require.Equal(t, &plan.MinLengthPredicate{Value: 1}, found.Schema.ResidualChecks()[0].Expression)
 
 	require.NotEmpty(t, got.Requirements.RawEvaluation,
 		"the keys it sees include names the representation has no field for")

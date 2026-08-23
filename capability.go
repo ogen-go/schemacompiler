@@ -75,7 +75,7 @@ func hasPlan(plans map[plan.SchemaID]plan.CompilationPlan, id plan.SchemaID) boo
 // predicate carries.
 func planReferences(p plan.CompilationPlan, visit func(plan.SchemaID)) {
 	planwalk.Plan(p, func(r plan.Representation) {
-		if ref, ok := r.(plan.ReferenceRepresentation); ok {
+		if ref, ok := r.(*plan.ReferenceRepresentation); ok {
 			visit(plan.SchemaID(ref.Name))
 		}
 	})

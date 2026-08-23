@@ -70,16 +70,16 @@ func (e Not) Kinds() plan.KindSet {
 // further constraint.
 func pureKindRestriction(e Expr) (plan.KindSet, bool) {
 	switch e := e.(type) {
-	case Any:
+	case *Any:
 		return plan.SetAny, true
-	case Never:
+	case *Never:
 		return 0, true
-	case Kinds:
+	case *Kinds:
 		if e.Numeric == plan.AnyNumber {
 			return e.Set, true
 		}
 		return 0, false
-	case All:
+	case *All:
 		if len(e.Operands) == 1 {
 			return pureKindRestriction(e.Operands[0])
 		}

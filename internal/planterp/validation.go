@@ -44,13 +44,13 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 	}
 
 	switch e := e.(type) {
-	case plan.MinLengthPredicate:
+	case *plan.MinLengthPredicate:
 		return lengthBound(f, value, e.Value, true)
 
-	case plan.MaxLengthPredicate:
+	case *plan.MaxLengthPredicate:
 		return lengthBound(f, value, e.Value, false)
 
-	case plan.PatternPredicate:
+	case *plan.PatternPredicate:
 		s, ok := value.(string)
 		if !ok {
 			return accepted(), nil
@@ -60,29 +60,29 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 		}
 		return accepted(), nil
 
-	case plan.FormatPredicate:
+	case *plan.FormatPredicate:
 		// `format` is an annotation in the 2020-12 standard dialect: assertion requires
 		// opting into format-assertion (docs/integration.md §1.1), and the plan carries
 		// no such opt-in, so there is nothing here to enforce.
 		in.approximate("format " + strconv.Quote(e.Format) + " is not asserted")
 		return accepted(), nil
 
-	case plan.MinimumPredicate:
+	case *plan.MinimumPredicate:
 		return numericBound(f, value, e.Value, e.Exclusive, true)
 
-	case plan.MaximumPredicate:
+	case *plan.MaximumPredicate:
 		return numericBound(f, value, e.Value, e.Exclusive, false)
 
-	case plan.ReferencePredicate:
+	case *plan.ReferencePredicate:
 		return in.referencePlan(e.Name, value, f)
 
-	case plan.ObjectStructurePredicate:
+	case *plan.ObjectStructurePredicate:
 		return in.objectStructure(e, value, f)
 
-	case plan.ArrayStructurePredicate:
+	case *plan.ArrayStructurePredicate:
 		return in.arrayStructure(e, value, f)
 
-	case plan.NumericDomainPredicate:
+	case *plan.NumericDomainPredicate:
 		integral, err := isInteger(value)
 		if err != nil {
 			return Verdict{}, withPath(f.path, err)
@@ -104,22 +104,22 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 			return Verdict{}, internalf("unhandled plan.NumericDomain %d", e.Domain)
 		}
 
-	case plan.MultipleOfPredicate:
+	case *plan.MultipleOfPredicate:
 		return multipleOf(f, value, e.Value)
 
-	case plan.MinItemsPredicate:
+	case *plan.MinItemsPredicate:
 		return itemsBound(f, value, e.Value, true)
 
-	case plan.MaxItemsPredicate:
+	case *plan.MaxItemsPredicate:
 		return itemsBound(f, value, e.Value, false)
 
-	case plan.UniqueItemsPredicate:
+	case *plan.UniqueItemsPredicate:
 		return uniqueItems(f, value)
 
-	case plan.ContainsCountPredicate:
+	case *plan.ContainsCountPredicate:
 		return in.containsCount(e.Schema, e.Min, e.Max, value, f)
 
-	case plan.RequiredPredicate:
+	case *plan.RequiredPredicate:
 		obj, ok := value.(map[string]any)
 		if !ok {
 			return accepted(), nil
@@ -131,22 +131,22 @@ func (in *interp) predicate(e plan.PredicateExpr, value any, f frame) (Verdict, 
 		}
 		return accepted(), nil
 
-	case plan.MinPropertiesPredicate:
+	case *plan.MinPropertiesPredicate:
 		return propertiesBound(f, value, e.Value, true)
 
-	case plan.MaxPropertiesPredicate:
+	case *plan.MaxPropertiesPredicate:
 		return propertiesBound(f, value, e.Value, false)
 
-	case plan.DependentRequiredPredicate:
+	case *plan.DependentRequiredPredicate:
 		return dependentRequired(f, e.Entries, value)
 
-	case plan.NegationPredicate:
+	case *plan.NegationPredicate:
 		return in.negation(e.Schema, value, f)
 
-	case plan.PropertyNamesPredicate:
+	case *plan.PropertyNamesPredicate:
 		return in.propertyNames(e.Schema, value, f)
 
-	case plan.ShapePredicate:
+	case *plan.ShapePredicate:
 		return in.shape(e.Schema, value, f)
 
 	default:

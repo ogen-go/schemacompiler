@@ -149,29 +149,11 @@ func leaf(n node, raw []byte, at *loc, keyword, message string, yield func(Error
 // no error. Use IsValid when only the answer matters.
 func (v *Validator) IterErrors(data []byte) iter.Seq[Error] {
 	return func(yield func(Error) bool) {
-		// One constraint can reach two nodes: design §4.1 has the object structure
-		// predicate restate what the representation stores, so a `required` property is
-		// checked both by [requiredNode] and by [objectStructure]'s presence mask. The
-		// fast path short-circuits and never notices; a reporting walk would say it
-		// twice. Distinct reasons, reported once each.
-		var seen []Error
-		report(v.root, data, nil, func(e Error) bool {
-			// A slice rather than a set: a rejected instance has a handful of reasons,
-			// and a linear scan over those beats hashing every one of them.
-			for _, s := range seen {
-				if s == e {
-					return true
-				}
-			}
-			seen = append(seen, e)
-			return yield(e)
-		})
+		report(v.root, data, nil, yield)
 	}
 }
 
-// Validate returns the first reason data fails, or nil. It does not go through
-// [Validator.IterErrors]: stopping at the first error makes deduplication pointless, and
-// paying for it would be the common case paying for the rare one.
+// Validate returns the first reason data fails, or nil.
 func (v *Validator) Validate(data []byte) error {
 	var first Error
 	found := false

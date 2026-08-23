@@ -198,11 +198,13 @@ func (o objectStructure) errs(raw []byte, at *loc, yield func(Error) bool) bool 
 	defer jx.PutDecoder(d)
 
 	seen := o.set.newPresence()
+	count := uint64(0)
 	stopped := false
 	if err := d.ObjBytes(func(d *jx.Decoder, key []byte) error {
 		if stopped {
 			return d.Skip()
 		}
+		count++
 		field, declared := o.set.lookup(key)
 		name := string(key)
 		value, err := d.Raw()
@@ -263,7 +265,7 @@ func (o objectStructure) errs(raw []byte, at *loc, yield func(Error) bool) bool 
 			return false
 		}
 	}
-	return true
+	return countErrs(o.counts, count, at, "minProperties", "maxProperties", yield)
 }
 
 func (a arrayStructure) errs(raw []byte, at *loc, yield func(Error) bool) bool {
@@ -305,7 +307,21 @@ func (a arrayStructure) errs(raw []byte, at *loc, yield func(Error) bool) bool {
 	}); err != nil {
 		return true
 	}
-	return !stopped
+	if stopped {
+		return false
+	}
+	return countErrs(a.counts, uint64(i), at, "minItems", "maxItems", yield)
+}
+
+// countErrs reports a folded bound the structure's own walk sized (see [newPlanFusion]).
+func countErrs(c countBounds, n uint64, at *loc, minKeyword, maxKeyword string, yield func(Error) bool) bool {
+	if c.hasMin && n < c.min {
+		return yield(Error{Location: at.String(), Keyword: minKeyword, Message: strconv.FormatUint(c.min, 10)})
+	}
+	if c.hasMax && n > c.max {
+		return yield(Error{Location: at.String(), Keyword: maxKeyword, Message: strconv.FormatUint(c.max, 10)})
+	}
+	return true
 }
 
 func (k kindDispatch) errs(raw []byte, at *loc, yield func(Error) bool) bool {

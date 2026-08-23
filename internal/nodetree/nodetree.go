@@ -78,9 +78,15 @@ func (v *Validator) collectDefs(p plan.CompilationPlan) error {
 // compilePlan lowers one plan node: its validation, then its dispatch. Representation is
 // not read (design §4.1).
 func (v *Validator) compilePlan(p plan.CompilationPlan) (node, error) {
+	preds := p.Validation.Predicates
+	fusion := newPlanFusion(preds)
+
 	var out all
-	for _, gp := range p.Validation.Predicates {
-		n, err := v.compileGuarded(gp)
+	for i, gp := range preds {
+		if fusion.skip[i] {
+			continue
+		}
+		n, err := v.compileGuarded(gp, fusion)
 		if err != nil {
 			return nil, err
 		}
@@ -105,8 +111,8 @@ func (v *Validator) compilePlan(p plan.CompilationPlan) (node, error) {
 	}
 }
 
-func (v *Validator) compileGuarded(gp plan.GuardedPredicate) (node, error) {
-	inner, err := v.compileExpr(gp.Expression)
+func (v *Validator) compileGuarded(gp plan.GuardedPredicate, fusion planFusion) (node, error) {
+	inner, err := v.compileExpr(gp.Expression, fusion)
 	if err != nil {
 		return nil, err
 	}

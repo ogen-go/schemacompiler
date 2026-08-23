@@ -44,6 +44,7 @@ func buildHighSchema(ctx context.Context, data []byte) (hs *base.Schema, refs ma
 		return nil, nil, root, &b, nil
 	}
 
+	expandBooleanSchemas(root)
 	refs = make(map[*yaml.Node]string)
 	stripRefs(root, refs)
 

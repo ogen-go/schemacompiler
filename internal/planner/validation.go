@@ -88,9 +88,14 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 	case ir.PropertyNamesDetail:
 		b.require(&b.reqs.RawEvaluation, path, "propertyNames sees undeclared property names")
 		sub := b.build(d.Schema, path+"/propertyNames")
+		// A whole sub-plan run once per property key, exactly as ContainsCountPredicate is
+		// run once per element (issue #80): the cost is the same shape, so the floor and
+		// the diagnostic are too.
+		b.diag(path, plan.DiagnosticCost, plan.SeverityWarning,
+			"propertyNames requires runtime validation of every property key")
 		return mappedPredicate{
 			Expr:       plan.PropertyNamesPredicate{Schema: sub},
-			Capability: sub.Capability,
+			Capability: maxCapability(plan.PredicateDispatch, sub.Capability),
 			Resolution: sub.Resolution,
 		}
 	default:

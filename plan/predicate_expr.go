@@ -190,6 +190,13 @@ type DependentRequiredPredicate struct{ Entries []DependentRequiredEntry }
 
 // PropertyNamesPredicate is `propertyNames`: Schema is evaluated against every own
 // property name, interpreted as a JSON string.
+//
+// Lowering contract. Schema is a full [CompilationPlan] run once per key, so like
+// [ContainsCountPredicate] — its element-wise counterpart — this forces CapabilityLevel
+// PredicateDispatch: a backend either emits the per-key check or MUST refuse and surface
+// the diagnostic (docs/integration.md §4). The keys it sees include every name the
+// representation has no field for, which is why the plan also reports
+// [Requirements.RawEvaluation] here.
 type PropertyNamesPredicate struct{ Schema CompilationPlan }
 
 func (MinLengthPredicate) isPredicateExpr()         {}

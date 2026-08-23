@@ -48,23 +48,6 @@ func capabilityName(c plan.CapabilityLevel) string {
 	}
 }
 
-func exactnessName(e plan.Exactness) string {
-	switch e {
-	case plan.ExactPureRepresentation:
-		return "ExactPureRepresentation"
-	case plan.ExactWithValidation:
-		return "ExactWithValidation"
-	case plan.SoundOverApproximation:
-		return "SoundOverApproximation"
-	case plan.DeclaredIncomplete:
-		return "DeclaredIncomplete"
-	case plan.UnsupportedConversion:
-		return "UnsupportedConversion"
-	default:
-		return fmt.Sprintf("Exactness(%d)", e)
-	}
-}
-
 func severityName(s plan.Severity) string {
 	switch s {
 	case plan.SeverityInfo:
@@ -78,10 +61,32 @@ func severityName(s plan.Severity) string {
 	}
 }
 
-// distKey buckets one (capability, exactness) pair for the corpus distribution table.
+// distKey buckets one (capability, fidelity) pair for the corpus distribution table.
 type distKey struct {
 	capability plan.CapabilityLevel
-	exactness  plan.Exactness
+	fidelity   string
+}
+
+// fidelityName names the strongest claim a result makes about its own accepted set, from
+// the diagnostics it carries (design §24.1). It is what the retired Exactness field used
+// to report, derived instead of asserted — and, unlike the old ladder, it never confuses a
+// wider representation or a costlier check with a lost constraint.
+func fidelityName(res *schemacompiler.Result) string {
+	for _, want := range []struct {
+		kind plan.DiagnosticKind
+		name string
+	}{
+		{plan.DiagnosticUnsupported, "unsupported"},
+		{plan.DiagnosticUnenforced, "unenforced"},
+		{plan.DiagnosticAssumed, "assumed"},
+	} {
+		for _, d := range res.Diagnostics {
+			if d.Kind == want.kind {
+				return want.name
+			}
+		}
+	}
+	return "exact"
 }
 
 // compileSafely runs Compile with a panic guard, so one malformed corpus schema
@@ -98,8 +103,8 @@ func compileSafely(t *testing.T, data []byte) (res *schemacompiler.Result, err e
 }
 
 // TestCorpus walks every schema in testdata/corpus, asserts Compile succeeds without
-// error or panic and always returns a plan, and checks capability/exactness against
-// the manifest where recorded. It also aggregates a capability/exactness distribution
+// error or panic and always returns a plan, and checks capability and fidelity against
+// the manifest where recorded. It also aggregates a capability/fidelity distribution
 // and logs every diagnostic at SeverityWarning or above, so unsupported constructs are
 // reported explicitly rather than silently capped (design §25, "no silent caps").
 func TestCorpus(t *testing.T) {
@@ -131,15 +136,14 @@ func TestCorpus(t *testing.T) {
 			require.NotNil(t, res, "Compile must return a non-nil result")
 			require.NotNil(t, res.Plan.Representation, "plan must carry a representation")
 
-			dist[distKey{res.Capability, res.Exactness}]++
+			dist[distKey{res.Capability, fidelityName(res)}]++
 
-			// A capability past PredicateDispatch cannot convert at all, so the result
-			// must not also advertise an exact or merely-validated Go type (design §24,
-			// §25; issue #48).
+			// A capability past PredicateDispatch cannot convert at all, so the plan must
+			// say which construct put it there (design §24.1, §25; issue #48).
 			if res.Capability >= plan.EvaluationStateValidation {
-				require.Equal(t, plan.UnsupportedConversion, res.Exactness,
-					"capability %s must not report exactness %s",
-					capabilityName(res.Capability), exactnessName(res.Exactness))
+				require.Equal(t, "unsupported", fidelityName(res),
+					"capability %s converts to nothing, so a diagnostic must name why",
+					capabilityName(res.Capability))
 			}
 
 			for _, diag := range res.Diagnostics {
@@ -151,16 +155,14 @@ func TestCorpus(t *testing.T) {
 
 			want, ok := manifest[rel]
 			if !ok {
-				t.Logf("no manifest expectation recorded for %s (capability=%s, exactness=%s)",
-					rel, capabilityName(res.Capability), exactnessName(res.Exactness))
+				t.Logf("no manifest expectation recorded for %s (capability=%s, fidelity=%s)",
+					rel, capabilityName(res.Capability), fidelityName(res))
 				return
 			}
 			require.Equal(t, want.Capability, res.Capability, "capability")
-			if want.checkExact {
-				require.Equal(t, want.Exactness, res.Exactness, "exactness")
-			}
-			if want.wantDiagnostic {
-				require.NotEmpty(t, res.Diagnostics, "expected at least one diagnostic")
+			if want.wantKind != plan.DiagnosticUnclassified {
+				require.True(t, hasDiagnosticKind(res.Diagnostics, want.wantKind),
+					"expected a %v diagnostic, got %+v", want.wantKind, res.Diagnostics)
 			}
 		})
 	}
@@ -179,24 +181,24 @@ func logDistribution(t *testing.T, dist map[distKey]int) {
 	t.Helper()
 	type row struct {
 		capability plan.CapabilityLevel
-		exactness  plan.Exactness
+		fidelity   string
 		count      int
 	}
 	var rows []row
 	for k, v := range dist {
-		rows = append(rows, row{k.capability, k.exactness, v})
+		rows = append(rows, row{k.capability, k.fidelity, v})
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].capability != rows[j].capability {
 			return rows[i].capability < rows[j].capability
 		}
-		return rows[i].exactness < rows[j].exactness
+		return rows[i].fidelity < rows[j].fidelity
 	})
 
 	var b strings.Builder
-	b.WriteString("capability/exactness distribution over the curated corpus:\n")
+	b.WriteString("capability/fidelity distribution over the curated corpus:\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "  %-28s %-26s %d\n", capabilityName(r.capability), exactnessName(r.exactness), r.count)
+		fmt.Fprintf(&b, "  %-28s %-14s %d\n", capabilityName(r.capability), r.fidelity, r.count)
 	}
 	t.Log(b.String())
 }
@@ -210,4 +212,13 @@ func logFlagged(t *testing.T, flagged []string) {
 		fmt.Fprintf(&b, "  %s\n", f)
 	}
 	t.Log(b.String())
+}
+
+func hasDiagnosticKind(diags []plan.Diagnostic, k plan.DiagnosticKind) bool {
+	for _, d := range diags {
+		if d.Kind == k {
+			return true
+		}
+	}
+	return false
 }

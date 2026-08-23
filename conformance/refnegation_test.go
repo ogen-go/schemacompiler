@@ -60,9 +60,9 @@ func TestNegatedRefIsEnforcedWithoutRejectingValid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			res, err := compileQuietly(json.RawMessage(tt.schema))
 			require.NoError(t, err)
-			require.Less(t, res.Exactness, plan.UnsupportedConversion)
+			require.Less(t, res.Capability, plan.EvaluationStateValidation)
 			if tt.exact {
-				require.Equal(t, plan.ExactWithValidation, res.Exactness)
+				require.False(t, hasDiagnosticKind(res.Diagnostics, plan.DiagnosticUnenforced))
 			}
 
 			value, err := decodeInstance(json.RawMessage(tt.instance))

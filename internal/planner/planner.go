@@ -16,13 +16,12 @@ import (
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
-// Result is the planner's output for one schema: the analyzed plan plus the
-// diagnostics collected while building it and the top-level exactness (design §25).
+// Result is the planner's output for one schema: the analyzed plan plus the diagnostics
+// collected while building it and what it asks of its consumer (design §25).
 type Result struct {
 	Plan         plan.CompilationPlan
 	Diagnostics  []plan.Diagnostic
 	Requirements plan.Requirements
-	Exactness    plan.Exactness
 }
 
 // Origin locates the schema a Build call analyzes within its source document: the JSON
@@ -56,7 +55,6 @@ func BuildAt(e ir.Expr, reg *frontend.Registry, origin Origin) Result {
 		Plan:         p,
 		Diagnostics:  b.diags,
 		Requirements: b.reqs,
-		Exactness:    exactnessOf(p, b.gaps),
 	}
 }
 

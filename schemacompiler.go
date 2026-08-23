@@ -47,11 +47,10 @@ type Result struct {
 	Plan plan.CompilationPlan
 	// Capability mirrors Plan.Capability for convenience.
 	Capability plan.CapabilityLevel
-	// Exactness reports how faithfully the representation reproduces the schema.
-	Exactness plan.Exactness
 	// Requirements is what the plan asks of whatever lowers it (design §25).
 	Requirements plan.Requirements
-	// Diagnostics explain capability or exactness downgrades.
+	// Diagnostics explain what the compiler could not do, and what that costs: see
+	// [plan.DiagnosticKind].
 	Diagnostics []plan.Diagnostic
 }
 
@@ -109,8 +108,8 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 		}
 	}
 
-	// The document's capability and exactness are at least the worst over the root and
-	// every reachable definition (design §22, §24).
+	// The document's capability is at least the worst over the root and every reachable
+	// definition (design §22).
 	capLevel := root.Plan.Capability
 	for _, d := range defs.plans {
 		capLevel = maxCapability(capLevel, d.Capability)
@@ -129,7 +128,6 @@ func compileSchema(schema *frontend.Schema, budget int) *Result {
 	return &Result{
 		Plan:         root.Plan,
 		Capability:   capLevel,
-		Exactness:    exactnessFor(capLevel, maxExactness(root.Exactness, defs.exactness)),
 		Requirements: sortRequirements(mergeRequirements(root.Requirements, defs.reqs)),
 		Diagnostics:  dedupeDiagnostics(diags),
 	}

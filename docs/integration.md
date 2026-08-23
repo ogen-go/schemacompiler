@@ -63,11 +63,12 @@ interpreter is a bug in one of them, not a matter of reading.
 
 ### 0.2. What acceptance does *not* tell you
 
-A plan accepting an instance the schema rejects is only a defect when the plan claims to
-be exact. `Result.Exactness` is what says whether it does — `SoundOverApproximation` and
-`DeclaredIncomplete` both announce that the plan admits a superset. Design §24 permits a
-superset; it never permits a plan to reject an instance the schema accepts, at any
-exactness. See §6 for how `Capability` and `Exactness` gate lowering.
+A plan accepting an instance the schema rejects is only a defect when the plan claims
+nothing about it. `Diagnostic.Kind` is what says whether it does — `DiagnosticAssumed` and
+`DiagnosticUnenforced` both announce that the plan admits a superset, and name the
+construct responsible. Design §24 permits a superset; it never permits a plan to reject an
+instance the schema accepts, whatever the plan declares. See §6 for how `Capability` and
+the diagnostics gate lowering.
 
 ## 1. Representation → `ir.Type`
 
@@ -234,7 +235,7 @@ Detection/preference order in `gen/schema_gen_sum.go`: explicit `discriminator` 
 | `NoDispatch` | n/a | Single representation, no `SumSpec` needed. |
 | `KindDispatch{Cases}` | `TypeDiscriminator = true` | One case per JSON kind (design §18.1); maps onto ogen's kind-based sum discrimination directly. |
 | `LiteralDispatch{Cases}` | `ValueDiscriminators` | Enum/const union (design §18, discriminator class 2); each `LiteralCase.Value` becomes one entry in `ValueToVariant`. |
-| `PropertyDispatch{Property, Cases, Tag}` | `Discriminator = Property`, `Mapping` built from `Cases` | Tagged union (design §18.2); this is ogen's explicit/implicit discriminator path. `TagDeclared`/`TagAsserted` mean an OpenAPI `discriminator` named the property (`handleExplicitDiscriminator`), `TagInferred` means it was recovered structurally (`implicitDiscriminatorKey`). `Tag` grades the disjointness evidence in three tiers (design §18, §15.3). `TagInferred` and `TagDeclared` are **proven**: every branch requires `Property`, pins it to a const/enum, and its cases cover every value it accepts; a branch that is itself an `allOf`/`anyOf`/`oneOf` is looked through, the pinned value set being the intersection over `allOf` members and the union over alternatives (issue #45). `TagAsserted` is **trusted, not proven**: every branch requires `Property` (OAS 3.0.3 line 2354 makes that mandatory) but leaves it unconstrained, so the `mapping` is taken as the "hint to shortcut validation and selection" OAS 3.0.3 line 2717 permits; the plan reports `SeverityInfo` and downgrades `Result.Exactness` to `SoundOverApproximation`. Lowering is identical for all three — the tier tells a backend whether decoding the selected variant is guaranteed to accept every valid instance. Declared cases come from `mapping` when it names the branch, else from the branch's own const/enum — never from the referenced component's name, which constrains nothing in the instance. A declaration that cannot drive dispatch at all — a `mapping` entry resolving to no branch, a `propertyName` some branch does not require, no value selecting some branch, or two branches sharing a value — is reported as a `SeverityWarning` diagnostic and the plan falls back to structural inference and then to `PredicateCountDispatch`, so a backend never switches on a value the author did not write. |
+| `PropertyDispatch{Property, Cases, Tag}` | `Discriminator = Property`, `Mapping` built from `Cases` | Tagged union (design §18.2); this is ogen's explicit/implicit discriminator path. `TagDeclared`/`TagAsserted` mean an OpenAPI `discriminator` named the property (`handleExplicitDiscriminator`), `TagInferred` means it was recovered structurally (`implicitDiscriminatorKey`). `Tag` grades the disjointness evidence in three tiers (design §18, §15.3). `TagInferred` and `TagDeclared` are **proven**: every branch requires `Property`, pins it to a const/enum, and its cases cover every value it accepts; a branch that is itself an `allOf`/`anyOf`/`oneOf` is looked through, the pinned value set being the intersection over `allOf` members and the union over alternatives (issue #45). `TagAsserted` is **trusted, not proven**: every branch requires `Property` (OAS 3.0.3 line 2354 makes that mandatory) but leaves it unconstrained, so the `mapping` is taken as the "hint to shortcut validation and selection" OAS 3.0.3 line 2717 permits; the plan reports a `SeverityInfo` diagnostic of kind `DiagnosticAssumed`. Lowering is identical for all three — the tier tells a backend whether decoding the selected variant is guaranteed to accept every valid instance. Declared cases come from `mapping` when it names the branch, else from the branch's own const/enum — never from the referenced component's name, which constrains nothing in the instance. A declaration that cannot drive dispatch at all — a `mapping` entry resolving to no branch, a `propertyName` some branch does not require, no value selecting some branch, or two branches sharing a value — is reported as a `SeverityWarning` diagnostic and the plan falls back to structural inference and then to `PredicateCountDispatch`, so a backend never switches on a value the author did not write. |
 | `PresenceDispatch{Property, Present, Absent}` | `UniqueFields` (or a bespoke two-branch encoding) | `dependentSchemas`-shaped presence dispatch (design §12.7) has no exact ogen precedent (ogen's `UniqueFields` targets "which required field is present" disambiguation among ≥2 object variants, not a binary present/absent split against one schema); the generator should model this as a 2-case `UniqueFields` sum where one branch's unique field set is empty. |
 | `PredicateCountDispatch{Branches, Minimum, Maximum}` | **not representable in `SumSpec` today** | No ogen construct evaluates every branch and counts matches at runtime; static dispatch strategies all assume exactly one statically-determined branch wins. Follow the **PredicateDispatch lowering contract** below: emit the runtime match-count, or refuse and surface the plan's `SeverityWarning` diagnostic. Do not approximate it with a lossy `SumSpec` encoding. |
 
@@ -293,11 +294,10 @@ counts above it forces `CapabilityLevel.PredicateDispatch`, so it arrives alread
 Negation inverts approximation polarity, so this predicate is emitted **only** when the
 nested plan reproduces its schema exactly: a nested plan that accepts more than its schema
 would make the negation reject valid instances, which §24 forbids. Where that cannot be
-established the compiler drops the negation instead — the outer plan then accepts a superset,
-reports `DeclaredIncomplete`, and carries a `SeverityWarning` naming the constraint it could
-not enforce. A backend therefore never sees a `NegationPredicate` it must distrust, but it
-must not read the absence of one as "the schema had no `not`"; the exactness and the
-diagnostic are what say so.
+established the compiler drops the negation instead — the outer plan then accepts a superset
+and carries a `DiagnosticUnenforced` naming the constraint it could not enforce. A backend
+therefore never sees a `NegationPredicate` it must distrust, but it must not read the absence
+of one as "the schema had no `not`"; the diagnostic is what says so.
 
 `Schema` may itself be — or contain — a `ReferenceRepresentation`, which is emitted when the
 target's own plan is exact (issue #108). Lower it exactly like any other reference: resolve
@@ -437,34 +437,40 @@ predicate that costs it sits in that field's own `ValidationPlan` — where the 
 constrains is. A backend that lowered only the root's `Validation` would emit nothing for
 it (issue #68).
 
-`Result.Exactness` / `DocumentResult.Exactness` never contradict that gate **in the
-refusing direction**: a capability past `PredicateDispatch` always reports
-`UnsupportedConversion`, so a plan the gate refuses is never advertised as convertible.
+There is no `Exactness` field, and there deliberately is not one (design §25.1). Whether the
+*generated program* reproduces the schema's accepted set depends on the lowering — integer
+widths, whether unknown properties are retained, which regex engine runs — none of which the
+compiler chooses, so a compiler-side exactness value is a claim it is not in a position to
+make. What the compiler reports instead is two things a backend cannot derive for itself:
+`plan.Requirements`, the checks the lowering must discharge, and `Diagnostic.Kind`, the
+constructs it failed to enforce.
 
-The converse does not hold, and deliberately so. The two fields answer different questions
-— *can this be lowered at all* and *does the lowering reproduce the accepted set* — and a
-plan the gate passes may still report `DeclaredIncomplete`, at any capability including
-`DirectGoType` (a `not` whose operand is not exactly modeled is dropped rather than
-enforced, which costs the plan nothing at runtime — issues #77, #82, #84). A backend that
-consults only `Capability` therefore sees a fully generatable plan whose generated type
-accepts values the schema rejects, with no residual validation to catch them. **Consult
-both fields**: `Capability` decides whether to generate, `Exactness` decides what the
-generated code is worth.
+`Capability` and `Diagnostic.Kind` answer different questions — *can this be lowered at all*
+and *does the plan still accept what its schema rejects* — and they are independent. A plan
+the capability gate passes may carry a `DiagnosticUnenforced` at any level including
+`DirectGoType` (a `not` whose operand is not exactly modeled is dropped rather than enforced,
+which costs the plan nothing at runtime — issues #77, #82, #84). A backend that consults only
+`Capability` therefore sees a fully generatable plan whose generated type accepts values the
+schema rejects, with no residual validation to catch them. **Consult both**: `Capability`
+decides whether to generate, the diagnostics decide what the generated code is worth.
 
-| `Exactness` | Meaning | Backend action |
+| `Diagnostic.Kind` | Meaning | Backend action |
 |---|---|---|
-| `ExactPureRepresentation` | The Go type alone reproduces the accepted set. | Generate; no validator needed. |
-| `ExactWithValidation` | The Go type plus the residual `ValidationPlan` reproduces the accepted set. The type alone may be wider than the schema — an `Any` representation carrying kind-guarded predicates for a keyword written without a sibling `type` (design §3), a match-count dispatch, a residual negation — as long as the validator closes the gap, which is what this rung asserts (issue #95). | Generate; emit the validator. |
-| `SoundOverApproximation` | The plan accepts a strict superset of the schema **even after the validator runs**, with the plan's own machinery bounding the excess: today only a `TagAsserted` discriminator, which trusts a declared tag instead of proving the branches disjoint, so a mis-tagged instance that a second branch would also have matched is accepted. | Generate; emit the validator, but the accepted set is wider than the schema's — surface the plan's `SeverityInfo` diagnostic. |
-| `DeclaredIncomplete` | The plan admits extra values and **nothing in it closes the gap**: a constraint was dropped and no residual check replaces it. Always accompanied by a `SeverityWarning` diagnostic naming the constraint. | Representable; the choice is the backend's. Generate anyway (ogen's permissive behaviour for keywords it ignores) or refuse — but surface the diagnostic either way. |
-| `UnsupportedConversion` | No sound conversion exists. | Refuse; surface the diagnostic. |
+| `DiagnosticAdvisory` | A storage, dispatch or authoring note. The plan accepts exactly what the schema does. | Generate; surface if useful to the author. |
+| `DiagnosticCost` | Reproducing the schema exactly requires work at runtime — match counting, trial validation, a residual sub-schema. The plan is exact; `Capability` carries the price. | Generate; emit the validator. |
+| `DiagnosticAssumed` | The plan accepts a strict superset of the schema **even after the validator runs**, with the plan's own machinery bounding the excess: today only a `TagAsserted` discriminator, which trusts a declared tag instead of proving the branches disjoint, so a mis-tagged instance a second branch would also have matched is accepted. | Generate; emit the validator, but the accepted set is wider than the schema's — surface the diagnostic. |
+| `DiagnosticUnenforced` | The plan admits extra values and **nothing in it closes the gap**: a constraint was dropped and no residual check replaces it. The message names the construct. | Representable; the choice is the backend's. Generate anyway (ogen's permissive behavior for keywords it ignores) or refuse — but surface the diagnostic either way. |
+| `DiagnosticUnsupported` | No sound conversion exists for the construct. Always paired with a capability past `PredicateDispatch`, so the gate below refuses these anyway. | Refuse; surface the diagnostic. |
+
+A plan carrying no diagnostic of the last three kinds accepts exactly what its schema does,
+to the extent the lowering discharges `plan.Requirements`.
 
 | `CapabilityLevel` | ogen generation | Rationale |
 |---|---|---|
 | `DirectGoType` | **Yes** | Plain `ir.Type`, no validator. |
 | `GoTypeWithValidation` | **Yes** | `ir.Type` + `ir.Validators`. |
 | `StaticDispatch` | **Yes** | `ir.Type{Kind: KindSum}` with a `SumSpec` strategy from §3 (`TypeDiscriminator`/`ValueDiscriminators`/`Discriminator`+`Mapping`). |
-| `PredicateDispatch` | **Partial** | The *representation* is a sound over-approximation (design §24: the union of all branches) closed by re-running every branch's checks at decode time and counting matches, so the rung is a cost, not a loss of exactness — such plans report `ExactWithValidation` — see the **PredicateDispatch lowering contract** in §3 for the exact match-count algorithm. ogen has no existing `SumSpec` shape for "runtime match-count over N branches," so until that lowering is built, treat as refuse-with-diagnostic; once built, it is a legitimate (if slower) generation target — the plan is not dropped, per the "no silent caps" rule. |
+| `PredicateDispatch` | **Partial** | The *representation* is a sound over-approximation (design §24: the union of all branches) closed by re-running every branch's checks at decode time and counting matches, so the level is a cost, not a loss of fidelity — such plans carry only a `DiagnosticCost` — see the **PredicateDispatch lowering contract** in §3 for the exact match-count algorithm. ogen has no existing `SumSpec` shape for "runtime match-count over N branches," so until that lowering is built, treat as refuse-with-diagnostic; once built, it is a legitimate (if slower) generation target — the plan is not dropped, per the "no silent caps" rule. |
 | `EvaluationStateValidation` | **No — refuse** | No evaluated-annotation tracking in ogen (confirmed: no `unevaluatedProperties`/`dynamicRef` references in `gen/`). Surface the plan's `SeverityError` diagnostic. |
 | `DynamicSchemaResolution` | **No — refuse** | Same: no dynamic-scope resolution engine exists or is planned for v1. |
 | `Unsupported` | **No — refuse** | No sound conversion exists at all (e.g. an unguarded reference cycle, design §19); always carries a `SeverityError` diagnostic explaining why. |

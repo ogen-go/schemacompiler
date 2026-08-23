@@ -9,9 +9,8 @@ import (
 )
 
 // TestBuild_NegationOverReferenceConsultsTarget covers issue #108: negating a `$ref` is
-// decided by the target's own plan, one row per rung of [plan.Exactness] the target can
-// land on, plus the cases the walk must refuse to answer — recursion, a cycle, and a
-// dangling target.
+// decided by the target's own plan, one row per way [exactlyModeled] can go on it, plus
+// the cases the walk must refuse to answer — recursion, a cycle, and a dangling target.
 //
 // The JSON-Schema-Test-Suite corpus reaches none of this: no suite schema negates a `$ref`
 // at all, so the differential oracle is byte-identical with and without the change.
@@ -25,19 +24,19 @@ func TestBuild_NegationOverReferenceConsultsTarget(t *testing.T) {
 		emit   bool
 	}{
 		{
-			name:   "target is ExactPureRepresentation",
+			name:   "target is exact on its own",
 			doc:    `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S": {"type": "string"}}}`,
 			reason: "the target's representation alone reproduces its schema",
 			emit:   true,
 		},
 		{
-			name:   "target is ExactWithValidation",
+			name:   "target is closed by a residual validator",
 			doc:    `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S": {"type": "string", "minLength": 3}}}`,
 			reason: "the target's residual validator closes its representation's gap",
 			emit:   true,
 		},
 		{
-			name: "target is SoundOverApproximation",
+			name: "target trusts an asserted discriminator",
 			doc: `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S": {
 				"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Dog"}],
 				"discriminator": {"propertyName": "petType",
@@ -50,14 +49,14 @@ func TestBuild_NegationOverReferenceConsultsTarget(t *testing.T) {
 			emit:   false,
 		},
 		{
-			name: "target is DeclaredIncomplete",
+			name: "target already dropped a constraint",
 			doc: `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S": {"type": "object",
 				"properties": {"a": {"not": ` + unsupported + `}}}}}`,
 			reason: "the target's own negation is dropped, so nothing in it rejects what it should",
 			emit:   false,
 		},
 		{
-			name:   "target is UnsupportedConversion",
+			name:   "target is not modeled at all",
 			doc:    `{"not": {"$ref": "#/$defs/S"}, "$defs": {"S": ` + unsupported + `}}`,
 			reason: "the target is not modeled at all",
 			emit:   false,
@@ -106,10 +105,10 @@ func TestBuild_NegationOverReferenceConsultsTarget(t *testing.T) {
 
 			if tt.emit {
 				require.NotZero(t, countNegations(t, got.Plan), tt.reason)
-				require.Equal(t, plan.ExactWithValidation, got.Exactness, tt.reason)
+				require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced), tt.reason)
 			} else {
 				require.Zero(t, countNegations(t, got.Plan), tt.reason)
-				require.Equal(t, plan.DeclaredIncomplete, got.Exactness, tt.reason)
+				require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced), tt.reason)
 			}
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 		})

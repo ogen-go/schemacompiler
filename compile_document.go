@@ -32,9 +32,8 @@ type DocumentResult struct {
 	Plans map[plan.SchemaID]plan.CompilationPlan
 	// Capability is the worst capability level over every plan.
 	Capability plan.CapabilityLevel
-	// Exactness is the worst exactness level over every plan.
-	Exactness plan.Exactness
-	// Diagnostics explain capability or exactness downgrades.
+	// Diagnostics explain what the compiler could not do, and what that costs: see
+	// [plan.DiagnosticKind].
 	Diagnostics []plan.Diagnostic
 }
 
@@ -58,7 +57,6 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	for _, pointer := range slices.Sorted(maps.Keys(d.Schemas)) {
 		built := buildPlan(d.Schemas[pointer], d.Registry, budget)
 		res.Plans[plan.SchemaID(pointer)] = built.Plan
-		res.Exactness = maxExactness(res.Exactness, built.Exactness)
 		diags = append(diags, built.Diagnostics...)
 	}
 
@@ -66,7 +64,6 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 	// those need a plan under their own pointer too.
 	defs := buildDefinitionsExcept(d.Registry, budget, res.Plans)
 	maps.Copy(res.Plans, defs.plans)
-	res.Exactness = maxExactness(res.Exactness, defs.exactness)
 	diags = append(diags, defs.diags...)
 
 	positions := refTargetPositions(d.Registry)
@@ -81,7 +78,6 @@ func CompileDocument(ctx context.Context, doc Document, opts Options) (*Document
 		}
 		res.Capability = maxCapability(res.Capability, p.Capability)
 	}
-	res.Exactness = exactnessFor(res.Capability, res.Exactness)
 
 	diags = append(diags, unresolvedDiagnostics(d.Unresolved)...)
 	diags = append(diags, uninhabitedDiagnostics(d.Uninhabited)...)

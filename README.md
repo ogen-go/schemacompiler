@@ -44,7 +44,7 @@ res, err := schemacompiler.Compile(ctx, schemaBytes, schemacompiler.Options{})
 if err != nil {
     // only malformed input fails; a dangling $ref is a diagnostic, not an error
 }
-fmt.Println(res.Capability, res.Exactness)
+fmt.Println(res.Capability, res.Diagnostics)
 for _, d := range res.Diagnostics {
     fmt.Println(d.Severity, d.Position, d.Pointer, d.Message)
 }

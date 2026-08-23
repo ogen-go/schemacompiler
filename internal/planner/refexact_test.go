@@ -20,7 +20,8 @@ func loadRegistry(t *testing.T, doc string) *frontend.Schema {
 }
 
 // TestRefTrusted_TargetRungs pins what [builder.refTrusted] answers per target, and asserts
-// the rung each target actually lands on, so a row cannot pass for the wrong reason.
+// whether each target is exactly modeled, so a row cannot pass for the wrong reason: the
+// last two rows are refused for reasons [exactlyModeled] cannot see.
 func TestRefTrusted_TargetRungs(t *testing.T) {
 	const unsupported = `{"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}`
 
@@ -28,21 +29,21 @@ func TestRefTrusted_TargetRungs(t *testing.T) {
 		name    string
 		defs    string
 		target  plan.SchemaID
-		rung    plan.Exactness
+		modeled bool
 		trusted bool
 	}{
 		{
 			name:    "exact target",
 			defs:    `{"S": {"type": "string"}}`,
 			target:  "/$defs/S",
-			rung:    plan.ExactPureRepresentation,
+			modeled: true,
 			trusted: true,
 		},
 		{
 			name:    "target closed by a residual validator",
 			defs:    `{"S": {"type": "string", "minLength": 3}}`,
 			target:  "/$defs/S",
-			rung:    plan.ExactWithValidation,
+			modeled: true,
 			trusted: true,
 		},
 		{
@@ -55,28 +56,28 @@ func TestRefTrusted_TargetRungs(t *testing.T) {
 				"Dog": {"type": "object", "required": ["petType", "bark"],
 					"properties": {"petType": {"type": "string"}, "bark": {"type": "boolean"}}}}`,
 			target:  "/$defs/S",
-			rung:    plan.SoundOverApproximation,
+			modeled: false,
 			trusted: false,
 		},
 		{
 			name:    "target with a dropped negation",
 			defs:    `{"S": {"type": "object", "properties": {"a": {"not": ` + unsupported + `}}}}`,
 			target:  "/$defs/S",
-			rung:    plan.DeclaredIncomplete,
+			modeled: false,
 			trusted: false,
 		},
 		{
 			name:    "unmodeled target",
 			defs:    `{"S": ` + unsupported + `}`,
 			target:  "/$defs/S",
-			rung:    plan.UnsupportedConversion,
+			modeled: false,
 			trusted: false,
 		},
 		{
 			name:    "guarded-recursive target",
 			defs:    `{"S": {"type": "object", "properties": {"next": {"$ref": "#/$defs/S"}}}}`,
 			target:  "/$defs/S",
-			rung:    plan.ExactPureRepresentation,
+			modeled: true,
 			trusted: false,
 		},
 		{
@@ -97,8 +98,8 @@ func TestRefTrusted_TargetRungs(t *testing.T) {
 				return
 			}
 			sub := newBuilder(s.Registry)
-			require.Equal(t, tt.rung, exactnessOf(sub.build(ir.Compile(node), ""), sub.gaps),
-				"the row must exercise the rung it names")
+			require.Equal(t, tt.modeled, exactlyModeled(sub.build(ir.Compile(node), ""), sub.gaps),
+				"the row must exercise the fidelity it names")
 		})
 	}
 }
@@ -114,7 +115,7 @@ func TestRefTrusted_NoRegistry(t *testing.T) {
 
 // TestRefTrusted_LeavesNoTrace pins the two hazards of building a target only to inspect it:
 // its diagnostics must not be re-emitted at every reference site, and its gaps must not
-// demote the exactness of the plan that refers to it (design §25).
+// make the plan that refers to it read as incomplete (design §25).
 func TestRefTrusted_LeavesNoTrace(t *testing.T) {
 	s := loadRegistry(t, `{"$ref": "#/$defs/S", "$defs": {"S":
 		{"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}}}`)

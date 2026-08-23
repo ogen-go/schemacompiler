@@ -112,7 +112,7 @@ func TestCompileDeclaredDiscriminatorSurvivesPipeline(t *testing.T) {
 	require.Equal(t, "petType", disp.Property)
 	require.Equal(t, plan.TagDeclared, disp.Tag)
 	require.Len(t, disp.Cases, 2)
-	require.Equal(t, plan.ExactWithValidation, res.Exactness)
+	require.Empty(t, res.Diagnostics)
 }
 
 func TestCompileAssertedDiscriminatorSurvivesPipeline(t *testing.T) {
@@ -141,5 +141,5 @@ func TestCompileAssertedDiscriminatorSurvivesPipeline(t *testing.T) {
 	require.Equal(t, "petType", disp.Property)
 	require.Equal(t, plan.TagAsserted, disp.Tag)
 	require.Len(t, disp.Cases, 2)
-	require.Equal(t, plan.SoundOverApproximation, res.Exactness)
+	require.True(t, hasKind(res.Diagnostics, plan.DiagnosticAssumed))
 }

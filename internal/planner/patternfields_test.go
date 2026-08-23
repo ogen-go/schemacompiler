@@ -27,9 +27,9 @@ func patternedObject(name, pattern string) ir.Expr {
 // the pattern in, not in RE2.
 //
 // Both cases below reach the generated type. Under RE2 the first silently emits a field
-// without the pattern schema's constraint while still claiming exactness, and the second
-// drops the constraint loudly. Under ECMA-262 the pattern covers the name in both, so the
-// field carries `minLength` and the plan stays exact.
+// without the pattern schema's constraint, and the second drops the constraint loudly.
+// Under ECMA-262 the pattern covers the name in both, so the field carries `minLength` and
+// nothing is dropped.
 func TestConstraintsFor_ECMASemantics(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -63,7 +63,6 @@ func TestConstraintsFor_ECMASemantics(t *testing.T) {
 				"the pattern schema must be intersected into the field it covers")
 			require.Equal(t, plan.MinLengthPredicate{Value: 1}, field.ResidualChecks()[0].Expression)
 
-			require.Equal(t, plan.ExactWithValidation, got.Exactness)
 			require.Empty(t, got.Diagnostics)
 		})
 	}
@@ -85,6 +84,5 @@ func TestConstraintsFor_UndecidablePatternDrops(t *testing.T) {
 	require.Empty(t, field.ResidualChecks(),
 		"an undecidable pattern must not be intersected in")
 
-	require.Equal(t, plan.DeclaredIncomplete, got.Exactness)
-	require.NotEmpty(t, got.Diagnostics)
+	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced))
 }

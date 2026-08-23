@@ -35,12 +35,11 @@ func refTargetPositions(reg *frontend.Registry) map[plan.SchemaID]plan.Position 
 }
 
 // definitions is the assembled set of named $ref-target plans for a document, plus the
-// diagnostics and worst-case exactness accumulated while compiling them.
+// diagnostics and requirements accumulated while compiling them.
 type definitions struct {
-	plans     map[plan.SchemaID]plan.CompilationPlan
-	diags     []plan.Diagnostic
-	exactness plan.Exactness
-	reqs      plan.Requirements
+	plans map[plan.SchemaID]plan.CompilationPlan
+	diags []plan.Diagnostic
+	reqs  plan.Requirements
 }
 
 // mergeRequirements unions two requirement sets. A document's demands on its consumer are
@@ -94,7 +93,6 @@ func buildDefinitionsExcept(reg *frontend.Registry, budget int, have map[plan.Sc
 		res := buildPlan(node, reg, budget)
 		out.plans[plan.SchemaID(id)] = res.Plan
 		out.diags = append(out.diags, res.Diagnostics...)
-		out.exactness = maxExactness(out.exactness, res.Exactness)
 		out.reqs = mergeRequirements(out.reqs, res.Requirements)
 	}
 	return out
@@ -216,14 +214,6 @@ func uninhabitedDiagnostics(nodes []frontend.UninhabitedNode) []plan.Diagnostic 
 
 // maxCapability returns the higher (more costly) of two capability levels (design §22).
 func maxCapability(a, b plan.CapabilityLevel) plan.CapabilityLevel {
-	if b > a {
-		return b
-	}
-	return a
-}
-
-// maxExactness returns the worse (less exact) of two exactness levels (design §24).
-func maxExactness(a, b plan.Exactness) plan.Exactness {
 	if b > a {
 		return b
 	}

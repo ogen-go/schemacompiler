@@ -9,10 +9,10 @@ import (
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
-// TestNegatable covers the half of the [withResidualNegation] gate that [plan.Exactness]
+// TestNegatable covers the half of the [withResidualNegation] gate that [exactlyModeled]
 // cannot decide: a plan that accepts everything while its operand does not proves a keyword
 // was dropped however exact the plan reports, and a reference is planned from its identity
-// alone, so its target's exactness never reaches this call (issue #82). With no registry
+// alone, so its target's fidelity never reaches this call (issue #82). With no registry
 // there is no target to consult, so every reference stays untrusted; [TestNegatable_RefTarget]
 // covers the resolvable cases.
 func TestNegatable(t *testing.T) {

@@ -1,7 +1,8 @@
 // differential_test.go runs the JSON-Schema-Test-Suite's labeled instances through
 // internal/planterp, which decides accept/reject by reading the compilation plan and
-// nothing else (issue #70). It is the machine check on Exactness: a plan that claims to
-// be exact and still accepts an instance the suite calls invalid has lost a constraint.
+// nothing else (issue #70). It is the machine check on §24.1: a plan that reports no
+// unenforced construct and still accepts an instance the suite calls invalid has lost one
+// silently.
 package conformance
 
 import (
@@ -54,19 +55,19 @@ const (
 	// verdictOK is a verdict the asymmetric oracle permits.
 	verdictOK verdictKind = iota
 	// verdictRejectedValid is the plan rejecting an instance the suite calls valid: an
-	// under-approximation, which design §24 forbids at every exactness level.
+	// under-approximation, which design §24 forbids unconditionally.
 	verdictRejectedValid
 	// verdictAcceptedInvalid is the plan accepting an instance the suite calls invalid
-	// while claiming ExactPureRepresentation or ExactWithValidation.
+	// while reporting nothing it failed to enforce.
 	verdictAcceptedInvalid
 	// verdictApproximated is verdictAcceptedInvalid reached through a constraint the
 	// interpreter itself could not enforce (a pattern its ECMA-262 engine cannot compile
 	// or cannot finish, an unasserted `format`), so it is not evidence against the plan.
 	verdictApproximated
 	// verdictDeclaredInexact is verdictAcceptedInvalid reached through a plan that says it
-	// accepts more than its schema — [plan.SoundOverApproximation] and above. The oracle
-	// cannot hold a plan to a claim it does not make, so this is permitted; it is counted
-	// on its own line so the price of permitting it is a number rather than an assumption.
+	// accepts more than its schema — see [declaresOverAcceptance]. The oracle cannot hold a
+	// plan to a claim it does not make, so this is permitted; it is counted on its own line
+	// so the price of permitting it is a number rather than an assumption.
 	verdictDeclaredInexact
 	// verdictInvalidValue is the interpreter refusing the instance itself: the corpus
 	// decoded into something [encoding/json] does not produce. That is a harness bug.
@@ -85,7 +86,7 @@ func (k verdictKind) String() string {
 	case verdictRejectedValid:
 		return "rejected-valid"
 	case verdictAcceptedInvalid:
-		return "accepted-invalid-while-exact"
+		return "accepted-invalid-while-declaring-nothing"
 	case verdictApproximated:
 		return "accepted-invalid-via-unenforceable-constraint"
 	case verdictDeclaredInexact:
@@ -105,16 +106,16 @@ type diffTally struct {
 	schemas        int
 	instances      int
 	skippedCompile int
-	// unsupportedCapability and unsupportedExactness count the plans skipped because no
-	// backend would generate them at all (docs/integration.md §6).
+	// unsupportedCapability and beyondBackend count the plans skipped because no backend
+	// would generate them at all (docs/integration.md §6).
 	unsupportedCapability int
-	unsupportedExactness  int
+	beyondBackend         int
 	// outOfDialect counts the schemas skipped per [outOfDialect] reason.
 	outOfDialect map[string]int
 	failures     map[verdictKind]int
-	// bandFailures counts the disagreements inside the skipped
-	// Exactness == UnsupportedConversion band. They are reported, never failed on: the
-	// line exists so the cost of skipping the band cannot silently grow.
+	// bandFailures counts the disagreements inside the skipped beyond-backend band. They
+	// are reported, never failed on: the line exists so the cost of skipping the band
+	// cannot silently grow.
 	bandFailures map[verdictKind]int
 	quarantined  int
 	unusedSkips  []string
@@ -173,17 +174,15 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 			case res.Capability == plan.Unsupported:
 				tally.unsupportedCapability++
 				continue
-			case res.Exactness == plan.UnsupportedConversion:
+			case res.Capability >= plan.EvaluationStateValidation:
 				// These plans convert to nothing at all, so no backend reaches an
 				// instance through them (docs/integration.md §6) and the oracle has
 				// nothing to hold them to. The band is still interpreted, and what it
-				// costs is reported on its own tally line rather than assumed: at the
-				// time of writing it hides 4 rejected-valid instances, all in
-				// unevaluatedProperties.json, all attributable to #5 (unevaluated* is
-				// unimplemented, which is why these plans are UnsupportedConversion in
-				// the first place), and no accepted-invalid-while-exact at all. Keeping
-				// the line means that cost tracks the compiler instead of going stale.
-				tally.unsupportedExactness++
+				// costs is reported on its own tally line rather than assumed — at the
+				// time of writing, nothing: no rejected-valid and no accepted-invalid
+				// hide in it. Keeping the line means that cost tracks the compiler
+				// instead of going stale.
+				tally.beyondBackend++
 				bandCost(t, res, c.Tests, tally.bandFailures)
 				continue
 			}
@@ -225,7 +224,7 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 	require.Empty(t, tally.unusedSkips,
 		"quarantine entries that no longer fire: the bug is fixed, delete the entry")
 	require.Zero(t, tally.bandFailures[verdictInternalError],
-		"planterp could not read a plan in the skipped exactness=UnsupportedConversion band; "+
+		"planterp could not read a plan in the skipped beyond-backend band; "+
 			"that band skips the oracle, never the interpreter's own guards")
 }
 
@@ -249,22 +248,21 @@ func judge(t *testing.T, res *schemacompiler.Result, inst diffInstance) (kind ve
 		return verdictInvalidValue, err.Error()
 	}
 
-	detail = fmt.Sprintf("instance %s, capability %v, exactness %v, verdict accepted=%v%s",
-		inst.Data, res.Capability, res.Exactness, verdict.Accepted, renderReason(verdict.Reason))
+	detail = fmt.Sprintf("instance %s, capability %v, verdict accepted=%v%s",
+		inst.Data, res.Capability, verdict.Accepted, renderReason(verdict.Reason))
 
 	switch {
 	case inst.Valid && !verdict.Accepted:
-		// Under-approximation: no exactness level licenses it (design §24).
+		// Under-approximation: nothing licenses it (design §24).
 		return verdictRejectedValid, detail
 	case !inst.Valid && verdict.Accepted:
-		// The exemption starts at SoundOverApproximation, not at DeclaredIncomplete: both
-		// rungs mean the plan's accepted set is a strict superset of its schema's, so
-		// neither can be held to the schema. What #95 fixed is which plans reach those
-		// rungs — a representation wider than the schema is not itself inexactness when
-		// the residual validator closes the gap (internal/planner/classify.go). Since that
-		// fix nothing in the suite reaches them, which the tally line proves rather than
-		// assumes.
-		if res.Exactness >= plan.SoundOverApproximation {
+		// A plan that named a construct it could not enforce cannot be held to the
+		// schema; one that named nothing can. Both DiagnosticAssumed and
+		// DiagnosticUnenforced exempt, because both mean the accepted set is a strict
+		// superset — they differ in whether anything bounds the excess, which is a
+		// question for a backend, not for the oracle. One suite instance reaches this,
+		// which the tally line reports rather than hides.
+		if declaresOverAcceptance(res) {
 			return verdictDeclaredInexact, detail
 		}
 		if len(verdict.Approximated) > 0 {
@@ -334,10 +332,10 @@ func reportTally(t *testing.T, tally diffTally) {
 
 	t.Logf("suite files %d, schemas %d (compiled %d), instances checked %d",
 		tally.files, tally.schemas,
-		tally.schemas-tally.skippedCompile-tally.unsupportedCapability-tally.unsupportedExactness-outOfDialectTotal(tally),
+		tally.schemas-tally.skippedCompile-tally.unsupportedCapability-tally.beyondBackend-outOfDialectTotal(tally),
 		tally.instances)
-	t.Logf("skipped: compile-error %d, capability=Unsupported %d, exactness=UnsupportedConversion %d",
-		tally.skippedCompile, tally.unsupportedCapability, tally.unsupportedExactness)
+	t.Logf("skipped: compile-error %d, capability=Unsupported %d, capability>=EvaluationStateValidation %d",
+		tally.skippedCompile, tally.unsupportedCapability, tally.beyondBackend)
 	for _, reason := range sortedKeys(tally.outOfDialect) {
 		t.Logf("skipped: out of dialect (%s) %d", reason, tally.outOfDialect[reason])
 	}
@@ -345,7 +343,7 @@ func reportTally(t *testing.T, tally diffTally) {
 		t.Logf("  %-48s %d", kind, tally.failures[kind])
 	}
 	t.Logf("quarantined by diffSkips: %d (entries %d)", tally.quarantined, len(diffSkips))
-	t.Logf("disagreements inside the skipped exactness=UnsupportedConversion band (reported, not failures):")
+	t.Logf("disagreements inside the skipped beyond-backend band (reported, not failures):")
 	for _, kind := range reportedKinds {
 		if kind == verdictApproximated || kind == verdictDeclaredInexact {
 			continue
@@ -382,4 +380,19 @@ func sortedKeys(m map[string]int) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// declaresOverAcceptance reports whether res says its plan accepts more than its schema.
+// It replaces the Exactness comparison the oracle used to make: §25.1 retired the ladder
+// because exactness is what a backend concludes after discharging [plan.Requirements], not
+// something the compiler is in a position to claim. What the compiler does report is which
+// constructs it failed to enforce, and that is what the exemption keys on now.
+func declaresOverAcceptance(res *schemacompiler.Result) bool {
+	for _, d := range res.Diagnostics {
+		switch d.Kind {
+		case plan.DiagnosticAssumed, plan.DiagnosticUnenforced, plan.DiagnosticUnsupported:
+			return true
+		}
+	}
+	return false
 }

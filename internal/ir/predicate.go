@@ -8,8 +8,8 @@ package ir
 // MinLengthDetail is `minLength` (string-guarded).
 // DroppedKeywordDetail marks a keyword the frontend left absent because its declared value
 // was not one the spec admits (issue #74). It asserts nothing — it carries the fact that
-// something the author wrote is not enforced, so the planner can lower the plan's exactness
-// to [plan.DeclaredIncomplete] instead of claiming a fidelity it does not have (design §24).
+// something the author wrote is not enforced, so the planner reports it as
+// [plan.DiagnosticUnenforced] instead of claiming a fidelity it does not have (design §24).
 type DroppedKeywordDetail struct{ Keyword string }
 
 type MinLengthDetail struct{ Value uint64 }

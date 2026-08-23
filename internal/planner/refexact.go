@@ -13,9 +13,9 @@ import (
 // whose own plan reproduces its schema's accepted set exactly (design §10.1, §24).
 //
 // [buildRef] plans a reference from its identity alone, because the target's plan is
-// assembled by a separate [BuildAt] call, so a reference reads as ExactPureRepresentation
+// assembled by a separate [BuildAt] call, so a reference reads as exactly modeled
 // whatever its target turns out to be. Every consumer of a whole document already sees
-// through that — the document assembly takes the worst exactness over the root and every
+// through that — the document assembly reports the diagnostics of the root and every
 // reachable target — but a query inside one Build call, such as the negation gate in
 // [withResidualNegation], does not, and there the optimism rejects valid instances (#82).
 func (b *builder) refsTrusted(p plan.CompilationPlan, seen map[plan.SchemaID]bool) bool {
@@ -58,10 +58,10 @@ func (b *builder) refTrusted(target plan.SchemaID, seen map[plan.SchemaID]bool) 
 
 	// The target is rebuilt purely to inspect it, so everything the build accumulated is
 	// rolled back: its diagnostics would otherwise be re-emitted once per reference site,
-	// and its gaps would demote the exactness of the referring plan (design §25).
+	// and its gaps would make the referring plan read as incomplete (design §25).
 	diags, before := b.diags, b.gaps
 	sub := b.build(ir.Compile(node), "")
-	trusted := exactlyModeled(exactnessOf(sub, b.since(before))) && b.refsTrusted(sub, next)
+	trusted := exactlyModeled(sub, b.since(before)) && b.refsTrusted(sub, next)
 	b.diags, b.gaps = diags, before
 
 	if b.refTrust == nil {

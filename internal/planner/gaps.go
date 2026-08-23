@@ -1,8 +1,8 @@
 package planner
 
 // gaps records why a plan admits values its schema rejects for reasons the plan's own
-// structure does not show. [plan.Exactness] has no per-plan field to roll up through, so
-// the builder accumulates these across one Build call and [exactnessOf] reads them.
+// structure does not show. There is no per-plan field to roll them up through, so the
+// builder accumulates them across one Build call and [exactlyModeled] reads them.
 //
 // The two are not the same rung (design §24, issue #84): an asserted discriminator still
 // leaves every branch's own validation in place to catch a mis-tagged instance, while a

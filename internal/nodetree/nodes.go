@@ -321,39 +321,16 @@ func rawElems(raw []byte) ([][]byte, bool) {
 // ---- object ----
 
 type requiredNode struct {
-	names  []string
-	wanted uint64
+	set    nameSet
+	wanted presence
 }
 
 func (r requiredNode) ok(raw []byte) bool {
-	seen, ok := presenceMask(raw, r.names)
+	seen, ok := r.set.presenceOf(raw)
 	if !ok {
 		return true
 	}
-	return seen == r.wanted
-}
-
-// presenceMask returns a bit per entry of want, set when that name is present. It replaces
-// a map so the common case allocates nothing; names past 64 fall back to the map path.
-func presenceMask(raw []byte, want []string) (uint64, bool) {
-	d := decoder(raw)
-	defer jx.PutDecoder(d)
-	var seen uint64
-	if err := d.ObjBytes(func(d *jx.Decoder, key []byte) error {
-		for i, w := range want {
-			if i >= 64 {
-				break
-			}
-			if w == string(key) {
-				seen |= 1 << uint(i)
-				break
-			}
-		}
-		return d.Skip()
-	}); err != nil {
-		return 0, false
-	}
-	return seen, true
+	return seen.covers(r.wanted)
 }
 
 type propertiesBound struct {
@@ -385,32 +362,29 @@ func countProps(raw []byte) (uint64, bool) {
 	return n, true
 }
 
-type dependentRequired struct{ entries []plan.DependentRequiredEntry }
+// dependentEntry is one `dependentRequired` mapping with both sides resolved to
+// [nameSet] positions, so validating an instance costs no lookups by name.
+type dependentEntry struct {
+	trigger  int
+	requires []int
+}
+
+type dependentRequired struct {
+	set     nameSet
+	entries []dependentEntry
+}
 
 func (dr dependentRequired) ok(raw []byte) bool {
-	var want []string
-	for _, e := range dr.entries {
-		want = append(want, e.Property)
-		want = append(want, e.Requires...)
-	}
-	mask, ok := presenceMask(raw, want)
+	seen, ok := dr.set.presenceOf(raw)
 	if !ok {
 		return true
 	}
-	has := func(name string) bool {
-		for i, w := range want {
-			if i < 64 && w == name {
-				return mask&(1<<uint(i)) != 0
-			}
-		}
-		return false
-	}
 	for _, e := range dr.entries {
-		if !has(e.Property) {
+		if !seen.has(e.trigger) {
 			continue
 		}
-		for _, need := range e.Requires {
-			if !has(need) {
+		for _, i := range e.requires {
+			if !seen.has(i) {
 				return false
 			}
 		}
@@ -483,4 +457,29 @@ func (r reference) ok(raw []byte) bool {
 		return true
 	}
 	return n.ok(raw)
+}
+
+func newDependentRequired(entries []plan.DependentRequiredEntry) dependentRequired {
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Property)
+		names = append(names, e.Requires...)
+	}
+	set := newNameSet(names)
+
+	out := dependentRequired{set: set, entries: make([]dependentEntry, 0, len(entries))}
+	for _, e := range entries {
+		trigger, ok := set.indexOf(e.Property)
+		if !ok {
+			continue
+		}
+		de := dependentEntry{trigger: trigger, requires: make([]int, 0, len(e.Requires))}
+		for _, need := range e.Requires {
+			if i, ok := set.indexOf(need); ok {
+				de.requires = append(de.requires, i)
+			}
+		}
+		out.entries = append(out.entries, de)
+	}
+	return out
 }

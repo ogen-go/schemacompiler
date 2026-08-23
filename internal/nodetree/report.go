@@ -97,12 +97,12 @@ func (u uniqueItems) errs(raw []byte, at *loc, yield func(Error) bool) bool {
 }
 
 func (r requiredNode) errs(raw []byte, at *loc, yield func(Error) bool) bool {
-	seen, ok := presenceMask(raw, r.names)
+	seen, ok := r.set.presenceOf(raw)
 	if !ok {
 		return true
 	}
-	for i, name := range r.names {
-		if seen&(1<<uint(i)) != 0 {
+	for i, name := range r.set.names {
+		if seen.has(i) {
 			continue
 		}
 		if !yield(Error{Location: at.String(), Keyword: "required", Message: strconv.Quote(name) + " is absent"}) {
@@ -197,12 +197,13 @@ func (o objectStructure) errs(raw []byte, at *loc, yield func(Error) bool) bool 
 	d := decoder(raw)
 	defer jx.PutDecoder(d)
 
-	var seen uint64
+	seen := o.set.newPresence()
 	stopped := false
 	if err := d.ObjBytes(func(d *jx.Decoder, key []byte) error {
 		if stopped {
 			return d.Skip()
 		}
+		field, declared := o.set.lookup(key)
 		name := string(key)
 		value, err := d.Raw()
 		if err != nil {
@@ -210,20 +211,16 @@ func (o objectStructure) errs(raw []byte, at *loc, yield func(Error) bool) bool 
 		}
 		child := at.child(name)
 
-		if _, declared := o.declared[name]; declared {
-			for i, f := range o.fields {
-				if f.name != name {
-					continue
-				}
-				seen |= 1 << uint(i)
-				if f.nullable && isNull(value) {
-					return nil
-				}
-				if !report(f.inner, value, &child, yield) {
-					stopped = true
-				}
+		if declared {
+			seen.set(field)
+			f := o.fields[field]
+			if f.nullable && isNull(value) {
 				return nil
 			}
+			if !report(f.inner, value, &child, yield) {
+				stopped = true
+			}
+			return nil
 		}
 
 		matched := false
@@ -255,7 +252,7 @@ func (o objectStructure) errs(raw []byte, at *loc, yield func(Error) bool) bool 
 		return false
 	}
 	for i, f := range o.fields {
-		if !f.required || seen&(1<<uint(i)) != 0 {
+		if !f.required || seen.has(i) {
 			continue
 		}
 		if !yield(Error{

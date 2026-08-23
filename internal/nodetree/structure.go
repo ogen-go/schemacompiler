@@ -25,45 +25,41 @@ type patternField struct {
 // pass over the instance's keys. It mirrors planterp's objectAgainst, but visits each key
 // once instead of building a map first.
 type objectStructure struct {
+	set        nameSet
 	fields     []fieldCheck
-	declared   map[string]struct{}
 	patterns   []patternField
 	additional node
-	// requiredMask has a bit per required field, matched against the bits set while
-	// walking the instance's keys. It replaces a per-instance map.
-	requiredMask uint64
+	// required has a bit per required field, matched against the bits set while walking
+	// the instance's keys. It replaces a per-instance map.
+	required presence
 }
 
 func (o objectStructure) ok(raw []byte) bool {
 	d := decoder(raw)
 	defer jx.PutDecoder(d)
 
-	var seen uint64
+	seen := o.set.newPresence()
 	valid := true
 	if err := d.ObjBytes(func(d *jx.Decoder, key []byte) error {
 		if !valid {
 			return d.Skip()
 		}
-		name := string(key)
-		if _, declared := o.declared[name]; declared {
-			for i, f := range o.fields {
-				if f.name != name {
-					continue
-				}
-				seen |= 1 << uint(i)
-				value, err := d.Raw()
-				if err != nil {
-					return err
-				}
-				if f.nullable && isNull(value) {
-					return nil
-				}
-				if !f.inner.ok(value) {
-					valid = false
-				}
+		if i, declared := o.set.lookup(key); declared {
+			seen.set(i)
+			f := o.fields[i]
+			value, err := d.Raw()
+			if err != nil {
+				return err
+			}
+			if f.nullable && isNull(value) {
 				return nil
 			}
+			if !f.inner.ok(value) {
+				valid = false
+			}
+			return nil
 		}
+		name := string(key)
 		value, err := d.Raw()
 		if err != nil {
 			return err
@@ -100,7 +96,7 @@ func (o objectStructure) ok(raw []byte) bool {
 	if !valid {
 		return false
 	}
-	return seen&o.requiredMask == o.requiredMask
+	return seen.covers(o.required)
 }
 
 func isNull(raw []byte) bool {

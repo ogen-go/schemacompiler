@@ -61,20 +61,14 @@ func (v *Validator) compileExpr(e plan.PredicateExpr) (node, error) {
 		return uniqueItems{}, nil
 
 	case plan.RequiredPredicate:
-		if len(e.Properties) > 64 {
-			return nil, errors.Wrapf(ErrUnsupported, "required with %d names", len(e.Properties))
-		}
-		var wanted uint64
-		for i := range e.Properties {
-			wanted |= 1 << uint(i)
-		}
-		return requiredNode{names: e.Properties, wanted: wanted}, nil
+		set := newNameSet(e.Properties)
+		return requiredNode{set: set, wanted: set.maskOf(e.Properties)}, nil
 	case plan.MinPropertiesPredicate:
 		return propertiesBound{bound: e.Value, isMin: true}, nil
 	case plan.MaxPropertiesPredicate:
 		return propertiesBound{bound: e.Value}, nil
 	case plan.DependentRequiredPredicate:
-		return dependentRequired{entries: e.Entries}, nil
+		return newDependentRequired(e.Entries), nil
 
 	case plan.ObjectStructurePredicate:
 		return v.compileObjectStructure(e)
@@ -119,13 +113,15 @@ func (v *Validator) compileExpr(e plan.PredicateExpr) (node, error) {
 }
 
 func (v *Validator) compileObjectStructure(e plan.ObjectStructurePredicate) (node, error) {
-	if len(e.Properties) > 64 {
-		return nil, errors.Wrapf(ErrUnsupported, "object structure with %d properties", len(e.Properties))
+	declared := make([]string, len(e.Properties))
+	for i, pc := range e.Properties {
+		declared[i] = pc.Name
 	}
-	o := objectStructure{declared: make(map[string]struct{}, len(e.Properties))}
+	o := objectStructure{set: newNameSet(declared)}
+	o.required = o.set.newPresence()
 	for i, pc := range e.Properties {
 		if pc.Presence == plan.PresenceRequired {
-			o.requiredMask |= 1 << uint(i)
+			o.required.set(i)
 		}
 		n, err := v.compilePlan(pc.Plan)
 		if err != nil {
@@ -137,7 +133,6 @@ func (v *Validator) compileObjectStructure(e plan.ObjectStructurePredicate) (nod
 			required: pc.Presence == plan.PresenceRequired,
 			nullable: pc.Nullable,
 		})
-		o.declared[pc.Name] = struct{}{}
 	}
 	for _, pc := range e.Patterns {
 		n, err := v.compilePlan(pc.Plan)

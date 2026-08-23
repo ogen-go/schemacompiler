@@ -1,6 +1,10 @@
 package planner
 
-import "github.com/ogen-go/schemacompiler/plan"
+import (
+	"fmt"
+
+	"github.com/ogen-go/schemacompiler/plan"
+)
 
 // anyPlan is the trivial plan for Any (schema `true`): every JSON value is accepted,
 // nothing to validate, dispatch, or resolve.
@@ -53,9 +57,9 @@ func maxCapability(a, b plan.CapabilityLevel) plan.CapabilityLevel {
 	return a
 }
 
-// mergeResolution combines several ResolutionPlans into their least-capable common form
-// (FullyResolved < StaticReferenceGraph < DynamicReferenceGraph), merging any static
-// definitions and dynamic anchors along the way.
+// mergeResolution combines several ResolutionPlans into the weakest form that still
+// serves all of them (FullyResolved < StaticReferenceGraph < DynamicReferenceGraph),
+// merging any static definitions and dynamic anchors along the way.
 func mergeResolution(parts ...plan.ResolutionPlan) plan.ResolutionPlan {
 	var (
 		dyn        bool
@@ -88,6 +92,13 @@ func mergeResolution(parts ...plan.ResolutionPlan) plan.ResolutionPlan {
 				}
 				dynAnchors[k] = append(dynAnchors[k], val...)
 			}
+		default:
+			// Falling through would return FullyResolved for a plan that needs a
+			// reference graph, and FullyResolved is the very claim being falsified: the
+			// backend would emit no resolution machinery at all (issue #63). There is no
+			// diagnostic channel here and no sound value to invent, so this fails loudly,
+			// as [planwalk.Children] does for the other plan variants.
+			panic(fmt.Sprintf("planner: unhandled plan.ResolutionPlan variant %T", p))
 		}
 	}
 	switch {

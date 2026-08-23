@@ -79,7 +79,7 @@ func (v *Validator) collectDefs(p plan.CompilationPlan) error {
 // not read (design §4.1).
 func (v *Validator) compilePlan(p plan.CompilationPlan) (node, error) {
 	var out all
-	for _, gp := range p.Validation.Predicates {
+	for _, gp := range withoutRestatedRequired(p.Validation.Predicates) {
 		n, err := v.compileGuarded(gp)
 		if err != nil {
 			return nil, err

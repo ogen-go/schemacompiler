@@ -67,3 +67,26 @@ func TestObjectStructureBeyondSixtyFourProperties(t *testing.T) {
 	require.True(t, v.IsValid([]byte(objectWith(decl))))
 	require.False(t, v.IsValid([]byte(`{"p69":"not an integer"}`)), "the 70th property is still checked")
 }
+
+// TestRestatedRequiredIsStillEnforced pins the behavior behind withoutRestatedRequired:
+// the structure keeps checking the names the standalone predicate stopped checking, and a
+// non-object is still nobody's business — both are guards.
+func TestRestatedRequiredIsStillEnforced(t *testing.T) {
+	v := compile(t, `{"type":"object","required":["a","b"],
+		"properties":{"a":{"type":"string"},"b":{"type":"integer"}}}`)
+
+	require.True(t, v.IsValid([]byte(`{"a":"x","b":1}`)))
+	require.False(t, v.IsValid([]byte(`{"a":"x"}`)), "b is required")
+	require.False(t, v.IsValid([]byte(`{"b":1}`)), "a is required")
+	require.False(t, v.IsValid([]byte(`{}`)))
+	require.False(t, v.IsValid([]byte(`[]`)), "the sibling type assertion still rejects a non-object")
+}
+
+// TestRequiredWithoutMatchingPropertyIsEnforced pins the case the drop must not reach: no
+// `properties` entry names it, so the standalone check is the only thing enforcing it.
+func TestRequiredWithoutMatchingPropertyIsEnforced(t *testing.T) {
+	v := compile(t, `{"type":"object","required":["a"],"properties":{"b":{"type":"string"}}}`)
+
+	require.True(t, v.IsValid([]byte(`{"a":1}`)))
+	require.False(t, v.IsValid([]byte(`{"b":"x"}`)), "a is required though undeclared")
+}

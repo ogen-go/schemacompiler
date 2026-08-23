@@ -58,8 +58,8 @@ func TestMetaSchemas(t *testing.T) {
 					errDiags++
 				}
 			}
-			t.Logf("%s: capability=%d exactness=%d diagnostics=%d (errors=%d)",
-				rel, res.Capability, res.Exactness, len(res.Diagnostics), errDiags)
+			t.Logf("%s: capability=%d fidelity=%s diagnostics=%d (errors=%d)",
+				rel, res.Capability, fidelityName(res), len(res.Diagnostics), errDiags)
 
 			if want, ok := metaExpect[rel]; ok {
 				require.Equal(t, want, res.Capability, "capability for %s", rel)

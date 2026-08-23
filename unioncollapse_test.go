@@ -138,5 +138,5 @@ func TestDeadEnumMemberDropped(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, same.Plan, dead.Plan)
 	require.Equal(t, same.Capability, dead.Capability)
-	require.Equal(t, same.Exactness, dead.Exactness)
+	require.Equal(t, same.Diagnostics, dead.Diagnostics)
 }

@@ -23,7 +23,7 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 		// Not a check: the keyword was left absent because its declared value was not one
 		// the spec admits, so the plan accepts instances the schema rejects and nothing in
 		// it closes the gap. The frontend already reported the keyword and where it was
-		// written ([frontend.InvalidKeyword]); all that is owed here is the exactness rung.
+		// written ([frontend.InvalidKeyword]); all that is owed here is the gap.
 		b.dropped = true
 		return mappedPredicate{}
 	case ir.MinLengthDetail:

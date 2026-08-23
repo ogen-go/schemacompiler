@@ -41,44 +41,32 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 	}
 }
 
-// exactnessOf derives the top-level Exactness from a finished plan's capability and
-// whether it carries residual validation (design §24, §25).
+// exactlyModeled reports whether p's accepted set is its schema's own, rather than a
+// superset of it (design §24). It is the one place the compiler judges its own fidelity,
+// and it is deliberately not reported: §25.1 retired the Exactness ladder because whether
+// the *generated program* reproduces the schema depends on the lowering — integer widths,
+// retained unknown properties, the regex engine — none of which the compiler chooses.
 //
-// Exactness is a property of the accepted set of the whole plan — representation ∧
-// dispatch ∧ validation — never of the representation alone. §24's contract is the
-// biconditional x ⊨ S ⟺ x ∈ ⟦G(S)⟧ ∧ V(S,x), so a representation wider than the schema
-// is exact whenever the residual validator closes the gap. That is what
-// [plan.ExactWithValidation] means, and it is the only thing distinguishing it from
-// [plan.ExactPureRepresentation]: `string` admits "ab" for `{"type":"string","minLength":3}`
-// exactly as `any` does for the bare `{"minLength":3}`, and the kind-guarded MinLength
-// rejects it in both (design §3, issue #95).
+// What survives is this internal boolean, because negation needs it. `not S` inverts the
+// approximation polarity of S (§8.2), so the standard over-approximating fallback would
+// turn into an under-approximation of the negation and reject valid instances. Only an
+// exactly modeled operand may be negated ([withResidualNegation]) or trusted through a
+// reference ([refTrusted]).
 //
-// [plan.SoundOverApproximation] is therefore reserved for a plan whose accepted set is a
-// strict superset of the schema's *after* validation runs, with the plan's own machinery
-// bounding the excess — today only an asserted discriminator, which trusts a declared tag
-// instead of proving the branches disjoint while every branch still validates. When
-// nothing bounds the excess the rung is [plan.DeclaredIncomplete] (issue #84).
+// A wider representation is not itself inexact: §24's contract is the biconditional
+// x ⊨ S ⟺ x ∈ ⟦G(S)⟧ ∧ V(S,x), so `string` for `{"type":"string","minLength":3}` is exact
+// once the kind-guarded MinLength runs (issue #95). Nor is cost: [plan.PredicateDispatch]
+// means match-counting is expensive, not approximate.
 //
-// g reports the gaps the plan's own structure does not show. A cost-only classification
-// never demotes exactness: [plan.PredicateDispatch] means match-counting or a residual
-// negation is expensive to run, not that it is approximate — the lowering contract on
-// [plan.PredicateCountDispatch] is exact, and [withResidualNegation] only emits a
-// negation over an exactly modeled operand.
-func exactnessOf(p plan.CompilationPlan, g gaps) plan.Exactness {
+// g reports the gaps p's own structure does not show, and both are disqualifying: an
+// asserted discriminator may route a mis-tagged instance to a branch that accepts it, and
+// a dropped constraint is closed by nothing at all.
+func exactlyModeled(p plan.CompilationPlan, g gaps) bool {
 	if p.Capability >= plan.EvaluationStateValidation {
-		return plan.UnsupportedConversion
+		return false
 	}
 	if _, never := p.Representation.(plan.NeverRepresentation); never {
-		return plan.ExactPureRepresentation
+		return true
 	}
-	if g.dropped {
-		return plan.DeclaredIncomplete
-	}
-	if g.asserted {
-		return plan.SoundOverApproximation
-	}
-	if len(plan.ResidualChecks(p.Representation, p.Validation)) == 0 && p.Capability == plan.DirectGoType {
-		return plan.ExactPureRepresentation
-	}
-	return plan.ExactWithValidation
+	return !g.dropped && !g.asserted
 }

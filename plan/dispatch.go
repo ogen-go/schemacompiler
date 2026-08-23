@@ -58,7 +58,7 @@ const (
 	// supplied the case values, but the branches only require the property without
 	// constraining it: dispatch trusts the declaration as the "hint to shortcut
 	// validation and selection" OAS 3.0.3 permits, and is not proven exact. Plans
-	// containing one report [SoundOverApproximation].
+	// containing one carry a [DiagnosticAssumed].
 	TagAsserted
 )
 

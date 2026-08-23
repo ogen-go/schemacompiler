@@ -94,7 +94,7 @@ schemacompiler            root: Compile / CompileSchema (*Result, error),       
                           CompileDocument (*DocumentResult, error), Options
   plan/                   output IR consumed by ogen: CompilationPlan, Representation, [public]
                           ValidationPlan, DispatchPlan, ResolutionPlan, Capability,
-                          Exactness, Diagnostic
+                          Requirements, Diagnostic
   internal/
     frontend/             libopenapi adapter, loader shim, resolver, ref-graph SCC
     ir/                   semantic Expr + KindSet + NumericDomain + semantic compile
@@ -126,7 +126,7 @@ Only `plan` and the root package are importable by ogen. Everything analytical i
 | 1 | `frontend` | libopenapi adapter, standalone loader, own `$ref`/`$id`/`$anchor`/JSON-Pointer + `$dynamicRef` resolution, resource registry, ref-graph SCC → guarded/unguarded recursion (§19) |
 | 2 | `ir` | `Expr`, `KindSet`, `NumericDomain`, `Compile(schema) Expr` — keyword→Expr as guarded predicates (§3, §6, §11–14) |
 | 3 | `norm` | rewrite/subsumption/disjointness/constraint-push/discriminator loop with expansion budget (§15–18) |
-| 4 | `planner` + `plan` | Representation/Validation/Dispatch/Resolution inference + recursive classify → Capability + Exactness + Diagnostics (§7–10, §22, §24, §25) |
+| 4 | `planner` + `plan` | Representation/Validation/Dispatch/Resolution inference + recursive classify → Capability + Requirements + Diagnostics (§7–10, §22, §24, §25) |
 | 5 | `conformance` | JSON-Schema-Test-Suite 2020-12 harness (no silent caps — log skips), e2e goldens, `plan → ogen gen/ir` integration notes |
 | 6 | root `document.go`, `compile_document.go` | whole-document `$ref` assembly: every `$ref` target compiled into `plan.StaticReferenceGraph.Definitions` on the root plan (`Compile`/`CompileSchema`) or into `DocumentResult.Plans` with `FullyResolved` per plan (`CompileDocument`), keyed by SchemaID; `Registry.RefTargets()` exposes the targets, and every plan's capability rolls up over what it references (§22) |
 

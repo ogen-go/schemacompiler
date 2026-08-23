@@ -5,7 +5,7 @@
 // the frontend, or the ir, and never re-derives a keyword's meaning from knowledge of
 // what the keyword was. A constraint that did not survive into the plan cannot be
 // enforced here, and the instance is accepted. That is the measurement — a plan that
-// claims exactness while accepting an invalid instance has lost a constraint.
+// reports no unenforced construct while accepting an invalid instance has lost one.
 //
 // Structure comes from [github.com/ogen-go/schemacompiler/internal/planwalk]: child
 // nodes and their [planwalk.Edge] payloads are enumerated there, so the binding guards

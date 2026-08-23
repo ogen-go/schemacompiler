@@ -131,7 +131,7 @@ func TestNullablePlan_SiblingsMayRejectNull(t *testing.T) {
 }
 
 // Nullability must not disturb discriminator dispatch at any of its three tiers: the same
-// schema with and without `nullable` reaches the same tier and the same exactness.
+// schema with and without `nullable` reaches the same tier and the same diagnostics.
 func TestNullablePlan_DiscriminatorTiers(t *testing.T) {
 	const proven = `"$defs": {
 		"Cat": {"type": "object", "required": ["kind"], "properties": {"kind": {"const": "cat"}}},
@@ -147,30 +147,28 @@ func TestNullablePlan_DiscriminatorTiers(t *testing.T) {
 	}`
 
 	for _, tt := range []struct {
-		name      string
-		defs      string
-		mapping   string
-		dispatch  string
-		exactness plan.Exactness
+		name     string
+		defs     string
+		mapping  string
+		dispatch string
+		assumed  bool
 	}{
 		{
-			name:      "Declared",
-			defs:      proven,
-			dispatch:  `PropertyDispatch property="kind" declared`,
-			exactness: plan.ExactWithValidation,
+			name:     "Declared",
+			defs:     proven,
+			dispatch: `PropertyDispatch property="kind" declared`,
 		},
 		{
-			name:      "Asserted",
-			defs:      asserted,
-			mapping:   `, "mapping": {"cat": "#/$defs/Cat", "dog": "#/$defs/Dog"}`,
-			dispatch:  `PropertyDispatch property="kind"` + "\n",
-			exactness: plan.SoundOverApproximation,
+			name:     "Asserted",
+			defs:     asserted,
+			mapping:  `, "mapping": {"cat": "#/$defs/Cat", "dog": "#/$defs/Dog"}`,
+			dispatch: `PropertyDispatch property="kind"` + "\n",
+			assumed:  true,
 		},
 		{
-			name:      "Unusable",
-			defs:      unusable,
-			dispatch:  "PredicateCountDispatch min=1 max=1",
-			exactness: plan.ExactWithValidation,
+			name:     "Unusable",
+			defs:     unusable,
+			dispatch: "PredicateCountDispatch min=1 max=1",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -183,8 +181,8 @@ func TestNullablePlan_DiscriminatorTiers(t *testing.T) {
 
 			require.Contains(t, withoutNull, tt.dispatch)
 			require.Contains(t, got, tt.dispatch)
-			require.Equal(t, tt.exactness, res.Exactness)
-			require.Equal(t, base.Exactness, res.Exactness)
+			require.Equal(t, tt.assumed, hasKind(res.Diagnostics, plan.DiagnosticAssumed))
+			require.Equal(t, base.Diagnostics, res.Diagnostics)
 			require.Equal(t, withoutNull, got)
 		})
 	}

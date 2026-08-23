@@ -102,7 +102,6 @@ func TestCompileDocumentDanglingTarget(t *testing.T) {
 
 	require.Equal(t, plan.Unsupported, res.Plans["/components/schemas/A"].Capability)
 	require.Equal(t, plan.DirectGoType, res.Plans["/components/schemas/B"].Capability)
-	require.Equal(t, plan.UnsupportedConversion, res.Exactness)
 
 	var named bool
 	for _, d := range res.Diagnostics {

@@ -8,10 +8,10 @@ import (
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
-// TestDiagnosticKindVocabulary walks one schema per kind and pins the rung each kind
-// implies, because that correspondence is the whole point of the field: a consumer reading
-// Kind learns what the diagnostic says about the accepted set without matching on message
-// text, and reads the same answer [plan.Exactness] gives for the plan as a whole (§24.1).
+// TestDiagnosticKindVocabulary walks one schema per kind and pins whether it means the
+// plan accepts more than its schema, because that is the whole point of the field: since
+// §25.1 retired the Exactness ladder, Kind is the only machine-readable answer to §24.1's
+// question, and it is per-construct where the ladder was per-plan.
 func TestDiagnosticKindVocabulary(t *testing.T) {
 	const assertedUnion = `{
 		"$defs": {
@@ -23,51 +23,49 @@ func TestDiagnosticKindVocabulary(t *testing.T) {
 	}`
 
 	for _, tt := range []struct {
-		name      string
-		schema    string
-		kind      plan.DiagnosticKind
-		severity  plan.Severity
-		exactness plan.Exactness
+		name        string
+		schema      string
+		kind        plan.DiagnosticKind
+		severity    plan.Severity
+		overAccepts bool
 	}{
 		{
-			name:      "advisory",
-			schema:    `{"allOf":[{"type":"string","format":"date-time"},{"format":"uuid"}]}`,
-			kind:      plan.DiagnosticAdvisory,
-			severity:  plan.SeverityInfo,
-			exactness: plan.ExactWithValidation,
+			name:     "advisory",
+			schema:   `{"allOf":[{"type":"string","format":"date-time"},{"format":"uuid"}]}`,
+			kind:     plan.DiagnosticAdvisory,
+			severity: plan.SeverityInfo,
 		},
 		{
-			name:      "cost",
-			schema:    `{"type":"array","contains":{"type":"string"},"minContains":2}`,
-			kind:      plan.DiagnosticCost,
-			severity:  plan.SeverityWarning,
-			exactness: plan.ExactWithValidation,
+			name:     "cost",
+			schema:   `{"type":"array","contains":{"type":"string"},"minContains":2}`,
+			kind:     plan.DiagnosticCost,
+			severity: plan.SeverityWarning,
 		},
 		{
-			name:      "assumed",
-			schema:    assertedUnion,
-			kind:      plan.DiagnosticAssumed,
-			severity:  plan.SeverityInfo,
-			exactness: plan.SoundOverApproximation,
+			name:        "assumed",
+			schema:      assertedUnion,
+			kind:        plan.DiagnosticAssumed,
+			severity:    plan.SeverityInfo,
+			overAccepts: true,
 		},
 		{
-			name:      "unenforced",
-			schema:    `{"type":"string","maxLength":2.5}`,
-			kind:      plan.DiagnosticUnenforced,
-			severity:  plan.SeverityError,
-			exactness: plan.DeclaredIncomplete,
+			name:        "unenforced",
+			schema:      `{"type":"string","maxLength":2.5}`,
+			kind:        plan.DiagnosticUnenforced,
+			severity:    plan.SeverityError,
+			overAccepts: true,
 		},
 		{
-			name:      "unsupported",
-			schema:    `{"type":"object","unevaluatedProperties":false}`,
-			kind:      plan.DiagnosticUnsupported,
-			severity:  plan.SeverityError,
-			exactness: plan.UnsupportedConversion,
+			name:        "unsupported",
+			schema:      `{"type":"object","unevaluatedProperties":false}`,
+			kind:        plan.DiagnosticUnsupported,
+			severity:    plan.SeverityError,
+			overAccepts: true,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			res := compileString(t, tt.schema)
-			require.Equal(t, tt.exactness, res.Exactness)
+			require.Equal(t, tt.overAccepts, overAccepts(res))
 
 			var found []plan.Diagnostic
 			for _, d := range res.Diagnostics {
@@ -87,5 +85,5 @@ func TestDiagnosticKindVocabulary(t *testing.T) {
 func TestDiagnosticKindSurvivesExactSchema(t *testing.T) {
 	res := compileString(t, `{"type":"string"}`)
 	require.Empty(t, res.Diagnostics)
-	require.Equal(t, plan.ExactPureRepresentation, res.Exactness)
+	require.False(t, overAccepts(res))
 }

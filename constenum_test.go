@@ -103,153 +103,152 @@ func TestCompileConstEnum(t *testing.T) {
 		dispatch   string
 		literals   []string
 		capability plan.CapabilityLevel
-		exactness  plan.Exactness
 	}{
 		// const, no sibling type.
 		{
 			name: "const string", schema: `{"const":"x"}`,
 			rep: "primitive:string", dispatch: "literal", literals: []string{`"x"`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const number", schema: `{"const":3}`,
 			rep: "primitive:number", dispatch: "literal", literals: []string{`3`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const null", schema: `{"const":null}`,
 			rep: "primitive:null", dispatch: "literal", literals: []string{`null`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const object", schema: `{"const":{"a":1}}`,
 			rep: "object", dispatch: "literal", literals: []string{`{"a":1}`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const array", schema: `{"const":[1,2]}`,
 			rep: "array", dispatch: "literal", literals: []string{`[1,2]`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 
 		// const with a sibling type: the literal must survive (issue #51).
 		{
 			name: "const string with type", schema: `{"type":"string","const":"x"}`,
 			rep: "primitive:string", dispatch: "literal", literals: []string{`"x"`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const integer with type", schema: `{"type":"integer","const":3}`,
 			rep: "primitive:number", dispatch: "literal", literals: []string{`3`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const null with type", schema: `{"type":"null","const":null}`,
 			rep: "primitive:null", dispatch: "literal", literals: []string{`null`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const object with type", schema: `{"type":"object","const":{"a":1}}`,
 			rep: "object", dispatch: "literal", literals: []string{`{"a":1}`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const array with type", schema: `{"type":"array","const":[1,2]}`,
 			rep: "array", dispatch: "literal", literals: []string{`[1,2]`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "const with type array", schema: `{"type":["string","number"],"const":"x"}`,
 			rep: "primitive:string", dispatch: "literal", literals: []string{`"x"`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 
 		// enum, no sibling type.
 		{
 			name: "enum strings", schema: `{"enum":["a","b"]}`,
 			rep: "union(primitive:string,primitive:string)", dispatch: "literal",
-			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum booleans", schema: `{"enum":[true,false]}`,
 			rep: "union(primitive:boolean,primitive:boolean)", dispatch: "literal",
-			literals: []string{`true`, `false`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`true`, `false`}, capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum single object", schema: `{"enum":[{"a":1}]}`,
 			rep: "object", dispatch: "literal", literals: []string{`{"a":1}`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 
 		// enum with a sibling type: every member must survive (issue #51).
 		{
 			name: "enum single string with type", schema: `{"type":"string","enum":["a"]}`,
 			rep: "primitive:string", dispatch: "literal", literals: []string{`"a"`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum single object with type", schema: `{"type":"object","enum":[{"a":1}]}`,
 			rep: "object", dispatch: "literal", literals: []string{`{"a":1}`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum single array with type", schema: `{"type":"array","enum":[[1]]}`,
 			rep: "array", dispatch: "literal", literals: []string{`[1]`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum single null with type", schema: `{"type":"null","enum":[null]}`,
 			rep: "primitive:null", dispatch: "literal", literals: []string{`null`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum objects with type", schema: `{"type":"object","enum":[{"a":1},{"a":2}]}`,
 			rep: "union(object,object)", dispatch: "literal",
-			literals: []string{`{"a":1}`, `{"a":2}`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`{"a":1}`, `{"a":2}`}, capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum arrays with type", schema: `{"type":"array","enum":[[1],[2]]}`,
 			rep: "union(array,array)", dispatch: "literal",
-			literals: []string{`[1]`, `[2]`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`[1]`, `[2]`}, capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum with type array", schema: `{"type":["string","null"],"enum":["a",null]}`,
 			rep: "union(primitive:string,primitive:null)", dispatch: "literal",
-			literals: []string{`"a"`, `null`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`"a"`, `null`}, capability: plan.StaticDispatch,
 		},
 
 		// enum members that are JSON-equal are one value (issue #53).
 		{
 			name: "enum numbers equal across notation", schema: `{"enum":[1,1.0]}`,
 			rep: "primitive:number", dispatch: "literal", literals: []string{`1`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum numbers equal across exponent", schema: `{"enum":[100,1e2]}`,
 			rep: "primitive:number", dispatch: "literal", literals: []string{`100`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum objects equal across member order", schema: `{"enum":[{"a":1,"b":2},{"b":2,"a":1}]}`,
 			rep: "object", dispatch: "literal", literals: []string{`{"a":1,"b":2}`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name:   "enum objects equal across nested number notation",
 			schema: `{"type":"object","enum":[{"a":1},{"a":1.0}]}`,
 			rep:    "object", dispatch: "literal", literals: []string{`{"a":1}`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum duplicate strings", schema: `{"enum":["a","a"]}`,
 			rep: "primitive:string", dispatch: "literal", literals: []string{`"a"`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			// Arrays are order-sensitive, so these are two distinct values.
 			name: "enum arrays differing in element order", schema: `{"enum":[[1,2],[2,1]]}`,
 			rep: "union(array,array)", dispatch: "literal",
-			literals: []string{`[1,2]`, `[2,1]`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`[1,2]`, `[2,1]`}, capability: plan.StaticDispatch,
 		},
 		{
 			// Beyond float64 precision: mathematically distinct, and must stay distinct.
@@ -257,7 +256,7 @@ func TestCompileConstEnum(t *testing.T) {
 			schema: `{"enum":[10000000000000000000000001,10000000000000000000000002]}`,
 			rep:    "union(primitive:number,primitive:number)", dispatch: "literal",
 			literals:   []string{`10000000000000000000000001`, `10000000000000000000000002`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 
 		{
@@ -265,33 +264,29 @@ func TestCompileConstEnum(t *testing.T) {
 			schema: `{"enum":[0.10000000000000000000000001,0.10000000000000000000000002]}`,
 			rep:    "union(primitive:number,primitive:number)", dispatch: "literal",
 			literals:   []string{`0.10000000000000000000000001`, `0.10000000000000000000000002`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			// oneOf over two spellings of one value is ExactlyOne(A, A) == Never
 			// (design §15.1), which only JSON-value equality can see.
 			name: "oneOf over json-equal consts", schema: `{"oneOf":[{"const":1},{"const":1.0}]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
-			exactness: plan.ExactPureRepresentation,
 		},
 
 		// A declared-but-empty enum accepts nothing (issue #52).
 		{
 			name: "empty enum", schema: `{"enum":[]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
-			exactness: plan.ExactPureRepresentation,
 		},
 		{
 			name: "empty enum with type", schema: `{"type":"string","enum":[]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
-			exactness: plan.ExactPureRepresentation,
 		},
 
 		// A const whose kind the sibling type excludes accepts nothing.
 		{
 			name: "const excluded by type", schema: `{"type":"string","const":1}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
-			exactness: plan.ExactPureRepresentation,
 		},
 
 		// An enum member the sibling type excludes is dead and must be dropped, not kept
@@ -299,32 +294,30 @@ func TestCompileConstEnum(t *testing.T) {
 		{
 			name: "enum no members excluded by type", schema: `{"type":"string","enum":["a","b"]}`,
 			rep: "union(primitive:string,primitive:string)", dispatch: "literal",
-			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum one member excluded by type", schema: `{"type":"string","enum":["a",1]}`,
 			rep: "primitive:string", dispatch: "literal", literals: []string{`"a"`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum some members excluded by type", schema: `{"type":"string","enum":["a",1,true,"b",null]}`,
 			rep: "union(primitive:string,primitive:string)", dispatch: "literal",
-			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			literals: []string{`"a"`, `"b"`}, capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum members excluded by integer type", schema: `{"type":"integer","enum":[1,"a"]}`,
 			rep: "primitive:number", dispatch: "literal", literals: []string{`1`},
-			capability: plan.StaticDispatch, exactness: plan.ExactWithValidation,
+			capability: plan.StaticDispatch,
 		},
 		{
 			name: "enum all members excluded by type", schema: `{"type":"string","enum":[1,2]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
-			exactness: plan.ExactPureRepresentation,
 		},
 		{
 			name: "enum all members excluded by object type", schema: `{"type":"object","enum":["a",1]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
-			exactness: plan.ExactPureRepresentation,
 		},
 	}
 	for _, tt := range tests {
@@ -335,7 +328,6 @@ func TestCompileConstEnum(t *testing.T) {
 			require.Equal(t, tt.dispatch, dispatchShape(res.Plan.Dispatch), "dispatch")
 			require.Equal(t, tt.literals, literalCaseValues(res.Plan.Dispatch), "literal cases")
 			require.Equal(t, tt.capability, res.Capability, "capability")
-			require.Equal(t, tt.exactness, res.Exactness, "exactness")
 			require.Empty(t, res.Plan.ResidualChecks(), "residual validation")
 			for _, d := range res.Diagnostics {
 				require.NotEqual(t, plan.SeverityWarning, d.Severity, "unexpected diagnostic: %s", d.Message)

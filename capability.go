@@ -65,17 +65,6 @@ func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan, positions 
 	return diags
 }
 
-// exactnessFor keeps a result's exactness consistent with its capability: nothing above
-// PredicateDispatch converts at all, so it cannot also claim an exact Go representation
-// (design §24, §25). The planner already pairs the two per plan; this re-establishes the
-// invariant after [rollUpCapabilities] raises a capability post-hoc.
-func exactnessFor(level plan.CapabilityLevel, observed plan.Exactness) plan.Exactness {
-	if level >= plan.EvaluationStateValidation {
-		return maxExactness(observed, plan.UnsupportedConversion)
-	}
-	return observed
-}
-
 func hasPlan(plans map[plan.SchemaID]plan.CompilationPlan, id plan.SchemaID) bool {
 	_, ok := plans[id]
 	return ok

@@ -96,7 +96,7 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 					t.Errorf("%s (%q): Compile returned a nil result with no error", f, c.Description)
 					return
 				}
-				dist[distKey{res.Capability, res.Exactness}]++
+				dist[distKey{res.Capability, fidelityName(res)}]++
 				reqs["RawEvaluation"] += len(res.Requirements.RawEvaluation)
 				reqs["UnboundedNumeric"] += len(res.Requirements.UnboundedNumeric)
 				reqs["JSONEquality"] += len(res.Requirements.JSONEquality)

@@ -47,7 +47,7 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 // branch whose accepted set is a *subset* of another branch's is unreachable and the wider
 // branch loses the overlap: normalization rewrites ExactlyOne(A, B) with B ⊆ A into
 // All(A, Not(B)) (design §15.2). Dropping that negation is what made the plan accept the
-// subsumed instances while reporting ExactWithValidation.
+// subsumed instances while reporting nothing unenforced.
 //
 // The operand is a `$ref`, which used to disqualify the negation outright. The target is
 // resolved and its own plan judged instead (issue #108), so the predicate survives and the
@@ -87,7 +87,7 @@ func TestBuild_SubsumedOneOfBranchIsExcluded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := buildNormalized(t, tt.doc)
 
-			require.Equal(t, plan.ExactWithValidation, got.Exactness,
+			require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced),
 				"the emitted negation rejects the subsumed instances the wider branch would accept")
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 			require.NotZero(t, countNegations(t, got.Plan),
@@ -110,7 +110,7 @@ func TestBuild_SubsumedOneOfBranchAmongThree(t *testing.T) {
 		`+subsetPetDefs+`}`)
 
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
-	require.Equal(t, plan.ExactWithValidation, got.Exactness)
+	require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced))
 	require.IsType(t, plan.PredicateCountDispatch{}, got.Plan.Dispatch)
 }
 
@@ -143,18 +143,18 @@ func TestBuild_DisjointNestedCombinatorBranchesStayStatic(t *testing.T) {
 	}
 }
 
-// TestBuild_NegationIsGatedOnNestedExactness pins issue #82. `not S` accepts exactly what
+// TestBuild_NegationIsGatedOnNestedFidelity pins issue #82. `not S` accepts exactly what
 // S rejects, so negation inverts the approximation polarity of its operand: a nested plan
 // that over-approximates S makes the negation *under*-approximate `not S` and reject valid
 // instances, which §24 never permits in either direction. The predicate is therefore
 // emitted only when the nested plan is exactly modeled; otherwise the negation is dropped,
 // which widens the outer plan (always sound) and is reported.
 //
-// The decision is the nested plan's own [plan.Exactness], one rung per row below, plus the
-// one case exactness cannot see: a reference, whose target is planned by a separate
+// The decision is [exactlyModeled] on the nested plan, one row per way it can go, plus the
+// one case that predicate cannot see: a reference, whose target is planned by a separate
 // [planner.BuildAt] call, so a reference reads as exact whatever its target turns out to be.
 // That half is decided by resolving the target and judging its plan instead (issue #108).
-func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
+func TestBuild_NegationIsGatedOnNestedFidelity(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		doc    string
@@ -162,19 +162,19 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 		emit   bool
 	}{
 		{
-			name:   "nested ExactPureRepresentation",
+			name:   "the nested type alone is exact",
 			doc:    `{"not": {"type": "integer"}}`,
 			reason: "the representation alone reproduces the schema, so negating it is exact too",
 			emit:   true,
 		},
 		{
-			name:   "nested ExactWithValidation",
+			name:   "the nested residual validator closes the gap",
 			doc:    `{"not": {"type": "string", "minLength": 3}}`,
 			reason: "the residual validator closes the representation's gap, so the accepted set is the schema's",
 			emit:   true,
 		},
 		{
-			name:   "nested ExactWithValidation through a match count",
+			name:   "the nested match count is priced, not approximated",
 			doc:    `{"not": {"type": "array", "contains": {"type": "string"}}}`,
 			reason: "PredicateDispatch prices the match count, it does not approximate it (#100)",
 			emit:   true,
@@ -198,7 +198,7 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 			emit:   true,
 		},
 		{
-			name: "nested SoundOverApproximation",
+			name: "the nested plan trusts an asserted discriminator",
 			doc: `{"not": {"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Dog"}],
 				"discriminator": {"propertyName": "petType",
 					"mapping": {"cat": "#/$defs/Dog", "dog": "#/$defs/Cat"}}}, ` +
@@ -207,14 +207,14 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 			emit:   false,
 		},
 		{
-			name: "nested DeclaredIncomplete",
+			name: "the nested plan already dropped a negation",
 			doc: `{"not": {"type": "object", "properties": {"a": {"not":
 				{"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}}}}}`,
 			reason: "the field's own negation is dropped, so nothing in the nested plan rejects what it should",
 			emit:   false,
 		},
 		{
-			name:   "nested UnsupportedConversion",
+			name:   "the nested plan does not model unevaluatedProperties",
 			doc:    `{"not": {"anyOf": [true, {"properties": {"foo": true}}], "unevaluatedProperties": false}}`,
 			reason: "unevaluatedProperties is not modeled, so the nested plan accepts more than the schema",
 			emit:   false,
@@ -239,12 +239,12 @@ func TestBuild_NegationIsGatedOnNestedExactness(t *testing.T) {
 			if tt.emit {
 				require.Equal(t, 1, countNegations(t, got.Plan), tt.reason)
 				require.Equal(t, plan.PredicateDispatch, got.Plan.Capability, tt.reason)
-				require.Equal(t, plan.ExactWithValidation, got.Exactness, tt.reason)
+				require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced), tt.reason)
 			} else {
 				require.Zero(t, countNegations(t, got.Plan), tt.reason)
 				require.Less(t, got.Plan.Capability, plan.PredicateDispatch,
 					"a dropped negation costs nothing at runtime")
-				require.Equal(t, plan.DeclaredIncomplete, got.Exactness,
+				require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced),
 					"nothing left in the plan rejects what the dropped negation would have (#84)")
 			}
 			require.True(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)

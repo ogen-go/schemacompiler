@@ -40,7 +40,6 @@ func TestBuild_DirectGoType(t *testing.T) {
 		got.Plan.Validation.Predicates)
 	require.Empty(t, got.Plan.ResidualChecks())
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
-	require.Equal(t, plan.ExactPureRepresentation, got.Exactness)
 	require.Empty(t, got.Diagnostics)
 }
 
@@ -55,7 +54,6 @@ func TestBuild_GoTypeWithValidation(t *testing.T) {
 
 	require.Equal(t, plan.PrimitiveRepresentation{Kind: plan.KindString}, got.Plan.Representation)
 	require.Equal(t, plan.GoTypeWithValidation, got.Plan.Capability)
-	require.Equal(t, plan.ExactWithValidation, got.Exactness)
 	require.Len(t, got.Plan.ResidualChecks(), 1)
 	require.Equal(t, plan.MinLengthPredicate{Value: 3}, got.Plan.ResidualChecks()[0].Expression)
 	require.Equal(t, plan.SetString, got.Plan.ResidualChecks()[0].Applicability)
@@ -72,7 +70,7 @@ func TestBuild_BarePredicateWidensToAny(t *testing.T) {
 
 	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.GoTypeWithValidation, got.Plan.Capability)
-	require.Equal(t, plan.ExactWithValidation, got.Exactness,
+	require.Empty(t, got.Diagnostics,
 		"the kind-guarded MinLength closes the gap the wider representation opens (#95)")
 }
 
@@ -161,8 +159,7 @@ func TestBuild_EvaluationStateValidation_UnevaluatedProperties(t *testing.T) {
 	got := planner.Build(e, nil)
 
 	require.Equal(t, plan.EvaluationStateValidation, got.Plan.Capability)
-	require.Equal(t, plan.UnsupportedConversion, got.Exactness)
-	require.NotEmpty(t, got.Diagnostics)
+	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnsupported))
 	require.Equal(t, plan.SeverityError, got.Diagnostics[0].Severity)
 }
 
@@ -175,8 +172,7 @@ func TestBuild_DynamicSchemaResolution(t *testing.T) {
 	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.DynamicSchemaResolution, got.Plan.Capability)
 	require.IsType(t, plan.DynamicReferenceGraph{}, got.Plan.Resolution)
-	require.Equal(t, plan.UnsupportedConversion, got.Exactness)
-	require.NotEmpty(t, got.Diagnostics)
+	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnsupported))
 	require.Equal(t, plan.SeverityError, got.Diagnostics[0].Severity)
 }
 
@@ -564,14 +560,12 @@ func TestBuild_Never(t *testing.T) {
 	got := planner.Build(ir.Never{}, nil)
 	require.Equal(t, plan.NeverRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
-	require.Equal(t, plan.ExactPureRepresentation, got.Exactness)
 }
 
 func TestBuild_Any(t *testing.T) {
 	got := planner.Build(ir.Any{}, nil)
 	require.Equal(t, plan.AnyRepresentation{}, got.Plan.Representation)
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
-	require.Equal(t, plan.ExactPureRepresentation, got.Exactness)
 }
 
 func TestBuild_Literal(t *testing.T) {
@@ -671,5 +665,4 @@ func TestBuild_IntegerCarriesItsDomain(t *testing.T) {
 	}, got.Plan.Validation.Predicates)
 	require.Empty(t, got.Plan.ResidualChecks())
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
-	require.Equal(t, plan.ExactPureRepresentation, got.Exactness)
 }

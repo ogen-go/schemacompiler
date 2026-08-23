@@ -139,6 +139,15 @@ func caseBranches(t *testing.T, cases []plan.LiteralCase) map[string]string {
 	return out
 }
 
+func hasKind(diags []plan.Diagnostic, k plan.DiagnosticKind) bool {
+	for _, d := range diags {
+		if d.Kind == k {
+			return true
+		}
+	}
+	return false
+}
+
 func hasSeverity(diags []plan.Diagnostic, s plan.Severity) bool {
 	for _, d := range diags {
 		if d.Severity == s {
@@ -510,13 +519,13 @@ func TestBuild_AssertedDiscriminatorIsStaticButInexact(t *testing.T) {
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, plan.TagAsserted, disp.Tag)
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
-	require.Equal(t, plan.SoundOverApproximation, got.Exactness)
+	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticAssumed))
 	require.True(t, hasSeverity(got.Diagnostics, plan.SeverityInfo))
 	require.False(t, hasWarning(got.Diagnostics), "diagnostics: %v", got.Diagnostics)
 }
 
 // TestBuild_ProvenDiscriminatorIsStatic is the top tier: a required const tag proves the
-// branches disjoint, so the plan may claim exactness.
+// branches disjoint, so nothing is assumed and no diagnostic is owed.
 func TestBuild_ProvenDiscriminatorIsStatic(t *testing.T) {
 	got := buildDoc(t, `{
 		"oneOf": [{"$ref": "#/$defs/Cat"}, {"$ref": "#/$defs/Dog"}],
@@ -531,7 +540,6 @@ func TestBuild_ProvenDiscriminatorIsStatic(t *testing.T) {
 	require.True(t, ok, "expected PropertyDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, plan.TagDeclared, disp.Tag)
 	require.Equal(t, plan.StaticDispatch, got.Plan.Capability)
-	require.Equal(t, plan.ExactWithValidation, got.Exactness)
 	require.Empty(t, got.Diagnostics)
 }
 
@@ -553,7 +561,6 @@ func TestBuild_UnrequiredDiscriminatorFallsBackToPredicateCount(t *testing.T) {
 	require.Equal(t, 1, disp.Minimum)
 	require.Equal(t, 1, disp.Maximum)
 	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
-	require.Equal(t, plan.ExactWithValidation, got.Exactness)
 	require.True(t, hasWarning(got.Diagnostics))
 }
 
@@ -600,9 +607,9 @@ func TestBuild_NestedDeclaredDiscriminators(t *testing.T) {
 	}
 }
 
-// TestBuild_NestedAssertedDiscriminatorCostsExactness checks the exactness rollup: an
+// TestBuild_NestedAssertedDiscriminatorIsAssumed checks the rollup: an
 // asserted dispatch anywhere in the plan makes the whole plan an over-approximation.
-func TestBuild_NestedAssertedDiscriminatorCostsExactness(t *testing.T) {
+func TestBuild_NestedAssertedDiscriminatorIsAssumed(t *testing.T) {
 	got := buildDoc(t, `{
 		"oneOf": [
 			{
@@ -632,7 +639,7 @@ func TestBuild_NestedAssertedDiscriminatorCostsExactness(t *testing.T) {
 	inner, ok := outer.Cases[0].Plan.Dispatch.(plan.PropertyDispatch)
 	require.True(t, ok, "expected a nested PropertyDispatch, got %T", outer.Cases[0].Plan.Dispatch)
 	require.Equal(t, plan.TagAsserted, inner.Tag)
-	require.Equal(t, plan.SoundOverApproximation, got.Exactness)
+	require.True(t, hasKind(got.Diagnostics, plan.DiagnosticAssumed))
 }
 
 // TestBuild_IdenticalBranchesAreUninhabited pins design §15.1: ExactlyOne(A, A) is Never,

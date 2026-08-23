@@ -33,8 +33,8 @@ package conformance
 // bound of 0.
 //
 // #95 added four entries: a plan whose representation is `any` and a plan classified
-// PredicateDispatch both used to report SoundOverApproximation, which the oracle exempts,
-// so nothing held them to anything. They report ExactWithValidation now, which made the
+// PredicateDispatch both used to declare over-acceptance, which the oracle exempts, so
+// nothing held them to anything. They declare nothing now, which made the
 // `min*` half of #74 visible — nine disagreements in all, of which #98 and #99 fixed five
 // outright before they could be quarantined.
 //

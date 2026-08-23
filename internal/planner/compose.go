@@ -33,7 +33,7 @@ func (b *builder) buildAll(all ir.All, path string) plan.CompilationPlan {
 // exactly what S rejects, so a nested plan that over-approximates S — this compiler's
 // standard safe fallback everywhere else — turns into an under-approximation of `not S`,
 // rejecting valid instances. That is the one direction §24 never permits, so the nested
-// plan's own [plan.Exactness] decides:
+// plan's own fidelity decides ([exactlyModeled]):
 //
 //   - exact (with or without a residual validator): emit the [plan.NegationPredicate].
 //     Evaluating it means running a whole sub-schema at runtime and inverting it, which is
@@ -41,8 +41,8 @@ func (b *builder) buildAll(all ir.All, path string) plan.CompilationPlan {
 //     is (internal/planner/validation.go, docs/implementation.md v1 scope).
 //   - anything else: drop the negation. Removing a conjunct only ever accepts a superset,
 //     which is a legitimate over-approximation, so the plan stays representable — but
-//     nothing left in it rejects the extra values, so the exactness becomes
-//     [plan.DeclaredIncomplete] rather than [plan.SoundOverApproximation] (issue #84).
+//     nothing left in it rejects the extra values, so the drop is reported as
+//     [plan.DiagnosticUnenforced] rather than [plan.DiagnosticAssumed] (issue #84).
 func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, path string) plan.CompilationPlan {
 	if len(nots) == 0 {
 		return p
@@ -51,7 +51,7 @@ func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, pa
 	for _, n := range nots {
 		before := b.gaps
 		sub := b.build(n.Operand, path+"/negated")
-		if !exactlyModeled(exactnessOf(sub, b.since(before))) || !b.negatable(sub, n.Operand) {
+		if !exactlyModeled(sub, b.since(before)) || !b.negatable(sub, n.Operand) {
 			dropped = true
 			continue
 		}
@@ -77,23 +77,17 @@ func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, pa
 	return p
 }
 
-// exactlyModeled reports whether e promises that the plan's accepted set is the schema's
-// own, which is what makes negating it sound.
-func exactlyModeled(e plan.Exactness) bool {
-	return e == plan.ExactPureRepresentation || e == plan.ExactWithValidation
-}
-
 // negatable reports whether p can be trusted to accept exactly what its schema accepts,
-// which is stricter than p's own [plan.Exactness] and is what negating it requires.
+// which is stricter than [exactlyModeled] and is what negating it requires.
 //
-// The gap [plan.Exactness] leaves is references: [buildRef] plans one from its identity
-// alone, so p reports the exactness of everything *except* its reference leaves. Each of
+// The gap [exactlyModeled] leaves is references: [buildRef] plans one from its identity
+// alone, so p reports the fidelity of everything *except* its reference leaves. Each of
 // those is resolved and judged on its target here (see [refsTrusted]).
 //
 // Object and array representations used to be excluded outright and no longer are: they
 // carry the whole sub-plan of a field or an item (#68), keep the shape when there is no
 // sibling `type` (#72), and scope `additionalProperties`/`items` to the names and indexes
-// their own schema object declared (#94), so their exactness is now what it says.
+// their own schema object declared (#94), so their fidelity is now what it says.
 func (b *builder) negatable(p plan.CompilationPlan, operand ir.Expr) bool {
 	if vacuous(p, operand) {
 		return false

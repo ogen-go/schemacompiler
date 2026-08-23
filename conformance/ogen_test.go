@@ -3,7 +3,7 @@
 // for today should compile here without ERROR or PANIC and always yield a plan.
 // This is sanity, not strict equality — ogen can have its own bugs or accept
 // OpenAPI-3.x-only constructs (nullable, discriminator) our 2020-12 converter simply
-// ignores — so capability/exactness are logged for human review, never asserted.
+// ignores — so capability/fidelity are logged for human review, never asserted.
 //
 // testdata/ogen/jsonschema/*.json is a verbatim copy of ogen's standalone
 // gen/_testdata/jsonschema/*.json corpus. Three of the six files (openapi30.json,
@@ -72,7 +72,7 @@ var knownOgenQuirks = map[string]string{
 
 // TestOgenCorpus walks every vendored ogen-derived schema and asserts Compile never
 // errors or panics and always returns a plan with a representation. Capability and
-// exactness are only logged (distribution + a review list of Unsupported-capability
+// fidelity are only logged (distribution + a review list of Unsupported-capability
 // or SeverityError-diagnostic files), never asserted against a manifest, since this
 // corpus is about "does it compile soundly", not "does it match an expected plan".
 func TestOgenCorpus(t *testing.T) {
@@ -108,7 +108,7 @@ func TestOgenCorpus(t *testing.T) {
 			require.NotNil(t, res, "Compile must return a non-nil result")
 			require.NotNil(t, res.Plan.Representation, "plan must carry a representation")
 
-			dist[distKey{res.Capability, res.Exactness}]++
+			dist[distKey{res.Capability, fidelityName(res)}]++
 			collectReview(&review, rel, res.Capability, res.Diagnostics)
 		})
 	}
@@ -342,7 +342,7 @@ func TestOgenLiveWalk(t *testing.T) {
 			require.NotNil(t, res, "Compile must return a non-nil result")
 			require.NotNil(t, res.Plan.Representation, "plan must carry a representation")
 
-			dist[distKey{res.Capability, res.Exactness}]++
+			dist[distKey{res.Capability, fidelityName(res)}]++
 			collectReview(&review, rel, res.Capability, res.Diagnostics)
 		})
 	}

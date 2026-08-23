@@ -18,19 +18,16 @@ func TestCompile(t *testing.T) {
 		name       string
 		schema     string
 		capability plan.CapabilityLevel
-		exactness  plan.Exactness
 	}{
 		{
 			name:       "direct string",
 			schema:     `{"type": "string"}`,
 			capability: plan.DirectGoType,
-			exactness:  plan.ExactPureRepresentation,
 		},
 		{
 			name:       "string with validation",
 			schema:     `{"type": "string", "minLength": 3}`,
 			capability: plan.GoTypeWithValidation,
-			exactness:  plan.ExactWithValidation,
 		},
 		{
 			name:       "kind-disjoint oneOf",
@@ -49,9 +46,6 @@ func TestCompile(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, res)
 			require.Equal(t, tt.capability, res.Capability, "capability")
-			if tt.exactness != 0 || tt.capability == plan.DirectGoType {
-				require.Equal(t, tt.exactness, res.Exactness, "exactness")
-			}
 		})
 	}
 }

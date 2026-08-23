@@ -111,7 +111,7 @@ func TestRefConjunctionKeepsEveryMember(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			res, err := compileQuietly(json.RawMessage(tt.schema))
 			require.NoError(t, err)
-			require.Less(t, res.Exactness, plan.UnsupportedConversion)
+			require.Less(t, res.Capability, plan.EvaluationStateValidation)
 
 			value, err := decodeInstance(json.RawMessage(tt.instance))
 			require.NoError(t, err)

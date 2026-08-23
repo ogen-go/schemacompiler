@@ -94,7 +94,12 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 			Resolution: sub.Resolution,
 		}
 	default:
-		b.diag(path, plan.DiagnosticUnenforced, plan.SeverityWarning, "unrecognized predicate detail, dropped")
-		return mappedPredicate{}
+		// A detail this switch does not know cannot be lowered, and dropping it silently
+		// would let the plan accept what the schema rejects at DirectGoType — §24 requires
+		// an unlowerable constraint to raise the capability, not to vanish (issue #64).
+		// [ir.AllPredicateDetails] is what keeps this unreachable.
+		b.diag(path, plan.DiagnosticUnsupported, plan.SeverityError,
+			"unrecognized predicate detail; the constraint is not enforced and the plan cannot be generated")
+		return mappedPredicate{Capability: plan.Unsupported}
 	}
 }

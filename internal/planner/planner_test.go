@@ -666,3 +666,34 @@ func TestBuild_IntegerCarriesItsDomain(t *testing.T) {
 	require.Empty(t, got.Plan.ResidualChecks())
 	require.Equal(t, plan.DirectGoType, got.Plan.Capability)
 }
+
+// TestBuild_NumericDomainIsNumbersOnly pins issue #69. The numeric domain is a property of
+// the components set, not of one kind, so a `type` listing a number alongside anything else
+// used to copy it onto every branch: `{"type":["string","integer"]}` produced a string
+// representation carrying an integer domain.
+//
+// Harmless for a backend that reads Numeric only when Kind is KindNumber, but the plan is
+// the contract, and the two axes of design §6 are separate for a reason — assertKind
+// already emits the domain predicate for numbers alone.
+func TestBuild_NumericDomainIsNumbersOnly(t *testing.T) {
+	got := planner.Build(ir.All{Operands: []ir.Expr{
+		ir.Kinds{Set: plan.SetString | plan.SetNumber | plan.SetNull, Numeric: plan.IntegerOnly},
+	}}, nil)
+
+	union, ok := got.Plan.Representation.(plan.UnionRepresentation)
+	require.True(t, ok, "got %T", got.Plan.Representation)
+
+	var sawNumber bool
+	for _, alt := range union.Alternatives {
+		prim, ok := alt.(plan.PrimitiveRepresentation)
+		require.True(t, ok, "got %T", alt)
+		if prim.Kind == plan.KindNumber {
+			sawNumber = true
+			require.Equal(t, plan.IntegerOnly, prim.Numeric)
+			continue
+		}
+		require.Equal(t, plan.AnyNumber, prim.Numeric,
+			"kind %v must not carry a numeric domain", prim.Kind)
+	}
+	require.True(t, sawNumber, "the number branch must still carry the domain")
+}

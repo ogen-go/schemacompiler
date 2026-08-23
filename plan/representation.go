@@ -15,8 +15,9 @@ type NeverRepresentation struct{}
 // PrimitiveRepresentation is a single scalar kind, optionally refined for numbers and
 // by a `format` (design §7).
 type PrimitiveRepresentation struct {
-	Kind    JSONKind
-	Numeric NumericDomain // meaningful only when Kind == KindNumber
+	Kind JSONKind
+	// Numeric is AnyNumber unless Kind is KindNumber (issue #69).
+	Numeric NumericDomain
 	// Format is the `format` annotation applying to this kind, as written. The compiler
 	// assigns it no meaning: choosing a Go type for a name is a backend decision. The
 	// matching [FormatPredicate] stays in the validation plan regardless, so a backend

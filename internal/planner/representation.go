@@ -196,12 +196,17 @@ func (b *builder) buildScalar(kind plan.JSONKind, c components, path string) pla
 		}
 	}
 
+	// The numeric domain belongs to numbers alone (issue #69). c.numeric is the domain of
+	// the whole components set, so on a `type: ["string", "integer"]` the string branch
+	// would otherwise carry the integer branch's domain across the union.
+	numeric := plan.AnyNumber
 	if kind == plan.KindNumber {
+		numeric = c.numeric
 		b.requireNumericBound(val, path)
 	}
 	rep := plan.Representation(plan.PrimitiveRepresentation{
 		Kind:    kind,
-		Numeric: c.numeric,
+		Numeric: numeric,
 		Format:  b.pickFormat(formats, path),
 	})
 	var disp plan.DispatchPlan = plan.NoDispatch{}

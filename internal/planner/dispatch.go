@@ -77,9 +77,9 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 		cases, tag, reason := b.declaredDispatchCases(disc, branchExprs)
 		switch {
 		case reason != "":
-			b.diag(path, plan.SeverityWarning, reason+"; falling back to structural analysis")
+			b.diag(path, plan.DiagnosticAdvisory, plan.SeverityWarning, reason+"; falling back to structural analysis")
 		case tag == plan.TagAsserted:
-			b.diag(path, plan.SeverityInfo,
+			b.diag(path, plan.DiagnosticAssumed, plan.SeverityInfo,
 				"discriminator dispatch relies on the declared mapping; branches are not provably disjoint")
 			return b.buildPropertyDispatch(disc.PropertyName, cases, tag, path)
 		default:
@@ -108,7 +108,7 @@ func (b *builder) buildUnionWithContext(k plan.KindSet, combinator ir.Expr, ctx 
 	if isOneOf {
 		maximum = 1
 	}
-	b.diag(path, plan.SeverityWarning,
+	b.diag(path, plan.DiagnosticCost, plan.SeverityWarning,
 		"union alternatives overlap; requires predicate-count dispatch")
 	return b.buildPredicateCountDispatch(branchExprs, minimum, maximum, path)
 }

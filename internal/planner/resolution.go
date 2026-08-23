@@ -18,7 +18,7 @@ func (b *builder) buildRef(v ir.Ref, path string) plan.CompilationPlan {
 		class = b.recur[v.Target]
 	}
 	if class == frontend.Unguarded {
-		b.diag(path, plan.SeverityError,
+		b.diag(path, plan.DiagnosticUnsupported, plan.SeverityError,
 			"unguarded recursive $ref: every cycle avoids an instance-descent edge, no structural base case")
 		capLevel = plan.Unsupported
 	}
@@ -38,7 +38,7 @@ func (b *builder) buildRef(v ir.Ref, path string) plan.CompilationPlan {
 // AnyRepresentation (design §24 invariant 4: never guess a narrow representation) and
 // is classified Unsupported-adjacent DynamicSchemaResolution.
 func (b *builder) buildDynamicRef(_ ir.DynamicRef, path string) plan.CompilationPlan {
-	b.diag(path, plan.SeverityError, "$dynamicRef target depends on dynamic scope")
+	b.diag(path, plan.DiagnosticUnsupported, plan.SeverityError, "$dynamicRef target depends on dynamic scope")
 	return plan.CompilationPlan{
 		Representation: plan.AnyRepresentation{},
 		Dispatch:       plan.NoDispatch{},

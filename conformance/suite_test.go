@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ogen-go/schemacompiler"
+	"github.com/ogen-go/schemacompiler/plan"
 )
 
 // suiteRoot is where the JSON-Schema-Test-Suite submodule would live, relative to
@@ -52,6 +53,7 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 		"RawEvaluation": 0, "UnboundedNumeric": 0, "JSONEquality": 0,
 		"ECMARegex": 0, "EvaluationTracking": 0,
 	}
+	kinds := make(map[plan.DiagnosticKind]int)
 	var attempted, errored, panicked int
 	var errSamples []string
 	for _, f := range files {
@@ -100,6 +102,9 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 				reqs["JSONEquality"] += len(res.Requirements.JSONEquality)
 				reqs["ECMARegex"] += len(res.Requirements.ECMARegex)
 				reqs["EvaluationTracking"] += len(res.Requirements.EvaluationTracking)
+				for _, d := range res.Diagnostics {
+					kinds[d.Kind]++
+				}
 			}()
 		}
 	}
@@ -122,6 +127,13 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 		require.NotZero(t, n, "no suite schema reports %s; the rule has stopped firing", slot)
 	}
 
+	reportDiagnosticKinds(t, kinds)
+
+	// §24.1 is only machine-checkable if every diagnostic says which side of it it falls
+	// on, so an unclassified one is a defect wherever it comes from.
+	require.Zero(t, kinds[plan.DiagnosticUnclassified],
+		"%d suite diagnostics carry no Kind", kinds[plan.DiagnosticUnclassified])
+
 	// Hard guards: never panic, and the error rate must stay well under a ceiling so a
 	// broad regression (a change that breaks Compile on many schemas) still fails loudly.
 	require.Zero(t, panicked, "Compile must never panic on a suite schema")
@@ -143,6 +155,29 @@ func reportRequirements(t *testing.T, reqs map[string]int) {
 	b.WriteString("requirements reported over the suite:\n")
 	for _, slot := range slots {
 		fmt.Fprintf(&b, "  %-20s %d\n", slot, reqs[slot])
+	}
+	t.Log(b.String())
+}
+
+// reportDiagnosticKinds logs how the suite's diagnostics divide between saying the plan
+// accepts more than its schema and saying it costs more to run (design §24.1).
+func reportDiagnosticKinds(t *testing.T, kinds map[plan.DiagnosticKind]int) {
+	t.Helper()
+
+	var b strings.Builder
+	b.WriteString("diagnostic kinds:\n")
+	for _, e := range []struct {
+		kind plan.DiagnosticKind
+		name string
+	}{
+		{plan.DiagnosticUnclassified, "unclassified"},
+		{plan.DiagnosticAdvisory, "advisory"},
+		{plan.DiagnosticCost, "cost"},
+		{plan.DiagnosticAssumed, "assumed"},
+		{plan.DiagnosticUnenforced, "unenforced"},
+		{plan.DiagnosticUnsupported, "unsupported"},
+	} {
+		fmt.Fprintf(&b, "  %-20s %d\n", e.name, kinds[e.kind])
 	}
 	t.Log(b.String())
 }

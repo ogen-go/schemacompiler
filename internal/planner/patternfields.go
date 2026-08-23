@@ -47,7 +47,7 @@ func (b *builder) constraintsFor(name string, os ir.ObjectShape, path string) []
 			// object's `additionalProperties` covers the name, so that is dropped too.
 			b.dropped = true
 			undecided = true
-			b.diag(path, plan.SeverityWarning, "patternProperties pattern "+strconv.Quote(pp.Pattern)+
+			b.diag(path, plan.DiagnosticUnenforced, plan.SeverityWarning, "patternProperties pattern "+strconv.Quote(pp.Pattern)+
 				" could not be matched as ECMA-262 ("+err.Error()+"); "+
 				"it is not intersected into the properties it may match")
 		}

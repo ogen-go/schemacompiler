@@ -37,6 +37,7 @@ func rollUpCapabilities(plans map[plan.SchemaID]plan.CompilationPlan, positions 
 				diags = append(diags, plan.Diagnostic{
 					Pointer:  string(id),
 					Position: positions[id],
+					Kind:     plan.DiagnosticUnsupported,
 					Severity: plan.SeverityError,
 					Message:  "reference " + string(target) + " resolves to no compiled schema",
 				})

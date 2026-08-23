@@ -24,7 +24,7 @@ func (b *builder) withResidualConjuncts(k plan.KindSet, base plan.CompilationPla
 	if validationOnly(sub) {
 		return mergePlans(base, sub)
 	}
-	b.diag(path, plan.SeverityInfo,
+	b.diag(path, plan.DiagnosticAdvisory, plan.SeverityInfo,
 		"$ref conjoined with further constraints: enforced against the instance, not merged into the referenced type")
 	base.Validation.Predicates = append(base.Validation.Predicates, plan.GuardedPredicate{
 		Applicability: plan.SetAny,

@@ -322,7 +322,7 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 	if merged.unevaluated {
 		// v1 scope (docs/implementation.md): no evaluated-annotation tracking engine.
 		b.require(&b.reqs.EvaluationTracking, path, "unevaluatedProperties")
-		b.diag(path, plan.SeverityError, "unevaluatedProperties requires evaluated-property tracking")
+		b.diag(path, plan.DiagnosticUnsupported, plan.SeverityError, "unevaluatedProperties requires evaluated-property tracking")
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}
 
@@ -383,7 +383,7 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 
 	if merged.unevaluated {
 		b.require(&b.reqs.EvaluationTracking, path, "unevaluatedItems")
-		b.diag(path, plan.SeverityError, "unevaluatedItems requires evaluated-item tracking")
+		b.diag(path, plan.DiagnosticUnsupported, plan.SeverityError, "unevaluatedItems requires evaluated-item tracking")
 		capLevel = maxCapability(capLevel, plan.EvaluationStateValidation)
 	}
 

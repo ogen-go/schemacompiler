@@ -64,7 +64,7 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 		}
 		// contains/minContains/maxContains match-counting is representable but flagged
 		// (docs/implementation.md v1 scope): keep the plan, note the runtime cost.
-		b.diag(path, plan.SeverityWarning,
+		b.diag(path, plan.DiagnosticCost, plan.SeverityWarning,
 			"contains/minContains/maxContains requires runtime match-count validation")
 		return mappedPredicate{
 			Expr:       plan.ContainsCountPredicate{Schema: sub, Min: minCount, Max: d.Max},
@@ -94,7 +94,7 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 			Resolution: sub.Resolution,
 		}
 	default:
-		b.diag(path, plan.SeverityWarning, "unrecognized predicate detail, dropped")
+		b.diag(path, plan.DiagnosticUnenforced, plan.SeverityWarning, "unrecognized predicate detail, dropped")
 		return mappedPredicate{}
 	}
 }

@@ -103,7 +103,7 @@ func (b *builder) mergePatternRules(objects []ir.ObjectShape, path string) []ir.
 			}
 			if len(other.PatternProperties) > 0 {
 				b.dropped = true
-				b.diag(path, plan.SeverityWarning, "two conjoined schema objects both declare patternProperties; "+
+				b.diag(path, plan.DiagnosticUnenforced, plan.SeverityWarning, "two conjoined schema objects both declare patternProperties; "+
 					"the additionalProperties of one is not intersected into the pattern rules of the other")
 				continue
 			}

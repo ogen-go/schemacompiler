@@ -99,10 +99,11 @@ func newBuilder(reg *frontend.Registry) *builder {
 }
 
 // diag records a diagnostic (issue #21). path is relative to the origin schema.
-func (b *builder) diag(path string, sev plan.Severity, msg string) {
+func (b *builder) diag(path string, kind plan.DiagnosticKind, sev plan.Severity, msg string) {
 	b.diags = append(b.diags, plan.Diagnostic{
 		Pointer:  b.origin.Pointer + path,
 		Position: b.origin.Position,
+		Kind:     kind,
 		Severity: sev,
 		Message:  msg,
 	})
@@ -160,7 +161,7 @@ func (b *builder) build(e ir.Expr, path string) plan.CompilationPlan {
 		return b.build(v.Expr, path)
 	default:
 		// Unrecognized node: widen soundly rather than guess (design §24 invariant 4).
-		b.diag(path, plan.SeverityWarning, "unrecognized expression node, widened to any")
+		b.diag(path, plan.DiagnosticUnenforced, plan.SeverityWarning, "unrecognized expression node, widened to any")
 		return anyPlan()
 	}
 }

@@ -54,7 +54,7 @@ implementation of this — but it must be a rejection, not a coercion.
 | A property matched by both a `Fields` entry and a `PatternRules` pattern | The declared **field owns** the name; the pattern rule is not additionally run against it. | The plan states one storage slot per property, and the planner has already intersected every matching pattern schema into that field's own plan (design §12.3). Running the rule again would double-apply it. |
 | `PresenceDispatch` against a non-object | **Accepts.** | It comes from `dependentSchemas`, which applies to objects only (design §12.7), but a `DispatchPlan` carries no kind guard the way a `GuardedPredicate` does. A dispatch that cannot select cannot reject. |
 | `KindDispatch` with no case for the instance's kind | **Rejects.** | Unlike the row above, the dispatch *can* select and declines to: the kinds in `Cases` are the kinds admitted. `Cases` is not required to cover every kind the paired representation admits. |
-| A `ReferenceRepresentation` inside a nested plan | Resolve against the **root** plan's `Resolution`. | Only the root plan carries a populated `StaticReferenceGraph`; every nested plan gets `StaticReferenceGraph{}` with empty `Definitions` (§5, §8). A nested plan's `Resolution` is not a second copy of the graph, and reading it as one resolves nothing. |
+| A `ReferenceRepresentation` inside a nested plan | Resolve against the **root** plan's `Resolution`. | Only the root plan carries a populated `StaticReferenceGraph`; every nested plan gets `StaticReferenceGraph{}` with empty `Definitions` (§5, §9). A nested plan's `Resolution` is not a second copy of the graph, and reading it as one resolves nothing. |
 
 `internal/planterp` is the executable form of this section: it interprets a plan as a
 JSON validator and nothing else, and the conformance harness differentially tests it
@@ -414,8 +414,8 @@ predicate, which is the acceptance bug the wrapper exists to prevent.
 
 | `plan.ResolutionPlan` | Generator behavior |
 |---|---|
-| `FullyResolved` | Normal lowering, no residual reference machinery. Every plan `CompileDocument` returns carries this: the document's graph is `DocumentResult.Plans`, not a per-plan copy (§8). |
-| `StaticReferenceGraph{Definitions}` | Each `SchemaID → CompilationPlan` entry becomes one named type generated once and referenced elsewhere (`ReferenceRepresentation`/`KindAlias`, §1), matching ogen's existing "one Go type per resolved schema" pass. `Compile`/`CompileSchema` attach it to the root plan; `CompileDocument` hands back the equivalent map as `DocumentResult.Plans` (§8). |
+| `FullyResolved` | Normal lowering, no residual reference machinery. Every plan `CompileDocument` returns carries this: the document's graph is `DocumentResult.Plans`, not a per-plan copy (§9). |
+| `StaticReferenceGraph{Definitions}` | Each `SchemaID → CompilationPlan` entry becomes one named type generated once and referenced elsewhere (`ReferenceRepresentation`/`KindAlias`, §1), matching ogen's existing "one Go type per resolved schema" pass. `Compile`/`CompileSchema` attach it to the root plan; `CompileDocument` hands back the equivalent map as `DocumentResult.Plans` (§9). |
 | `DynamicReferenceGraph{StaticDefinitions, DynamicAnchors}` | **Not representable.** `$dynamicRef` resolution depends on the runtime dynamic-scope stack (design §10.2, §19); ogen has no runtime schema-resolution engine (`gen` never references `unevaluatedProperties` or `dynamicRef` — confirmed by source search) and no typed error exists for it yet. The generator must refuse and surface the plan's diagnostic, following the same clean-failure pattern ogen already uses for other unsupported constructs (`ErrNotImplemented` in `gen/schema_gen_sum.go:341`, `gen/gen_security.go:111`; `ErrUnsupportedContentTypes` in `gen/errors.go:60,133`) rather than attempting a partial/unsound lowering. |
 
 ## 6. Capability gate
@@ -442,7 +442,7 @@ There is no `Exactness` field, and there deliberately is not one (design §25.1)
 widths, whether unknown properties are retained, which regex engine runs — none of which the
 compiler chooses, so a compiler-side exactness value is a claim it is not in a position to
 make. What the compiler reports instead is two things a backend cannot derive for itself:
-`plan.Requirements`, the checks the lowering must discharge, and `Diagnostic.Kind`, the
+`Requirements` (§7), the checks the lowering must discharge, and `Diagnostic.Kind`, the
 constructs it failed to enforce.
 
 `Capability` and `Diagnostic.Kind` answer different questions — *can this be lowered at all*
@@ -463,7 +463,7 @@ decides whether to generate, the diagnostics decide what the generated code is w
 | `DiagnosticUnsupported` | No sound conversion exists for the construct. Always paired with a capability past `PredicateDispatch`, so the gate below refuses these anyway. | Refuse; surface the diagnostic. |
 
 A plan carrying no diagnostic of the last three kinds accepts exactly what its schema does,
-to the extent the lowering discharges `plan.Requirements`.
+to the extent the lowering discharges its `Requirements` (§7).
 
 | `CapabilityLevel` | ogen generation | Rationale |
 |---|---|---|
@@ -475,7 +475,79 @@ to the extent the lowering discharges `plan.Requirements`.
 | `DynamicSchemaResolution` | **No — refuse** | Same: no dynamic-scope resolution engine exists or is planned for v1. |
 | `Unsupported` | **No — refuse** | No sound conversion exists at all (e.g. an unguarded reference cycle, design §19); always carries a `SeverityError` diagnostic explaining why. |
 
-## 7. Metadata → godoc, defaults, and extensions
+## 7. Requirements → what the lowering must discharge
+
+`Result.Requirements` / `DocumentResult.Requirements` (`plan/requirements.go`) name the
+places where a lowering decision decides whether the generated program reproduces the
+schema's accepted set. §6 says whether a plan can be generated at all; this says what the
+generated code has to do to be correct once it is.
+
+It exists because the compiler chooses none of that (design §25.1). How integers are
+sized, whether unknown properties are retained, which regex engine runs at validation
+time — all of it belongs to the backend, so an exactness verdict was never the compiler's
+to give. What it can do is point at the decisions.
+
+Each entry is a `plan.Location{Pointer, Position, Detail}`: the JSON Pointer of the schema
+the requirement arises from (the same pointer space `Diagnostic.Pointer` uses), the source
+position when the parser retained one, and a short `Detail` naming the construct so a
+report needs no re-derivation. Slots are sorted by pointer then detail, so the field is
+stable across runs.
+
+| Slot | Reports | Discharged by | If ignored |
+|---|---|---|---|
+| `RawEvaluation` | Checks that inspect something decoding discards, so they cannot be evaluated against the decoded Go value alone (design §24.3). | Running the check against the raw JSON, or retaining what would be dropped. | The check silently measures the wrong thing. |
+| `UnboundedNumeric` | Numeric slots the schema does not bound, so a fixed-width Go type narrows them (design §24.2). | Choosing a type that holds every value the schema admits, or **declaring** the narrowing. | Values the schema accepts overflow or lose precision, unreported. |
+| `JSONEquality` | Checks defined by equality of JSON *values*, not of the decoded Go value. | Comparing at the JSON level. | The check rejects instances the schema accepts. |
+| `ECMARegex` | Patterns RE2 does not read the same way (design §11.10). | An ECMA-262 engine — `github.com/dlclark/regexp2` in `regexp2.ECMAScript` mode is what this repo and ogen's runtime use. | The pattern enforces something other than what the author wrote, in either direction. |
+| `EvaluationTracking` | Checks needing evaluated-location annotations: `unevaluatedProperties`, `unevaluatedItems`. | Annotation tracking through the whole applicator tree. | Nothing — the plan that produced the entry always has a capability past `PredicateDispatch`, so §6 already refuses it. Attribute by `Location.Pointer` (§7.2): other plans in the same document are unaffected. |
+
+**Every slot over-reports on purpose.** A backend that handles a requirement it did not
+strictly need is correct; one that misses a real requirement is wrong *and silent*, which
+is §24.3's third failure mode — a storage decision below a check quietly turning into a
+§24.1 violation above it. `ECMARegex` is the clearest case: whether a given `\d` actually
+diverges between the two engines is undecidable, so the escape is reported as written.
+`^[a-z]+$` and `^[\t ]$` are not listed.
+
+The converse also holds, and is what keeps the field readable: a requirement the compiler
+can discharge statically is **not** reported. `{"type":"integer","maximum":1000}` is
+provably adequate as an `int64`, so it does not appear in `UnboundedNumeric`; bare
+`{"type":"integer"}` does. A slot that listed every numeric field would train a consumer
+to ignore it.
+
+### 7.1. `RawEvaluation` — the one that catches ogen
+
+This is the slot a struct-generating backend has to read, because ogen's natural lowering
+is exactly the thing it warns about: a generated struct has fields for the declared
+properties and drops everything else, and several keywords are defined over the properties
+that were dropped.
+
+| Construct | Why the decoded value is not enough |
+|---|---|
+| `minProperties` / `maxProperties` | The count is over the instance's properties, undeclared ones included. A struct has already discarded them, so the count comes out low. |
+| `propertyNames` | Applies to every property name in the instance, undeclared ones included. |
+| `additionalProperties: false` | Rejects undeclared names — precisely the information a struct throws away, so nothing is left to reject. |
+| `uniqueItems` | Also in `JSONEquality`: two JSON-distinct objects whose differences all sit in dropped properties decode to the same Go value, and the check then rejects an array the schema accepts. |
+
+Discharging it means one of two things: evaluate those checks against the raw JSON before
+or alongside decoding, or retain the dropped properties (an overflow map) so the decoded
+value still carries what the check needs. Which one is the backend's call; doing neither is
+not a third option.
+
+### 7.2. Scope
+
+Requirements are unioned over the whole compilation, not reported per plan: `Compile`
+merges the root schema's with every reachable `$ref` target's, and `CompileDocument` merges
+across every component as well. A backend generating one type at a time therefore cannot
+read "does *this* plan need raw evaluation" off the field directly — use `Location.Pointer`
+to attribute an entry, which is why every entry carries one.
+
+`Requirements.Empty()` reporting true means the plans ask nothing beyond ordinary decoding
+and validation. That is a real answer, not a default: the field is populated on both the
+single-schema and the whole-document path, and the conformance suite asserts every slot is
+reached by some schema, so an empty slot means "nothing here", never "the rule stopped
+firing".
+
+## 8. Metadata → godoc, defaults, and extensions
 
 `plan.Metadata` carries the non-semantic annotations of a schema; `plan.FieldRepresentation.Metadata`
 carries the same for one property, so a property's own `title`/`description`/`deprecated`
@@ -506,7 +578,7 @@ is the generator's job — it reads them off `Metadata.Extensions` (per-property
 field's `Metadata.Extensions`) and applies its own semantics, so new vendor keys need no
 change here.
 
-## 8. Whole-document compilation
+## 9. Whole-document compilation
 
 `schemacompiler.CompileDocument` (`compile_document.go`) compiles an OpenAPI
 `components.schemas` set as one unit: every component is converted into a single

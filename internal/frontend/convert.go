@@ -208,6 +208,7 @@ func (st *convState) siblingSchema(ctx context.Context, refNode *yaml.Node) (*ba
 	}
 	// The document's nodes are shared with the caller, so strip on a copy.
 	stripped := deepCopyNode(n)
+	expandBooleanSchemas(stripped)
 	if st.refMap == nil {
 		st.refMap = make(map[*yaml.Node]string)
 	}

@@ -50,26 +50,37 @@ func distributeAll(operands []ir.Expr, st *state) (ir.Expr, bool) {
 
 	switch c := operands[idx].(type) {
 	case *ir.ExactlyOne:
-		branches := make([]ir.Expr, 0, len(c.Operands))
-		for _, b := range c.Operands {
-			nb := normalize(&ir.All{Operands: append(append([]ir.Expr{}, others...), b)}, st)
-			if _, ok := nb.(*ir.Never); ok {
-				continue // impossible branch elimination (design §15.5).
-			}
-			branches = append(branches, nb)
+		branches, why := distributeBranches(c.Operands, others, st)
+		if len(branches) == 0 {
+			return &ir.Never{Contradiction: emptyUnion(why)}, true
 		}
 		return &ir.ExactlyOne{Operands: branches, Discriminator: c.Discriminator}, true
 	case *ir.AnyOf:
-		branches := make([]ir.Expr, 0, len(c.Operands))
-		for _, b := range c.Operands {
-			nb := normalize(&ir.All{Operands: append(append([]ir.Expr{}, others...), b)}, st)
-			if _, ok := nb.(*ir.Never); ok {
-				continue
-			}
-			branches = append(branches, nb)
+		branches, why := distributeBranches(c.Operands, others, st)
+		if len(branches) == 0 {
+			return &ir.Never{Contradiction: emptyUnion(why)}, true
 		}
 		return &ir.AnyOf{Operands: branches, Discriminator: c.Discriminator}, true
 	default:
 		return nil, false // unreachable
 	}
+}
+
+// distributeBranches pushes others into each branch and drops the ones that turn out
+// impossible (design §15.5). why keeps the first explanation, which is the only account of
+// the conflict left if every branch goes: the branches themselves are gone by then, so
+// nothing downstream could say why the union emptied (issue #39).
+func distributeBranches(branches, others []ir.Expr, st *state) (live []ir.Expr, why string) {
+	live = make([]ir.Expr, 0, len(branches))
+	for _, b := range branches {
+		nb := normalize(&ir.All{Operands: append(append([]ir.Expr{}, others...), b)}, st)
+		if never, ok := nb.(*ir.Never); ok {
+			if why == "" {
+				why = never.Contradiction
+			}
+			continue
+		}
+		live = append(live, nb)
+	}
+	return live, why
 }

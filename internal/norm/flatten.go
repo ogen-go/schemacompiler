@@ -1,6 +1,8 @@
 package norm
 
 import (
+	"strings"
+
 	"github.com/ogen-go/schemacompiler/internal/ir"
 	"github.com/ogen-go/schemacompiler/plan"
 )
@@ -36,20 +38,22 @@ func normalizeAll(e *ir.All, st *state) ir.Expr {
 		// them (design §15.5). foldKindsAll below only folds Kinds siblings; this also
 		// catches an operand whose kind set is implied rather than declared, such as a
 		// Literal of the wrong kind under a sibling `type` (design §16.2).
-		return &ir.Never{}
+		return &ir.Never{Contradiction: contradictionOf(flat)}
 	}
 
 	flat, kinds, hasKinds, isNever := foldKindsAll(flat)
 	if isNever {
-		return &ir.Never{}
+		return &ir.Never{Contradiction: contradictionOf(flat)}
 	}
 
 	flat = dropGuardVacuousPredicates(flat, kinds, hasKinds)
 
 	for _, o := range flat {
-		if _, ok := o.(*ir.Never); ok {
-			// All(..., Never, ...) -> Never (design §15.1).
-			return &ir.Never{}
+		if never, ok := o.(*ir.Never); ok {
+			// All(..., Never, ...) -> Never (design §15.1). The reason carries over: an
+			// operand the author spelled `false` makes this conjunction deliberately
+			// empty, and reporting it would be noise.
+			return &ir.Never{Contradiction: never.Contradiction}
 		}
 	}
 
@@ -75,13 +79,14 @@ func normalizeAnyOf(e *ir.AnyOf, st *state) ir.Expr {
 		flat = flattenAnyOfInto(flat, normalize(o, st))
 	}
 
+	prunedWhy := firstContradiction(flat)
 	flat = filterNotNever(flat) // AnyOf(..., Never, ...) -> remove Never.
 	flat = dedupExprs(flat)     // AnyOf(A, A) -> A.
 	flat = removeSubsumedAnyOf(flat)
 
 	switch len(flat) {
 	case 0:
-		return &ir.Never{} // AnyOf() -> Never (design §15.1).
+		return &ir.Never{Contradiction: emptyUnion(prunedWhy)} // AnyOf() -> Never (design §15.1).
 	case 1:
 		return flat[0]
 	default:
@@ -99,6 +104,7 @@ func normalizeExactlyOne(e *ir.ExactlyOne, st *state) ir.Expr {
 		flat = append(flat, normalize(o, st))
 	}
 
+	prunedWhy := firstContradiction(flat)
 	flat = filterNotNever(flat) // ExactlyOne(..., Never, ...) -> remove Never.
 
 	// Generalized idempotence (design §15.1): ExactlyOne(A, A) -> Never
@@ -107,6 +113,12 @@ func normalizeExactlyOne(e *ir.ExactlyOne, st *state) ir.Expr {
 	// matches, so it can never satisfy exactly-one; exclude it and recurse
 	// on what remains: ExactlyOne(A, A, C, ...) = All(Not(A), ExactlyOne(C, ...)).
 	if dup, rest, ok := extractDuplicate(flat); ok {
+		if len(rest) == 0 {
+			// Every branch was the same one: an instance matching it matches them all,
+			// so nothing matches exactly one (issue #39).
+			return &ir.Never{Contradiction: "`oneOf` alternatives all accept the same values, " +
+				"so no instance matches exactly one"}
+		}
 		return normalize(&ir.All{Operands: []ir.Expr{
 			&ir.Not{Operand: dup},
 			&ir.ExactlyOne{Operands: rest},
@@ -115,7 +127,7 @@ func normalizeExactlyOne(e *ir.ExactlyOne, st *state) ir.Expr {
 
 	switch len(flat) {
 	case 0:
-		return &ir.Never{} // ExactlyOne() -> Never (design §15.1).
+		return &ir.Never{Contradiction: emptyUnion(prunedWhy)} // ExactlyOne() -> Never (design §15.1).
 	case 1:
 		return flat[0]
 	}
@@ -377,4 +389,78 @@ func extractDuplicate(operands []ir.Expr) (dup ir.Expr, rest []ir.Expr, ok bool)
 		}
 	}
 	return nil, nil, false
+}
+
+// contradictionOf explains why a conjunction accepts nothing, or returns "" when the
+// author asked for that (issue #39).
+//
+// An operand already proved contradictory carries the better explanation, and it has to be
+// consulted first: an intersection that collapses because one operand is empty reaches the
+// kind check below with nothing to compare.
+func contradictionOf(operands []ir.Expr) string {
+	for _, o := range operands {
+		if never, ok := o.(*ir.Never); ok && never.Contradiction != "" {
+			return never.Contradiction
+		}
+	}
+	return conflictingKinds(operands)
+}
+
+// conflictingKinds names the kind sets that leave nothing in common, so a schema proved
+// uninhabited can say which constraints disagree (issue #39).
+func conflictingKinds(operands []ir.Expr) string {
+	var (
+		parts       []string
+		seen        = map[string]bool{}
+		restrictive int
+	)
+	for _, o := range operands {
+		names := plan.KindSetNames(o.Kinds())
+		if len(names) == 0 || len(names) == len(plan.KindSetNames(plan.SetAny)) {
+			continue // contributes no restriction worth naming
+		}
+		restrictive++
+		part := strings.Join(names, "|")
+		if !seen[part] {
+			seen[part] = true
+			parts = append(parts, part)
+		}
+	}
+	switch {
+	case restrictive < 2:
+		// One constraint accepting nothing is a schema deliberately spelled empty —
+		// `not: {}`, which is how a boolean `false` reaches here, or `type: []`. Only a
+		// disagreement *between* constraints is something the author did not ask for.
+		return ""
+	case len(parts) < 2:
+		// Constraints that disagree below the kind level, such as a numeric domain: they
+		// cannot both hold, and naming the kind twice would explain nothing.
+		return "the constraints cannot be satisfied together"
+	default:
+		return "the constraints accept disjoint kinds (" + strings.Join(parts, ", ") + ")"
+	}
+}
+
+// emptyUnion explains a union with nothing left in it, naming why its branches went when
+// one of them said (issue #39).
+//
+// It does not name the keyword. `enum` lowers to the same AnyOf that `anyOf` does, so the
+// keyword here is not the one the author wrote.
+func emptyUnion(why string) string {
+	msg := "no alternative in the union is satisfiable"
+	if why != "" {
+		msg += ": " + why
+	}
+	return msg
+}
+
+// firstContradiction returns the first explanation among operands already proved
+// contradictory, before they are dropped and it is lost.
+func firstContradiction(operands []ir.Expr) string {
+	for _, o := range operands {
+		if never, ok := o.(*ir.Never); ok && never.Contradiction != "" {
+			return never.Contradiction
+		}
+	}
+	return ""
 }

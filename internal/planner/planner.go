@@ -137,6 +137,13 @@ func (b *builder) build(e ir.Expr, path string) plan.CompilationPlan {
 	case *ir.Any:
 		return anyPlan()
 	case *ir.Never:
+		if v.Contradiction != "" {
+			// Normalization derived this, so the author wrote constraints that cannot be
+			// satisfied together and has not been told (issue #39). A schema spelled
+			// `false` carries no contradiction and stays quiet.
+			b.diag(path, plan.DiagnosticAdvisory, plan.SeverityWarning,
+				"uninhabited schema: "+v.Contradiction)
+		}
 		return b.neverPlanAt(path)
 	case *ir.Kinds, *ir.Predicate, *ir.Shape, *ir.Not:
 		return b.buildAll(&ir.All{Operands: []ir.Expr{e}}, path)

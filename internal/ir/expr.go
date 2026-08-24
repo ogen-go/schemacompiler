@@ -27,7 +27,12 @@ type Expr interface {
 type Any struct{}
 
 // Never accepts nothing (schema false).
-type Never struct{}
+//
+// Contradiction is why normalization derived it, when it did. An author who writes `false`
+// or `not: {}` means the empty schema and needs no telling; one whose constraints turn out
+// to have no common instance does, so the planner reports the second and stays quiet about
+// the first (issue #39). Empty means declared.
+type Never struct{ Contradiction string }
 
 // Kinds restricts the accepted JSON kinds (from type), optionally refining numbers.
 type Kinds struct {

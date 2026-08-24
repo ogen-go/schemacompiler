@@ -43,3 +43,30 @@ const (
 	IntegerOnly
 	NonIntegerOnly
 )
+
+// kindNames pairs each single-kind bit with its JSON Schema `type` name, in the order
+// [KindSetNames] reports them.
+var kindNames = []struct {
+	bit  KindSet
+	name string
+}{
+	{SetNull, "null"},
+	{SetBoolean, "boolean"},
+	{SetNumber, "number"},
+	{SetString, "string"},
+	{SetArray, "array"},
+	{SetObject, "object"},
+}
+
+// KindSetNames lists the JSON Schema `type` names s admits, for a diagnostic that has to
+// say which kinds a constraint allows. It is a function rather than a String method so
+// that formatting a KindSet with %v keeps printing the bits.
+func KindSetNames(s KindSet) []string {
+	var out []string
+	for _, k := range kindNames {
+		if s&k.bit != 0 {
+			out = append(out, k.name)
+		}
+	}
+	return out
+}

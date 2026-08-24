@@ -103,6 +103,9 @@ func TestCompileConstEnum(t *testing.T) {
 		dispatch   string
 		literals   []string
 		capability plan.CapabilityLevel
+		// uninhabited is the contradiction the schema is expected to be reported for, or
+		// "" when it must compile without one (issue #39).
+		uninhabited string
 	}{
 		// const, no sibling type.
 		{
@@ -271,22 +274,26 @@ func TestCompileConstEnum(t *testing.T) {
 			// (design §15.1), which only JSON-value equality can see.
 			name: "oneOf over json-equal consts", schema: `{"oneOf":[{"const":1},{"const":1.0}]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
+			uninhabited: "`oneOf` alternatives all accept the same values, so no instance matches exactly one",
 		},
 
 		// A declared-but-empty enum accepts nothing (issue #52).
 		{
 			name: "empty enum", schema: `{"enum":[]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
+			uninhabited: "no alternative in the union is satisfiable",
 		},
 		{
 			name: "empty enum with type", schema: `{"type":"string","enum":[]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
+			uninhabited: "no alternative in the union is satisfiable",
 		},
 
 		// A const whose kind the sibling type excludes accepts nothing.
 		{
 			name: "const excluded by type", schema: `{"type":"string","const":1}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
+			uninhabited: "the constraints accept disjoint kinds (string, number)",
 		},
 
 		// An enum member the sibling type excludes is dead and must be dropped, not kept
@@ -312,10 +319,14 @@ func TestCompileConstEnum(t *testing.T) {
 			capability: plan.StaticDispatch,
 		},
 		{
+			uninhabited: "no alternative in the union is satisfiable: " +
+				"the constraints accept disjoint kinds (string, number)",
 			name: "enum all members excluded by type", schema: `{"type":"string","enum":[1,2]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
 		},
 		{
+			uninhabited: "no alternative in the union is satisfiable: " +
+				"the constraints accept disjoint kinds (object, string)",
 			name: "enum all members excluded by object type", schema: `{"type":"object","enum":["a",1]}`,
 			rep: "never", dispatch: "none", capability: plan.DirectGoType,
 		},
@@ -329,7 +340,14 @@ func TestCompileConstEnum(t *testing.T) {
 			require.Equal(t, tt.literals, literalCaseValues(res.Plan.Dispatch), "literal cases")
 			require.Equal(t, tt.capability, res.Capability, "capability")
 			require.Empty(t, res.Plan.ResidualChecks(), "residual validation")
+			if tt.uninhabited != "" {
+				require.Contains(t, diagnosticMessages(res.Diagnostics),
+					"uninhabited schema: "+tt.uninhabited, "expected the schema to be reported uninhabited")
+			}
 			for _, d := range res.Diagnostics {
+				if tt.uninhabited != "" && d.Message == "uninhabited schema: "+tt.uninhabited {
+					continue
+				}
 				require.NotEqual(t, plan.SeverityWarning, d.Severity, "unexpected diagnostic: %s", d.Message)
 				require.NotEqual(t, plan.SeverityError, d.Severity, "unexpected diagnostic: %s", d.Message)
 			}
@@ -418,4 +436,12 @@ func TestOverlapDiagnosticVocabulary(t *testing.T) {
 			require.Equal(t, tt.overlap, found, "overlap diagnostic")
 		})
 	}
+}
+
+func diagnosticMessages(diags []plan.Diagnostic) []string {
+	out := make([]string, len(diags))
+	for i, d := range diags {
+		out[i] = d.Message
+	}
+	return out
 }

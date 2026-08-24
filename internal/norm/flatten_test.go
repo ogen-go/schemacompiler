@@ -54,8 +54,8 @@ func TestNormalize_Identities(t *testing.T) {
 		want ir.Expr
 	}{
 		{"All() -> Any", &ir.All{}, &ir.Any{}},
-		{"AnyOf() -> Never", &ir.AnyOf{}, &ir.Never{}},
-		{"ExactlyOne() -> Never", &ir.ExactlyOne{}, &ir.Never{}},
+		{"AnyOf() -> Never", &ir.AnyOf{}, &ir.Never{Contradiction: emptyUnion("")}},
+		{"ExactlyOne() -> Never", &ir.ExactlyOne{}, &ir.Never{Contradiction: emptyUnion("")}},
 		{"All(A) -> A", &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}, &ir.Kinds{Set: plan.SetString}},
 		{"AnyOf(A) -> A", &ir.AnyOf{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}, &ir.Kinds{Set: plan.SetString}},
 		{"ExactlyOne(A) -> A", &ir.ExactlyOne{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}}}, &ir.Kinds{Set: plan.SetString}},
@@ -108,7 +108,8 @@ func TestNormalize_ExactlyOneDuplicate(t *testing.T) {
 	// A satisfies two branches, so exactly-one can never hold.
 	a := ir.Kinds{Set: plan.SetString}
 	got := Normalize(&ir.ExactlyOne{Operands: []ir.Expr{&a, &a}}, 100)
-	require.Equal(t, &ir.Never{}, got)
+	require.Equal(t, &ir.Never{Contradiction: "`oneOf` alternatives all accept the same values, " +
+		"so no instance matches exactly one"}, got)
 }
 
 func TestNormalize_ExactlyOneDuplicateGeneralized(t *testing.T) {
@@ -157,7 +158,7 @@ func TestNormalize_KindIntersection(t *testing.T) {
 		{
 			"disjoint kind sets -> Never",
 			&ir.All{Operands: []ir.Expr{&ir.Kinds{Set: plan.SetString}, &ir.Kinds{Set: plan.SetNumber}}},
-			&ir.Never{},
+			&ir.Never{Contradiction: "the constraints accept disjoint kinds (string, number)"},
 		},
 	}
 	for _, tc := range cases {

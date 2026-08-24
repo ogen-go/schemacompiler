@@ -61,13 +61,6 @@ var knownOgenQuirks = map[string]string{
 	// frontend fails to walk (verified by inspecting the fixture directly).
 	"jsonschema/openapi30.json":               "dangling $ref into a section missing from an incomplete embedded draft-04 meta-schema copy (ogen fixture, not a compiler gap)",
 	"gen/_testdata/jsonschema/openapi30.json": "dangling $ref into a section missing from an incomplete embedded draft-04 meta-schema copy (ogen fixture, not a compiler gap)",
-	// CONFIRMED COMPILER DEFECT, out of scope for this task (the compiler core under
-	// internal/ is frozen): an enum whose members include a non-primitive (array)
-	// value panics with "hash of unhashable type: []interface {}", apparently from
-	// code that uses an enum member as a Go map key without accounting for
-	// non-comparable JSON values (arrays/objects). Recorded here, not silently
-	// retried, precisely so it stays visible for follow-up.
-	"_testdata/positive/non_primitive_enum.json": "CONFIRMED COMPILER PANIC on an array-valued enum member (hash of unhashable type) - real defect, out of scope here",
 }
 
 // TestOgenCorpus walks every vendored ogen-derived schema and asserts Compile never

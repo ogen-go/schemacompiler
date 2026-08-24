@@ -15,7 +15,7 @@ import "github.com/ogen-go/schemacompiler/plan"
 // merged flat, since a wrapper would only nest the same checks (issue #78).
 func (b *builder) withResidualConjuncts(k plan.KindSet, base plan.CompilationPlan, rest components, path string) plan.CompilationPlan {
 	if rest.empty() {
-		return base
+		return assertRefKind(base, k, rest)
 	}
 	sub := b.buildConjunction(k, rest, path)
 	if _, never := sub.Representation.(*plan.NeverRepresentation); never {
@@ -35,9 +35,31 @@ func (b *builder) withResidualConjuncts(k plan.KindSet, base plan.CompilationPla
 	return base
 }
 
+// assertRefKind states a `type` declared beside a `$ref` in the plan the reference builds.
+//
+// [components.empty] treats a bare kind restriction as no contribution, because everywhere
+// else the kinds are folded into the caller's aggregate and reach the plan through the
+// builder that aggregate selects. On this path they do not: the reference's own plan is
+// returned unchanged, so `{"$ref": "#/$defs/T", "type": "array"}` over an unconstrained T
+// accepted a string, with nothing residual to reject it and no diagnostic (issue #60).
+func assertRefKind(p plan.CompilationPlan, k plan.KindSet, c components) plan.CompilationPlan {
+	if !c.hasKindRestriction || (k == plan.SetAny && c.numeric == plan.AnyNumber) {
+		return p
+	}
+	head := []plan.GuardedPredicate{{Applicability: k, Assert: true}}
+	if k.Has(plan.KindNumber) && c.numeric != plan.AnyNumber {
+		head = append(head, plan.GuardedPredicate{
+			Applicability: plan.SetNumber,
+			Expression:    &plan.NumericDomainPredicate{Domain: c.numeric},
+		})
+	}
+	p.Validation.Predicates = append(head, p.Validation.Predicates...)
+	return p
+}
+
 // empty reports whether c carries no structural contribution of its own. A bare kind
-// restriction counts as none: the kinds are already folded into the caller's aggregate
-// and reach the plan through it.
+// restriction counts as none: it is asserted by [assertRefKind] on this path and folded
+// into the caller's aggregate on every other.
 func (c components) empty() bool {
 	return len(c.refs) == 0 && len(c.shapes) == 0 && len(c.predicates) == 0 &&
 		c.literal == nil && len(c.combinators) == 0 && len(c.nots) == 0

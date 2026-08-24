@@ -421,10 +421,16 @@ func TestNullablePlan_RefSiblingKindSetNotRepresented(t *testing.T) {
 	require.Equal(t, 0, nullableWarns)
 	require.Equal(t, 0, declaredWarns)
 
-	// Clause 1 fails without an authored `type`, so that spelling warns instead.
+	// Clause 1 fails without an authored `type`, so that spelling warns instead — and
+	// with no `type` there is no sibling kind set to assert over the reference, which is
+	// what separates it from the two spellings above (issue #60).
 	ignored, ignoredWarns := holderField(t, "{$ref: "+cat+", nullable: true}")
-	require.Equal(t, declared, ignored)
 	require.Equal(t, 1, ignoredWarns)
+	require.Equal(t, declared.Plan.Representation, ignored.Plan.Representation)
+	require.Equal(t, declared.Nullable, ignored.Nullable)
+	require.Equal(t, plan.GuardedPredicate{Applicability: plan.SetObject, Assert: true},
+		declared.Plan.Validation.Predicates[0])
+	require.Equal(t, declared.Plan.Validation.Predicates[1:], ignored.Plan.Validation.Predicates)
 }
 
 // Away from a `$ref` the sibling kind set does reach the representation, and the two

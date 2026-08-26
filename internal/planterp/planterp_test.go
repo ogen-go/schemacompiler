@@ -32,9 +32,8 @@ func guarded(guard plan.KindSet, e plan.PredicateExpr) plan.ValidationPlan {
 // reach it this way. It mirrors internal/planner's assertKind, objectStructure and
 // arrayStructure.
 //
-// [plan.UnionRepresentation] and [plan.RecursiveRepresentation] have no counterpart and so
-// cannot appear here: a union of kinds is a [plan.KindDispatch] on the validation side, and
-// the planner never emits a recursive binder.
+// [plan.UnionRepresentation] has no counterpart and so cannot appear here: a union of kinds
+// is a [plan.KindDispatch] on the validation side.
 func leaf(r plan.Representation) plan.CompilationPlan {
 	p := plan.CompilationPlan{Representation: r}
 	switch r := r.(type) {
@@ -162,10 +161,9 @@ func TestRepresentation(t *testing.T) {
 			}),
 			value: `[1,2]`,
 		},
-		// UnionRepresentation and RecursiveRepresentation are deliberately absent: the
-		// interpreter decides from the checks alone (design §4.1), and neither has a
-		// counterpart there. A union of kinds arrives as a [plan.KindDispatch], covered by
-		// TestDispatch; the planner never emits a recursive binder.
+		// UnionRepresentation is deliberately absent: the interpreter decides from the
+		// checks alone (design §4.1) and a union has no counterpart there. A union of
+		// kinds arrives as a [plan.KindDispatch], covered by TestDispatch.
 	})
 }
 

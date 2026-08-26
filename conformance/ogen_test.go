@@ -38,6 +38,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -100,6 +101,7 @@ func TestOgenCorpus(t *testing.T) {
 			require.NoError(t, err, "Compile must not error on a vendored ogen-parity schema")
 			require.NotNil(t, res, "Compile must return a non-nil result")
 			require.NotNil(t, res.Plan.Representation, "plan must carry a representation")
+			require.Empty(t, planwalk.ContractViolations(res.Plan), "plan-shape contract")
 
 			dist[distKey{res.Capability, fidelityName(res)}]++
 			collectReview(&review, rel, res.Capability, res.Diagnostics)
@@ -334,6 +336,7 @@ func TestOgenLiveWalk(t *testing.T) {
 			require.NoError(t, err, "Compile must not error")
 			require.NotNil(t, res, "Compile must return a non-nil result")
 			require.NotNil(t, res.Plan.Representation, "plan must carry a representation")
+			require.Empty(t, planwalk.ContractViolations(res.Plan), "plan-shape contract")
 
 			dist[distKey{res.Capability, fidelityName(res)}]++
 			collectReview(&review, rel, res.Capability, res.Diagnostics)

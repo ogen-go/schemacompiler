@@ -105,7 +105,7 @@ func TestPlanReachesEveryNestingSite(t *testing.T) {
 				Representation: &plan.UnionRepresentation{Alternatives: []plan.Representation{ref("alternative")}},
 			}}},
 			{Expression: &plan.PropertyNamesPredicate{Schema: plan.CompilationPlan{
-				Representation: &plan.RecursiveRepresentation{Name: "r", Body: ref("body")},
+				Representation: &plan.UnionRepresentation{Alternatives: []plan.Representation{ref("body")}},
 			}}},
 		}},
 	}

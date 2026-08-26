@@ -34,7 +34,7 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 	switch rep.(type) {
 	case *plan.AnyRepresentation, *plan.NeverRepresentation, *plan.PrimitiveRepresentation,
 		*plan.ObjectRepresentation, *plan.ArrayRepresentation, *plan.UnionRepresentation,
-		*plan.RecursiveRepresentation, *plan.ReferenceRepresentation:
+		*plan.ReferenceRepresentation:
 		return plan.DirectGoType
 	default:
 		return plan.Unsupported

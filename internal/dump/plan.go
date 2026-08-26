@@ -138,13 +138,6 @@ func writeRepresentation(t *tw, r plan.Representation, visiting map[plan.SchemaI
 				t.enter(func() { writeRepresentation(t, alt, visiting) })
 			}
 		})
-	case *plan.RecursiveRepresentation:
-		var g struct {
-			Name string
-			Body plan.Representation
-		} = *r
-		t.line("Recursive %q", g.Name)
-		t.enter(func() { writeRepresentation(t, g.Body, visiting) })
 	case *plan.ReferenceRepresentation:
 		var g struct {
 			Name string

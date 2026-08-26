@@ -34,8 +34,10 @@ type ObjectRepresentation struct {
 	// Fields are the declared properties in source order, the order a backend should
 	// generate struct fields in (issue #89). Names are unique within one object.
 	Fields []FieldRepresentation
-	// Additional is the plan for every property no field and no pattern rule covers.
-	// nil means additional properties are not representable as a field.
+	// Additional is the plan for every property no field and no pattern rule covers, and
+	// is always stated: `additionalProperties` absent is a plan over [AnyRepresentation]
+	// and `false` one over [NeverRepresentation], so nil is not a third value meaning
+	// either of them. Enforced by planwalk.NilPlanSlots.
 	Additional *CompilationPlan
 	// PatternRules cover the property names no Fields entry declares. A declared field
 	// owns its name outright: every `patternProperties` schema whose pattern matches it
@@ -97,12 +99,6 @@ type UnionRepresentation struct {
 	Alternatives []Representation
 }
 
-// RecursiveRepresentation binds a name for a recursive Go type (design §19).
-type RecursiveRepresentation struct {
-	Name string
-	Body Representation
-}
-
 // ReferenceRepresentation refers to a named representation (a $ref target or recursion binder).
 type ReferenceRepresentation struct {
 	Name string
@@ -114,5 +110,4 @@ func (*PrimitiveRepresentation) isRepresentation() {}
 func (*ObjectRepresentation) isRepresentation()    {}
 func (*ArrayRepresentation) isRepresentation()     {}
 func (*UnionRepresentation) isRepresentation()     {}
-func (*RecursiveRepresentation) isRepresentation() {}
 func (*ReferenceRepresentation) isRepresentation() {}

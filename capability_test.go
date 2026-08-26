@@ -107,7 +107,9 @@ func TestPlanReferencesNested(t *testing.T) {
 			Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: &plan.UnionRepresentation{
 				Alternatives: []plan.Representation{
 					&plan.ReferenceRepresentation{Name: "U"},
-					&plan.RecursiveRepresentation{Name: "R", Body: &plan.ReferenceRepresentation{Name: "B"}},
+					&plan.UnionRepresentation{Alternatives: []plan.Representation{
+						&plan.ReferenceRepresentation{Name: "B"},
+					}},
 				},
 			}}},
 		},

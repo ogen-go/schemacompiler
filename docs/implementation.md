@@ -56,10 +56,10 @@ to refuse to generate for these, which is acceptable:
   Unsupported (no evaluated-annotation tracking engine in v1). §14 machinery is stubbed.
 - **`contains` / `minContains` / `maxContains` match-counting** and **overlapping
   `oneOf`/`anyOf` requiring predicate-count dispatch** → keep the plan
-  (`PredicateCountDispatch`) but classify as `PredicateDispatch`; a diagnostic notes the
+  (`PredicateCountDispatch`) but classify as `RawEvaluation`; a diagnostic notes the
   runtime match-count cost. (These are representable, just flagged — do not drop them.)
 - **a negation normalization could not eliminate** (§11.8) → keep it as a
-  `plan.NegationPredicate` over the negated sub-schema and classify as `PredicateDispatch`,
+  `plan.NegationPredicate` over the negated sub-schema and classify as `RawEvaluation`,
   **but only when that sub-schema's plan is exact**. Negation inverts approximation
   polarity: negating an over-approximation under-approximates, i.e. rejects valid
   instances, which invariant 4 forbids outright. Otherwise drop the negation (the outer

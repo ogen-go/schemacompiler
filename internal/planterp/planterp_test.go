@@ -381,7 +381,7 @@ func TestNegationOverAnApproximatedSubPlanAccepts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := plan.CompilationPlan{
 				Representation: &plan.AnyRepresentation{},
-				Capability:     plan.PredicateDispatch,
+				Capability:     plan.RawEvaluation,
 				Validation: guarded(plan.SetAny, &plan.NegationPredicate{Schema: plan.CompilationPlan{
 					Representation: &plan.AnyRepresentation{},
 					Validation:     guarded(plan.SetString, tt.expr),
@@ -405,7 +405,7 @@ func TestNegationOverAnEnforcedSubPlanInverts(t *testing.T) {
 	}
 	p := plan.CompilationPlan{
 		Representation: &plan.AnyRepresentation{},
-		Capability:     plan.PredicateDispatch,
+		Capability:     plan.RawEvaluation,
 		Validation:     guarded(plan.SetAny, &plan.NegationPredicate{Schema: sub}),
 	}
 

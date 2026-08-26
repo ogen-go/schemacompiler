@@ -37,7 +37,7 @@ func (b *builder) buildAll(all *ir.All, path string) plan.CompilationPlan {
 //
 //   - exact (with or without a residual validator): emit the [plan.NegationPredicate].
 //     Evaluating it means running a whole sub-schema at runtime and inverting it, which is
-//     the [plan.PredicateDispatch] tier for the same reason [plan.ContainsCountPredicate]
+//     the [plan.RawEvaluation] tier for the same reason [plan.ContainsCountPredicate]
 //     is (internal/planner/validation.go, docs/implementation.md v1 scope).
 //   - anything else: drop the negation. Removing a conjunct only ever accepts a superset,
 //     which is a legitimate over-approximation, so the plan stays representable — but
@@ -72,7 +72,7 @@ func (b *builder) withResidualNegation(p plan.CompilationPlan, nots []ir.Not, pa
 	if emitted {
 		b.diag(path, plan.DiagnosticCost, plan.SeverityWarning,
 			"residual negation requires runtime sub-schema validation")
-		p.Capability = maxCapability(p.Capability, plan.PredicateDispatch)
+		p.Capability = maxCapability(p.Capability, plan.RawEvaluation)
 	}
 	return p
 }

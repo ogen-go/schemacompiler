@@ -94,7 +94,7 @@ func TestBuild_StaticDispatch_KindDisjointOneOf(t *testing.T) {
 	require.Empty(t, got.Diagnostics)
 }
 
-func TestBuild_PredicateDispatch_OverlappingOneOf(t *testing.T) {
+func TestBuild_RawEvaluation_OverlappingOneOf(t *testing.T) {
 	// {"oneOf": [{"type": "string", "pattern": "^a"}, {"type": "string", "minLength": 5}]}
 	branch := func(detail ir.PredicateDetail) ir.Expr {
 		return &ir.All{Operands: []ir.Expr{
@@ -111,7 +111,7 @@ func TestBuild_PredicateDispatch_OverlappingOneOf(t *testing.T) {
 
 	got := planner.Build(&e, nil)
 
-	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
+	require.Equal(t, plan.RawEvaluation, got.Plan.Capability)
 	disp, ok := got.Plan.Dispatch.(*plan.PredicateCountDispatch)
 	require.True(t, ok, "expected PredicateCountDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, 1, disp.Minimum)
@@ -121,7 +121,7 @@ func TestBuild_PredicateDispatch_OverlappingOneOf(t *testing.T) {
 	require.Equal(t, plan.SeverityWarning, got.Diagnostics[0].Severity)
 }
 
-func TestBuild_PredicateDispatch_OverlappingAnyOf(t *testing.T) {
+func TestBuild_RawEvaluation_OverlappingAnyOf(t *testing.T) {
 	// Overlapping anyOf lowers to PredicateCountDispatch with the anyOf bounds [1, N] —
 	// the lowering contract on plan.PredicateCountDispatch (issue #7). oneOf gives [1,1];
 	// anyOf accepts at least one, up to all branches.
@@ -141,7 +141,7 @@ func TestBuild_PredicateDispatch_OverlappingAnyOf(t *testing.T) {
 
 	got := planner.Build(&e, nil)
 
-	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
+	require.Equal(t, plan.RawEvaluation, got.Plan.Capability)
 	disp, ok := got.Plan.Dispatch.(*plan.PredicateCountDispatch)
 	require.True(t, ok, "expected PredicateCountDispatch, got %T", got.Plan.Dispatch)
 	require.Equal(t, 1, disp.Minimum)
@@ -300,7 +300,7 @@ func TestBuild_TaggedUnionPropertyDispatch(t *testing.T) {
 func TestBuild_TaggedUnionPropertyDispatch_ThroughRefs(t *testing.T) {
 	// The idiomatic factored form: each oneOf branch is a bare $ref to a named object
 	// whose const-tagged "kind" property discriminates it (issue #2). Must reach
-	// PropertyDispatch, not degrade to PredicateDispatch.
+	// PropertyDispatch, not degrade to RawEvaluation.
 	doc := `{
 		"oneOf": [
 			{"$ref": "#/$defs/Circle"},
@@ -578,7 +578,7 @@ func TestBuild_Literal(t *testing.T) {
 	require.Equal(t, "circle", disp.Cases[0].Value)
 }
 
-func TestBuild_ContainsCount_PredicateDispatchWarning(t *testing.T) {
+func TestBuild_ContainsCount_RawEvaluationWarning(t *testing.T) {
 	// {"type":"array","contains":{"type":"string"},"minContains":2}
 	e := ir.All{Operands: []ir.Expr{
 		&ir.Kinds{Set: plan.SetArray},
@@ -590,7 +590,7 @@ func TestBuild_ContainsCount_PredicateDispatchWarning(t *testing.T) {
 
 	got := planner.Build(&e, nil)
 
-	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
+	require.Equal(t, plan.RawEvaluation, got.Plan.Capability)
 	require.NotEmpty(t, got.Diagnostics)
 	found := false
 	for _, d := range got.Diagnostics {

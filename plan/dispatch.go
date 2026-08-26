@@ -89,7 +89,7 @@ type PresenceDispatch struct {
 // the enclosing [UnionRepresentation] over the branches (a sound over-approximation, design
 // §24); for oneOf the single accepting branch's representation is authoritative. A backend
 // that cannot emit runtime match-counting MUST refuse and surface the plan's
-// PredicateDispatch diagnostic rather than drop the schema or approximate it with a static
+// RawEvaluation diagnostic rather than drop the schema or approximate it with a static
 // discriminator (docs/integration.md §3, §6).
 type PredicateCountDispatch struct {
 	// Branches are the alternative plans, each trial-validated independently.

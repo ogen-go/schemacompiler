@@ -35,8 +35,8 @@ func capabilityName(c plan.CapabilityLevel) string {
 		return "GoTypeWithValidation"
 	case plan.StaticDispatch:
 		return "StaticDispatch"
-	case plan.PredicateDispatch:
-		return "PredicateDispatch"
+	case plan.RawEvaluation:
+		return "RawEvaluation"
 	case plan.EvaluationStateValidation:
 		return "EvaluationStateValidation"
 	case plan.DynamicSchemaResolution:
@@ -138,7 +138,7 @@ func TestCorpus(t *testing.T) {
 
 			dist[distKey{res.Capability, fidelityName(res)}]++
 
-			// A capability past PredicateDispatch cannot convert at all, so the plan must
+			// A capability past RawEvaluation cannot convert at all, so the plan must
 			// say which construct put it there (design §24.1, §25; issue #48).
 			if res.Capability >= plan.EvaluationStateValidation {
 				require.Equal(t, "unsupported", fidelityName(res),

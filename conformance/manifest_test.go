@@ -87,17 +87,17 @@ var manifest = map[string]caseExpectation{
 	// A guarded (instance-descent) recursive $ref: representable as a recursive Go type.
 	"ref/recursive_guarded.json": {Capability: plan.DirectGoType},
 
-	// --- PredicateDispatch: alternatives known, needs predicate/match-count eval. ---
+	// --- RawEvaluation: the check reads the raw JSON, not just the decoded value. ---
 	// Representable (kept as PredicateCountDispatch, design's v1 scope), flagged with
 	// a SeverityWarning diagnostic — not silently downgraded to Unsupported.
-	"dispatch/oneof_overlapping.json": withKind(caseExpectation{Capability: plan.PredicateDispatch}, plan.DiagnosticCost),
-	"dispatch/anyof_overlapping.json": withKind(caseExpectation{Capability: plan.PredicateDispatch}, plan.DiagnosticCost),
-	"array/contains.json":             withKind(caseExpectation{Capability: plan.PredicateDispatch}, plan.DiagnosticCost),
-	"conditional/if_then_else.json":   withKind(caseExpectation{Capability: plan.PredicateDispatch}, plan.DiagnosticCost),
+	"dispatch/oneof_overlapping.json": withKind(caseExpectation{Capability: plan.RawEvaluation}, plan.DiagnosticCost),
+	"dispatch/anyof_overlapping.json": withKind(caseExpectation{Capability: plan.RawEvaluation}, plan.DiagnosticCost),
+	"array/contains.json":             withKind(caseExpectation{Capability: plan.RawEvaluation}, plan.DiagnosticCost),
+	"conditional/if_then_else.json":   withKind(caseExpectation{Capability: plan.RawEvaluation}, plan.DiagnosticCost),
 	// A negation that survives normalization has no representation and no v1 validator
-	// predicate below PredicateDispatch: it is carried as a plan.NegationPredicate over a
+	// predicate below RawEvaluation: it is carried as a plan.NegationPredicate over a
 	// whole sub-schema, which a backend either runs or refuses (design §11.8, §24).
-	"direct/not_keyword.json": withKind(caseExpectation{Capability: plan.PredicateDispatch}, plan.DiagnosticCost),
+	"direct/not_keyword.json": withKind(caseExpectation{Capability: plan.RawEvaluation}, plan.DiagnosticCost),
 
 	// --- EvaluationStateValidation: v1-Unsupported, no evaluated-annotation engine. ---
 	"unsupported/unevaluated_properties.json": withKind(caseExpectation{Capability: plan.EvaluationStateValidation}, plan.DiagnosticUnsupported),

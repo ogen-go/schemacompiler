@@ -68,7 +68,7 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 			"contains/minContains/maxContains requires runtime match-count validation")
 		return mappedPredicate{
 			Expr:       &plan.ContainsCountPredicate{Schema: sub, Min: minCount, Max: d.Max},
-			Capability: maxCapability(plan.PredicateDispatch, sub.Capability),
+			Capability: maxCapability(plan.RawEvaluation, sub.Capability),
 			Resolution: sub.Resolution,
 		}
 	case *ir.RequiredDetail:
@@ -95,7 +95,7 @@ func (b *builder) mapPredicate(p ir.Predicate, path string) mappedPredicate {
 			"propertyNames requires runtime validation of every property key")
 		return mappedPredicate{
 			Expr:       &plan.PropertyNamesPredicate{Schema: sub},
-			Capability: maxCapability(plan.PredicateDispatch, sub.Capability),
+			Capability: maxCapability(plan.RawEvaluation, sub.Capability),
 			Resolution: sub.Resolution,
 		}
 	default:

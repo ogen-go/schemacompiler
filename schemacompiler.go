@@ -33,7 +33,7 @@ type Options struct {
 	// BaseURI is the retrieval URI of the root schema, used to resolve relative $ref/$id.
 	BaseURI string
 	// ExpansionBudget bounds combinator expansion during normalization; when exceeded a
-	// factored predicate-dispatch form is preserved instead of exponential IR (design §21).
+	// factored raw-evaluation form is preserved instead of exponential IR (design §21).
 	// Zero selects a conservative default.
 	ExpansionBudget int
 	// Loader resolves external/remote $ref documents. When nil, only in-document references

@@ -75,7 +75,7 @@ func TestClassifyCoversEveryDispatchVariant(t *testing.T) {
 		{&plan.LiteralDispatch{}, plan.StaticDispatch},
 		{&plan.PropertyDispatch{}, plan.StaticDispatch},
 		{&plan.PresenceDispatch{}, plan.StaticDispatch},
-		{&plan.PredicateCountDispatch{}, plan.PredicateDispatch},
+		{&plan.PredicateCountDispatch{}, plan.RawEvaluation},
 	} {
 		got := classify(&plan.PrimitiveRepresentation{Kind: plan.KindString}, plan.ValidationPlan{}, tt.disp, &plan.FullyResolved{})
 		require.Equalf(t, tt.want, got, "%T", tt.disp)

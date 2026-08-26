@@ -425,7 +425,7 @@ func (b *builder) buildPresenceDispatch(name string, absentExpr, presentExpr ir.
 func (b *builder) buildPredicateCountDispatch(branchExprs []ir.Expr, minimum, maximum int, path string) plan.CompilationPlan {
 	branches := make([]plan.CompilationPlan, len(branchExprs))
 	var alts []plan.Representation
-	capLevel := plan.PredicateDispatch
+	capLevel := plan.RawEvaluation
 	var resParts []plan.ResolutionPlan
 	for i, be := range branchExprs {
 		sub := b.build(be, path)

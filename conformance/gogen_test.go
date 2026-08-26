@@ -6,6 +6,7 @@ package conformance
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -159,4 +160,51 @@ func TestGogenLoweredCorpusCompiles(t *testing.T) {
 	})
 	require.NotZero(t, checked)
 	t.Logf("type-checked %d documents", checked)
+}
+
+// TestGogenSplitsOgenCorpus measures the validation boundary docs/backend.md §2 defines: how
+// much of a real corpus a Go type can carry, and what is left for the raw-JSON path.
+//
+// It counts each type's own predicates, not those of the plans nested inside it — a nested
+// plan is carried by a nested type, and pairing the two trees is the renderer's job rather
+// than this pass's.
+func TestGogenSplitsOgenCorpus(t *testing.T) {
+	counts := map[gogen.Disposition]int{}
+	delegated := map[string]int{}
+	var lowered, clean int
+	eachOgenDocument(t, func(_ string, defs map[plan.SchemaID]plan.CompilationPlan) {
+		types, err := gogen.Lower(defs)
+		if err != nil {
+			return
+		}
+		for _, n := range types {
+			lowered++
+			if n.Checks.Empty() {
+				clean++
+			}
+			for _, gp := range defs[n.ID].Validation.Predicates {
+				d := gogen.Classify(n, gp)
+				counts[d]++
+				if d == gogen.Delegate {
+					delegated[fmt.Sprintf("%T", gp.Expression)]++
+				}
+			}
+		}
+	})
+
+	total := counts[gogen.Discharged] + counts[gogen.Inline] + counts[gogen.Delegate]
+	require.NotZero(t, total)
+	t.Logf("%d types, %d carry no check of their own (%.1f%%)", lowered, clean, float64(clean)*100/float64(lowered))
+	t.Logf("%d predicates: %d discharged, %d inline, %d delegate (%.1f%%)",
+		total, counts[gogen.Discharged], counts[gogen.Inline], counts[gogen.Delegate],
+		float64(counts[gogen.Delegate])*100/float64(total))
+
+	kinds := make([]string, 0, len(delegated))
+	for k := range delegated {
+		kinds = append(kinds, k)
+	}
+	slices.SortFunc(kinds, func(a, b string) int { return delegated[b] - delegated[a] })
+	for _, k := range kinds {
+		t.Logf("  delegate %5d %s", delegated[k], k)
+	}
 }

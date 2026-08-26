@@ -104,10 +104,9 @@ delegates cases that do not need it and teaches the reader to trust a slot never
 be exact.
 
 So: `preservedBy(GoType, plan.PredicateExpr) bool`, exhaustive over both sides, with a
-`default` that panics rather than guesses. Three outcomes per predicate — inline it; change
-the lowering so it becomes inlinable (an overflow map); or delegate it. Delegation is
-per-predicate rather than per-type: build a sub-plan of the delegated checks alone and
-compile that.
+`default` that panics rather than guesses. Delegation is per-predicate rather than
+per-type: build a sub-plan of the delegated checks alone and compile that. §10 records what
+it turned into once written.
 
 `nodetree`'s transitive dependencies are `jx`, `regexp2`, `go-faster/errors` and `plan` —
 no libopenapi — so delegating costs a generated program nothing ogen does not already
@@ -327,3 +326,67 @@ control test pins that `map[^a]string` does not parse.
 A pattern is a comment in that rendering, not part of the type. `map[^a]string` was the
 sharpest version of the problem: Go map keys here are always `string`, so the notation
 spelled a key type that does not exist.
+
+## 10. What `preservedBy` turned out to be
+
+Three outcomes, and they are not the three this document first guessed.
+
+| | meaning |
+| --- | --- |
+| **Discharged** | the Go type states it; emit nothing |
+| **Inline** | generated code decides it from the decoded value |
+| **Delegate** | it needs the raw document |
+
+`Discharged` was missing, and it is the largest of the three. `Inline` was assumed to be the
+good outcome, but a predicate the type already enforces is better than one it can check: a
+`required` property stored in a field that is not `opt.Opt` has nowhere to record absence, so
+a decoded value is already proof the property was there. Same for a kind assertion over a
+type that holds one kind, a `NumericDomainPredicate` over an integer type, and a
+`ReferencePredicate` over the `Named` it refers to.
+
+And "change the lowering so it becomes inlinable" never arose. §2 offered it for
+`minProperties` over a struct that discards unknown properties — but `Lower` states
+`additionalProperties` in every object, so an open one always has an overflow map and a
+closed one admits no key it did not store. The case the fix was for does not exist in this IR.
+
+### Delegation is exactly the `RawEvaluation` set
+
+Four predicates survive no Go type: `NegationPredicate`, `ShapePredicate`,
+`ContainsCountPredicate`, `PropertyNamesPredicate`. Those are precisely
+`plan.RawEvaluation`'s members (design §4.2).
+
+That is not a coincidence and not a shortcut. The ladder ranks *how much raw JSON generated
+code must retain and inspect*; `preservedBy` asks whether a Go type keeps what a predicate
+reads. "Needs the document" and "no type preserves it" are one statement read from either
+end. `TestRawEvaluationAlwaysDelegates` pins it, so the two ends cannot drift apart.
+
+Everything else delegates only when the value reaching it is raw — an `Any`, which keeps
+everything and exposes nothing. `UniqueItemsPredicate` is the strict case: it compares whole
+values, and two raw documents can differ byte for byte and be the same JSON value, so nothing
+*beneath* the array may be raw either.
+
+### Measured
+
+58 ogen documents, each type's own predicates:
+
+| | count | share |
+| --- | --- | --- |
+| discharged | 2468 | 61.3% |
+| inline | 1435 | 35.6% |
+| delegate | **124** | **3.1%** |
+
+The 124 are 91 `ShapePredicate`, 31 `RequiredPredicate` over an untyped `Any`, and one each
+of `FormatPredicate` and `PropertyNamesPredicate`. 66 of 1592 types carry no check of their
+own at all.
+
+### What this pass does not do
+
+It classifies each type's *own* predicates. A nested plan is carried by a nested type, and
+pairing the two trees — walking a `GoType` and a `CompilationPlan` in step so every
+sub-schema's checks land on the slot that stores them — is the renderer's data model, not
+this pass's. `Checks` sits on `Named` today; the sub-schema checks it recurses into are
+reached through the structural predicates, which carry their own sub-plans.
+
+That is also why the counts above are per-type rather than per-keyword: the 4181
+`FormatPredicate`s the corpus contains live mostly in property sub-plans, and they will be
+classified against the field types that hold them.

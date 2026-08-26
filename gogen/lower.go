@@ -57,6 +57,12 @@ func Lower(plans map[plan.SchemaID]plan.CompilationPlan) ([]*Named, error) {
 	}
 
 	breakCycles(types)
+
+	// Splitting last: what a type can carry depends on the shape every earlier pass
+	// settled, pointer indirection included.
+	for _, n := range types {
+		n.Checks = Split(n, plans[n.ID].Validation)
+	}
 	return types, nil
 }
 

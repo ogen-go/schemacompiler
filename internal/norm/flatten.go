@@ -303,7 +303,7 @@ func filterNotNever(operands []ir.Expr) []ir.Expr {
 // implies b (design §15.2).
 func removeSubsumedAll(operands []ir.Expr) []ir.Expr {
 	drop := make([]bool, len(operands))
-	for i := 0; i < len(operands); i++ {
+	for i := range operands {
 		if drop[i] {
 			continue
 		}
@@ -338,7 +338,7 @@ func removeSubsumedAll(operands []ir.Expr) []ir.Expr {
 // already covers a (design §15.2).
 func removeSubsumedAnyOf(operands []ir.Expr) []ir.Expr {
 	drop := make([]bool, len(operands))
-	for i := 0; i < len(operands); i++ {
+	for i := range operands {
 		if drop[i] {
 			continue
 		}

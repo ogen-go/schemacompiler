@@ -3,7 +3,7 @@ package dump
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/ogen-go/schemacompiler/plan"
 )
@@ -59,7 +59,7 @@ func writeMetadata(t *tw, m plan.Metadata) {
 	for name := range g.Extensions {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, name := range names {
 		t.line("extension %q=%s", name, extensionValue(g.Extensions[name]))
 	}

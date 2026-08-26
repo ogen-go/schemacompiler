@@ -1,7 +1,8 @@
 package schemacompiler
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 
 	"github.com/ogen-go/schemacompiler/internal/frontend"
@@ -60,12 +61,11 @@ func sortRequirements(r plan.Requirements) plan.Requirements {
 	for _, slot := range []*[]plan.Location{
 		&r.RawEvaluation, &r.UnboundedNumeric, &r.JSONEquality, &r.ECMARegex, &r.EvaluationTracking,
 	} {
-		sort.Slice(*slot, func(i, j int) bool {
-			a, b := (*slot)[i], (*slot)[j]
-			if a.Pointer != b.Pointer {
-				return a.Pointer < b.Pointer
-			}
-			return a.Detail < b.Detail
+		slices.SortFunc(*slot, func(a, b plan.Location) int {
+			return cmp.Or(
+				cmp.Compare(a.Pointer, b.Pointer),
+				cmp.Compare(a.Detail, b.Detail),
+			)
 		})
 	}
 	return r

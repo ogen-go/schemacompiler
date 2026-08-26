@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -63,7 +63,7 @@ func dumpNode(n *Node, indent string, out *strings.Builder) {
 	}
 	if len(n.Required) > 0 {
 		req := append([]string(nil), n.Required...)
-		sort.Strings(req)
+		slices.Sort(req)
 		fmt.Fprintf(out, "%s  required=%v\n", indent, req)
 	}
 	if n.MinLength != nil {
@@ -135,7 +135,7 @@ func sortedKeys(m map[string]any) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }
 

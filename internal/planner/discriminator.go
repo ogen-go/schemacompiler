@@ -3,6 +3,7 @@ package planner
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ogen-go/schemacompiler/internal/ir"
@@ -123,11 +124,8 @@ func literalValues(e ir.Expr) ([]ir.Literal, bool) {
 func intersectLiterals(a, b []ir.Literal) []ir.Literal {
 	var out []ir.Literal
 	for _, x := range a {
-		for _, y := range b {
-			if x.Equal(y) {
-				out = append(out, x)
-				break
-			}
+		if slices.ContainsFunc(b, x.Equal) {
+			out = append(out, x)
 		}
 	}
 	return out
@@ -158,10 +156,8 @@ func requiredProperty(c components, name string) bool {
 		if !ok {
 			continue
 		}
-		for _, prop := range rd.Properties {
-			if prop == name {
-				return true
-			}
+		if slices.Contains(rd.Properties, name) {
+			return true
 		}
 	}
 	return false

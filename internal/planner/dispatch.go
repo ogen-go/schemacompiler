@@ -1,6 +1,8 @@
 package planner
 
 import (
+	"slices"
+
 	"github.com/ogen-go/schemacompiler/internal/ir"
 	"github.com/ogen-go/schemacompiler/plan"
 )
@@ -165,7 +167,7 @@ func (b *builder) buildLiteralDispatch(cases []discCase, path string) plan.Compi
 // pairwiseKindDisjoint reports whether every pair of branches accepts disjoint JSON
 // kinds, which is a sufficient proof of overall disjointness (design §15.3).
 func pairwiseKindDisjoint(branchExprs []ir.Expr) bool {
-	for i := 0; i < len(branchExprs); i++ {
+	for i := range branchExprs {
 		for j := i + 1; j < len(branchExprs); j++ {
 			if branchExprs[i].Kinds()&branchExprs[j].Kinds() != 0 {
 				return false
@@ -378,10 +380,8 @@ func requiredSingleHeld(e ir.Expr, name string) bool {
 	c := flattenAll([]ir.Expr{e})
 	for _, p := range c.predicates {
 		if rd, ok := p.Detail.(*ir.RequiredDetail); ok {
-			for _, n := range rd.Properties {
-				if n == name {
-					return true
-				}
+			if slices.Contains(rd.Properties, name) {
+				return true
 			}
 		}
 	}

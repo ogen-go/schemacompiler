@@ -36,7 +36,7 @@ const maxFixpointIters = 64
 func Normalize(e ir.Expr, budget int) ir.Expr {
 	st := &state{budget: budget}
 	prev := e
-	for i := 0; i < maxFixpointIters; i++ {
+	for range maxFixpointIters {
 		next := normalize(prev, st)
 		if exprEqual(next, prev) {
 			return next

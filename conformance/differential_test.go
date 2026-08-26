@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -215,7 +215,7 @@ func TestPlanInterpreterDifferential(t *testing.T) {
 			tally.unusedSkips = append(tally.unusedSkips, key)
 		}
 	}
-	sort.Strings(tally.unusedSkips)
+	slices.Sort(tally.unusedSkips)
 
 	reportTally(t, tally)
 	for _, f := range findings {
@@ -378,7 +378,7 @@ func sortedKeys(m map[string]int) []string {
 	for k := range m {
 		out = append(out, k)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -162,7 +162,7 @@ func reportRequirements(t *testing.T, reqs map[string]int) {
 	for slot := range reqs {
 		slots = append(slots, slot)
 	}
-	sort.Strings(slots)
+	slices.Sort(slots)
 
 	var b strings.Builder
 	b.WriteString("requirements reported over the suite:\n")

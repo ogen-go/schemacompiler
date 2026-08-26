@@ -7,7 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -70,7 +70,7 @@ func TestGogenNamesOgenCorpus(t *testing.T) {
 	require.NotZero(t, docs, "walked no compilable documents")
 	require.Empty(t, failures, "every schema in the corpus must name without an annotation")
 
-	sort.Ints(lengths)
+	slices.Sort(lengths)
 	at := func(q int) int { return lengths[min(len(lengths)*q/100, len(lengths)-1)] }
 	t.Logf("named %d schemas across %d documents; length p50=%d p90=%d p99=%d max=%d",
 		schemas, docs, at(50), at(90), at(99), lengths[len(lengths)-1])

@@ -250,11 +250,46 @@ matching pattern schema into that field's plan (design §12.3), so its slot is e
 The first lowering widened two-or-more rules to `map[string]any`, which threw away every
 element type for no reason.
 
-**Routing is to every matching rule, not the first.** JSON Schema conjoins the rules a key
-matches, and `additionalProperties` applies only when none matched. ogen's decoder gets this
-right — its template loops all patterns and sets `handled` — but it re-runs the value decoder
-inside each matching branch, reading a token that the previous branch already consumed. Our
-renderer must decode once and then route, or the overlapping case corrupts the stream.
+### Routing: validate against all, store in the first
+
+A key is validated against every rule whose pattern it matches — JSON Schema conjoins them,
+and `additionalProperties` applies only when none matched. ogen's decoder template loops all
+patterns and sets `handled`, which is that rule, but it does two things we should not copy.
+
+It re-runs the value decoder inside each matching branch, reading a token the previous branch
+already consumed. Decode once into the value, then test the patterns against the key: at one
+or two rules per object that loop is nothing.
+
+And it stores the key in *every* matching map, so encoding emits it twice. Round-tripping
+`{"ab":"x"}` under `{"^a":{"type":"string"},"b$":{"type":"string"}}` gives
+`{"ab":"x","ab":"x"}`, and the Go value has two independent slots for one JSON key — a state
+no document corresponds to.
+
+Store in the **first** matching map instead. That is lossless: an accepted value under
+overlapping rules i < j satisfies both, so it lies in ⟦Sᵢ⟧ ∩ ⟦Sⱼ⟧ ⊆ ⟦Sᵢ⟧, and mapᵢ's element
+type was built to hold ⟦Sᵢ⟧. Every key then lives in exactly one slot and round-trip is
+identity.
+
+### Is the map/struct boundary itself sound?
+
+Yes, and separately from the routing bug above.
+
+The map case over-accepts *keys* and nothing else: `map[string]T` can hold a key no rule
+matches, which a closed object rejects. That is §24's permitted direction, and the check that
+closes it is `ObjectStructurePredicate` — subject to the §2 hazard below, but not to a
+representation that cannot hold an accepted value.
+
+A declared field never has to share its name with a rule, because the planner has already
+intersected every matching pattern schema into it (§12.3). `{"properties":{"abc":{"type":
+"string"}},"patternProperties":{"^a":{"type":"number"}}}` lowers `abc` to `Never`, which is
+right — the intersection is empty and the property can never be present.
+
+What it is not is *stable*. Adding a second `patternProperties` rule turns `map[string]T`
+into a struct of two maps; adding one `properties` entry turns it into a struct too. A
+one-keyword schema edit rewrites the generated API. That is inherent to letting the common
+`additionalProperties`-only case be a map at all, it is long-standing ogen behaviour, and it
+is a stability property rather than a soundness one — but it is the thing that will surprise
+someone, so it is written down here.
 
 ### What it does not fix
 

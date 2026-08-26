@@ -104,9 +104,17 @@ type Map struct {
 // Struct is an object with declared fields.
 //
 // Patterns is one map per `patternProperties` rule, in the plan's order, each keeping its
-// own element type. A key is routed to *every* map whose pattern it matches, not the first
-// — JSON Schema conjoins the matching rules (design §12.3) — and to Additional only when it
-// matches none. Additional is the type of those, nil when the object is closed.
+// own element type. Additional is the type of the keys no rule matches, nil when the object
+// is closed.
+//
+// Routing contract. A key is *validated* against every rule whose pattern it matches, which
+// is what JSON Schema says (design §12.3), but it is *stored* in the first of them only.
+// Storing it in each would put one key in two maps, and encoding would then emit it twice.
+//
+// Storing in the first is lossless. An accepted value under overlapping rules i < j
+// satisfies both, so it lies in ⟦Sᵢ⟧ ∩ ⟦Sⱼ⟧ ⊆ ⟦Sᵢ⟧, and mapᵢ's element type was built to
+// hold ⟦Sᵢ⟧. The intersection is often empty — two rules matching one key with `string` and
+// `number` bodies admit no value for it at all — but nothing here needs to decide that.
 //
 // A declared field is never routed here: the planner has already intersected every matching
 // pattern schema into that field's own plan, so its slot is exact.

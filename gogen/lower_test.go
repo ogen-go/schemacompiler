@@ -10,6 +10,7 @@ import (
 
 	"github.com/ogen-go/schemacompiler"
 	"github.com/ogen-go/schemacompiler/gogen"
+	"github.com/ogen-go/schemacompiler/internal/gotypecheck"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -46,6 +47,9 @@ func sig(t gogen.GoType) string {
 	case *gogen.Slice:
 		return "[]" + sig(t.Elem)
 	case *gogen.Map:
+		if t.Pattern != "" {
+			return "map[" + t.Pattern + "]" + sig(t.Elem)
+		}
 		return "map[string]" + sig(t.Elem)
 	case *gogen.Tuple:
 		parts := make([]string, 0, len(t.Elems)+1)
@@ -57,9 +61,12 @@ func sig(t gogen.GoType) string {
 		}
 		return "tuple(" + strings.Join(parts, ",") + ")"
 	case *gogen.Struct:
-		parts := make([]string, 0, len(t.Fields)+1)
+		parts := make([]string, 0, len(t.Fields)+len(t.Patterns)+1)
 		for _, f := range t.Fields {
 			parts = append(parts, fmt.Sprintf("%s %s", f.Name, sig(f.Type)))
+		}
+		for _, p := range t.Patterns {
+			parts = append(parts, sig(p))
 		}
 		if t.Additional != nil {
 			parts = append(parts, "..."+sig(t.Additional))
@@ -132,13 +139,23 @@ func TestLowerShapes(t *testing.T) {
 			"closed struct", `{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":false}`,
 			`struct{A string}`,
 		},
+		// A lone rule over a closed object is the only thing governing the keys, so it is
+		// the map. Anything else needs a slot per governing rule, and a struct has slots.
 		{
 			"sole pattern rule", `{"type":"object","patternProperties":{"^a":{"type":"string"}},"additionalProperties":false}`,
-			`map[string]string`,
+			`map[^a]string`,
 		},
 		{
 			"pattern rule beside open additional", `{"type":"object","patternProperties":{"^a":{"type":"string"}}}`,
-			`map[string]any`,
+			`struct{map[^a]string;...any}`,
+		},
+		{
+			"two rules keep their own element types", `{"type":"object","patternProperties":{"^a":{"type":"string"},"^b":{"type":"number"}},"additionalProperties":false}`,
+			`struct{map[^a]string;map[^b]float}`,
+		},
+		{
+			"pattern rule beside a declared field", `{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"patternProperties":{"^x":{"type":"number"}},"additionalProperties":false}`,
+			`struct{A string;map[^x]float}`,
 		},
 		{
 			"homogeneous array", `{"type":"array","items":{"type":"string"}}`,
@@ -327,4 +344,46 @@ func TestLowerHonoursFieldNameExtension(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, types, 1)
 	require.Equal(t, `struct{Slash string}`, sig(types[0].Underlying))
+}
+
+// TestLoweredTypesCompile hands each fixture to the Go type checker. It is the assertion
+// [sig] cannot make: "invalid recursive type" is a property of the graph rather than of any
+// one type, so a test can assert a pointer appears exactly where it expects and still be
+// describing a package that does not build. go/parser does not see it either — such a file
+// parses — which is why this goes all the way to go/types.
+func TestLoweredTypesCompile(t *testing.T) {
+	schemas := map[string]string{
+		"self reference":     `{"$defs":{"Node":{"type":"object","properties":{"child":{"$ref":"#/$defs/Node"}}}},"type":"object","properties":{"n":{"$ref":"#/$defs/Node"}}}`,
+		"mutual recursion":   `{"$defs":{"A":{"type":"object","properties":{"b":{"$ref":"#/$defs/B"}}},"B":{"type":"object","properties":{"a":{"$ref":"#/$defs/A"}}}},"type":"object","properties":{"a":{"$ref":"#/$defs/A"}}}`,
+		"recursive tuple":    `{"$defs":{"Pair":{"type":"array","prefixItems":[{"type":"string"},{"$ref":"#/$defs/Pair"}],"items":false}},"type":"object","properties":{"p":{"$ref":"#/$defs/Pair"}}}`,
+		"recursion via ref":  `{"$defs":{"A":{"$ref":"#/$defs/B"},"B":{"$ref":"#/$defs/A"}},"type":"object","properties":{"a":{"$ref":"#/$defs/A"}}}`,
+		"cycle via a slice":  `{"$defs":{"Tree":{"type":"object","properties":{"kids":{"type":"array","items":{"$ref":"#/$defs/Tree"}}}}},"type":"object","properties":{"t":{"$ref":"#/$defs/Tree"}}}`,
+		"pattern properties": `{"$defs":{"P":{"type":"object","properties":{"a":{"type":"string"}},"patternProperties":{"^x":{"type":"number"},"^y":{"$ref":"#/$defs/P"}}}},"type":"object","properties":{"p":{"$ref":"#/$defs/P"}}}`,
+	}
+
+	for name, schema := range schemas {
+		t.Run(name, func(t *testing.T) {
+			types, err := gogen.Lower(definitions(t, schema))
+			require.NoError(t, err)
+			src := gotypecheck.Source(types)
+			require.NoError(t, gotypecheck.Check(src), "rendered:\n%s", src)
+		})
+	}
+}
+
+// TestLoweredTypesNeedTheRecursionPass is the control: without the pointers, the same
+// fixture is the "invalid recursive type" this is all here to prevent. If it ever stops
+// failing, [TestLoweredTypesCompile] has stopped proving anything.
+func TestLoweredTypesNeedTheRecursionPass(t *testing.T) {
+	require.ErrorContains(t, gotypecheck.Check(`package p
+
+type Opt[T any] struct {
+	val T
+	set bool
+}
+
+type Node struct {
+	Child Opt[Node]
+}
+`), "invalid recursive type")
 }

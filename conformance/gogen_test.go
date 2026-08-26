@@ -16,6 +16,7 @@ import (
 
 	"github.com/ogen-go/schemacompiler"
 	"github.com/ogen-go/schemacompiler/gogen"
+	"github.com/ogen-go/schemacompiler/internal/gotypecheck"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -140,4 +141,22 @@ func TestGogenLowersReproducibly(t *testing.T) {
 			require.Equal(t, first[i].Recursive, second[i].Recursive, "%s: %s", rel, first[i].Name)
 		}
 	})
+}
+
+// TestGogenLoweredCorpusCompiles type-checks every document's lowered types. It is the one
+// assertion that is not about what lowering produced but about whether it produced Go: a
+// cycle the recursion pass missed is an "invalid recursive type" that no shape comparison
+// sees and that go/parser accepts.
+func TestGogenLoweredCorpusCompiles(t *testing.T) {
+	var checked int
+	eachOgenDocument(t, func(rel string, defs map[plan.SchemaID]plan.CompilationPlan) {
+		types, err := gogen.Lower(defs)
+		if err != nil {
+			return
+		}
+		require.NoError(t, gotypecheck.Verify(types), "%s does not type-check", rel)
+		checked++
+	})
+	require.NotZero(t, checked)
+	t.Logf("type-checked %d documents", checked)
 }

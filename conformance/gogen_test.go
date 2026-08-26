@@ -144,22 +144,31 @@ func TestGogenLowersReproducibly(t *testing.T) {
 	})
 }
 
-// TestGogenLoweredCorpusCompiles type-checks every document's lowered types. It is the one
-// assertion that is not about what lowering produced but about whether it produced Go: a
-// cycle the recursion pass missed is an "invalid recursive type" that no shape comparison
-// sees and that go/parser accepts.
-func TestGogenLoweredCorpusCompiles(t *testing.T) {
-	var checked int
+// TestGogenRendersAndCompilesCorpus renders every document and type-checks the result
+// against the real `opt` package.
+//
+// It is the one assertion that is not about what lowering produced but about whether it
+// produced Go: a cycle the recursion pass missed is an "invalid recursive type" that no
+// shape comparison sees and that go/parser accepts. Checking against the real `opt` rather
+// than a stand-in matters, because inline storage is the property that decides whether a
+// cycle compiles.
+func TestGogenRendersAndCompilesCorpus(t *testing.T) {
+	var checked, bytes int
 	eachOgenDocument(t, func(rel string, defs map[plan.SchemaID]plan.CompilationPlan) {
 		types, err := gogen.Lower(defs)
 		if err != nil {
 			return
 		}
-		require.NoError(t, gotypecheck.Verify(types), "%s does not type-check", rel)
+		files, err := gogen.Render(types, gogen.Options{})
+		require.NoError(t, err, rel)
+		require.NoError(t, gotypecheck.Check(files, "../opt"), "%s does not type-check", rel)
 		checked++
+		for _, f := range files {
+			bytes += len(f.Content)
+		}
 	})
 	require.NotZero(t, checked)
-	t.Logf("type-checked %d documents", checked)
+	t.Logf("rendered and type-checked %d documents, %d KiB of Go", checked, bytes/1024)
 }
 
 // TestGogenSplitsOgenCorpus measures the validation boundary docs/backend.md §2 defines: how

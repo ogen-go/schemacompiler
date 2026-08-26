@@ -390,3 +390,18 @@ reached through the structural predicates, which carry their own sub-plans.
 That is also why the counts above are per-type rather than per-keyword: the 4181
 `FormatPredicate`s the corpus contains live mostly in property sub-plans, and they will be
 classified against the field types that hold them.
+
+## 11. Two things `Render` cannot say yet
+
+**A sum renders as `any`.** It needs a discriminator to be worth more, and dispatch is not
+lowered. The alternatives go in the doc comment of the declaration or field that holds it —
+not in the type, because Go block comments do not nest and a sum of a sum would have its
+first `*/` close both. A sum nested deeper than that loses the note; the plan keeps it
+either way. `any` over-accepts in the direction §24 permits, and the validation plan still
+narrows it.
+
+**A pattern is a comment.** `Pattern0Props map[string]T` says which values it holds but not
+which keys route to it. That is decoder data, and there is no decoder yet.
+
+Both are why generated code is not yet a third validator in the differential harness (§3):
+it does not reject anything.

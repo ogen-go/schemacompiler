@@ -106,15 +106,14 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 				for _, d := range res.Diagnostics {
 					kinds[d.Kind]++
 				}
-				for _, g := range planwalk.OverbroadGuards(res.Plan) {
-					// A guard reaching past what its predicate reads either rejects an
-					// instance the schema accepts or is a check in name only, and the
-					// interpreters cannot tell either way (issue #60).
+				for _, v := range planwalk.ContractViolations(res.Plan) {
+					// Rules about the plan's own shape that no interpreter can check for
+					// itself: a guard reaching past what its predicate reads, a sub-plan
+					// left unstated, a union nothing can dispatch on (issue #60).
 					overbroad++
 					if len(guardSamples) < 10 {
-						guardSamples = append(guardSamples, fmt.Sprintf("%s (%q): %T guarded on %v, reads %v",
-							filepath.Base(f), c.Description, g.Predicate,
-							plan.KindSetNames(g.Guard), plan.KindSetNames(g.Meaning)))
+						guardSamples = append(guardSamples,
+							fmt.Sprintf("%s (%q): %s", filepath.Base(f), c.Description, v))
 					}
 				}
 			}()
@@ -149,7 +148,7 @@ func TestJSONSchemaTestSuite(t *testing.T) {
 	// Hard guards: never panic, and the error rate must stay well under a ceiling so a
 	// broad regression (a change that breaks Compile on many schemas) still fails loudly.
 	require.Zero(t, panicked, "Compile must never panic on a suite schema")
-	require.Zerof(t, overbroad, "%d guards fire on a kind their predicate cannot read:\n  %s",
+	require.Zerof(t, overbroad, "%d plan-shape contract violations:\n  %s",
 		overbroad, strings.Join(guardSamples, "\n  "))
 	require.Less(t, errored*5, attempted, "suite error rate exceeded 20%%; likely a regression, not a library gap")
 }

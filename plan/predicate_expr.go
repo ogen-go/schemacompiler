@@ -136,7 +136,9 @@ type PatternCheck struct {
 //
 // Lowering contract. A property is governed by the first [PropertyCheck] whose Name it
 // equals; failing that, by every [PatternCheck] whose Pattern it matches; failing that, by
-// Additional. A nil Additional admits any value, matching `additionalProperties` absent.
+// Additional, which is always stated the way [ObjectRepresentation.Additional] is:
+// `additionalProperties` absent is a plan over [AnyRepresentation], `false` one over
+// [NeverRepresentation], and nil is neither.
 // Declared names are not also run through a matching pattern: the planner has already
 // intersected every matching pattern schema into the property's own plan (design §12.3).
 type ObjectStructurePredicate struct {
@@ -150,8 +152,8 @@ type ObjectStructurePredicate struct {
 // [ObjectStructurePredicate] is [ObjectRepresentation]'s.
 //
 // Lowering contract. Element i is governed by Prefix[i] where one exists and by Rest
-// otherwise. A nil Rest rejects every element past the prefix, matching `items: false`;
-// `items` absent is a Rest admitting any value.
+// otherwise. Rest is always stated: `items: false` is a plan over [NeverRepresentation]
+// and `items` absent one over [AnyRepresentation], so nil is neither.
 type ArrayStructurePredicate struct {
 	Prefix []CompilationPlan
 	Rest   *CompilationPlan

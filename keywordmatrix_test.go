@@ -229,8 +229,8 @@ func judge(t *testing.T, schema, witness string) (*schemacompiler.Result, plante
 	require.NoError(t, json.Unmarshal([]byte(witness), &v))
 	verdict, err := planterp.Interpret(res.Plan, v)
 	require.NoError(t, err)
-	require.Emptyf(t, planwalk.OverbroadGuards(res.Plan),
-		"a guard fires on a kind its predicate cannot read, in %s", schema)
+	require.Emptyf(t, planwalk.ContractViolations(res.Plan),
+		"plan-shape contract broken in %s", schema)
 	return res, verdict
 }
 

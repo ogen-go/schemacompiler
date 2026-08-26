@@ -31,7 +31,9 @@ type Named struct {
 	// any one reference: which edge to break is not canonical, which node to break at
 	// is (docs/backend.md §7).
 	Recursive bool
-	Metadata  plan.Metadata
+	// Checks is the plan's validation split by what this type can carry.
+	Checks   Checks
+	Metadata plan.Metadata
 }
 
 // PrimitiveKind is a Go scalar.

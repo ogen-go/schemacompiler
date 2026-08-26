@@ -14,12 +14,17 @@ material here, not the specification.
 ## 0. Shape
 
 ```go
-gogen.Lower(plans map[plan.SchemaID]plan.CompilationPlan, opts Options) ([]GoType, error)
-gogen.Render(types []GoType, opts Options) ([]File, error)
+gogen.Lower(plans map[plan.SchemaID]plan.CompilationPlan) ([]*Named, error)
+gogen.Render(types []*Named, opts Options) ([]File, error)
 ```
 
 Two stages, both public. `Lower` owns plan → Go semantics; `Render` owns source text. ogen
 may call `Render` or supply its own, which is the reason for the constraint in §4.
+
+`Lower` takes no options because none of its decisions are the caller's: §7 is the reason
+it takes the whole map rather than one plan, and a knob that changed a shape per call would
+give two callers two Go types for one schema. Every element of the result is a declaration,
+so `[]*Named` says what `[]GoType` would have left to a type assertion.
 
 ## 1. Naming
 
@@ -29,7 +34,8 @@ Restrictive and mechanical. The author names types; the backend does not guess.
   `$defs`, `definitions`, `allOf`, `additionalProperties`, `patternProperties`,
   `dependentSchemas`.
 - `items`/`prefixItems` → `Item`. `oneOf`/`anyOf` → `Variant<n>`.
-- Split each surviving segment on `[-_. ]`, upper-case each word, concatenate.
+- Split each surviving segment on `_` and on every rune that cannot appear in a Go
+  identifier, upper-case each word, concatenate.
 - No initialism table, no pluralization, no `Id` → `ID`. `title` never participates in a
   name; it is godoc.
 - `x-go-name` overrides outright. `Metadata.Extensions` already carries every `x-*` key,
@@ -43,9 +49,18 @@ pinned against a live ogen checkout by `TestGogenNamesOgenCorpus`.
 Two properties of the rule fell out rather than being designed, and both are worth knowing.
 Upper-casing the first word escapes every Go keyword for free, since all of them are
 lower-case: a schema named `type` becomes `Type` and needs no annotation. And the identifier
-check is what handles a name no rule could derive — a property named `slash/field` or
-`foo"bar` fails it and the author is asked for one, rather than being handed something
+check is what handles a name no rule could derive, rather than handing the author something
 sanitized that they did not write.
+
+The separator set is the widest of those two properties, and it was measured rather than
+chosen. Restricting it to `[-_. ]` left 25 of 15253 corpus properties unnameable — five
+distinct spellings, `$ref`, `$schema`, `@timestamp`, `@odata.location`, `+1` — in three
+documents including k8s and the GitHub API. Requiring `x-go-name` there means patching a
+specification the ogen user does not own. Treating a rune that cannot appear in an
+identifier as a separator invents nothing (it only drops), and two names that drop to the
+same identifier collide, which is already a hard error. What survives is the case the
+escape hatch is actually for: GitHub's `+1` and `-1` reaction counts drop to a leading
+digit and still ask the author for a name.
 
 ### Why the long spelling wins
 
@@ -173,3 +188,45 @@ One caveat remains, and is not a defect: `plan.ResidualChecks` compares
 shares the pointer with the structure predicate it derives. A backend that rebuilds or
 round-trips a plan breaks that comparison silently. `gogen` must not reconstruct plans it
 intends to call `ResidualChecks` on.
+
+## 7. Recursion is broken at the node, never at the edge
+
+A schema may reference itself, and `opt.Opt[T]` stores its value inline, so some references
+have to become pointers or the generated package does not compile. Which ones is the whole
+question.
+
+**Not the edge.** Choosing a minimal set of references to cut is the feedback arc set
+problem: NP-hard, and worse, without a canonical answer. Two documents referencing the same
+schema could cut differently and disagree about its Go shape.
+
+**The node.** If a type is a member of a cycle of inline storage, *every* direct reference
+to it is a pointer — including references from outside the cycle. SCC membership is
+canonical, so "several graphs referencing the same schema" dissolves: there is one answer
+per schema, and it does not depend on who asks or in what order.
+
+This is why `Lower` takes the whole document map. Lowering schema by schema would compute
+the components of a graph it cannot see.
+
+Three ordered passes, none reading a later one's output:
+
+1. **Shape** — from `plan.Representation` alone. References become `*Named` nodes, so the
+   lowered types are already a graph.
+2. **Components** — Tarjan over *Go-storage* edges, marking every type in a cycle.
+3. **Indirection** — each direct reference to a marked type becomes a `Pointer`.
+
+The edge set in pass 2 is not the frontend's. `internal/frontend` classifies recursion over
+instance-descent edges to answer §19's guarded/unguarded question; a `oneOf` alternative is
+a Go interface but not an instance descent, and an array item is a descent but is already
+indirect in Go. Same algorithm, different graph, so Tarjan lives in `internal/scc` and each
+caller brings its own edges.
+
+What counts as inline: struct fields, tuple slots, an `opt` wrapper, and a named type's own
+underlying type. What does not, because the language already indirects: slices, maps,
+interfaces, and pointers themselves.
+
+Only three `opt` types are needed rather than six. `opt.Opt[*Node]` breaks the cycle, so
+instantiating with a pointer is the entire adaptation — there is no parallel `OptPtr`.
+
+Measured over the 58 ogen documents: 1592 types lowered, **10 recursive (0.63%)**. Pointer
+indirection is the one thing lowering adds that an author sees in their own code, and it
+stays rare.

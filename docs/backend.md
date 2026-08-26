@@ -403,5 +403,12 @@ narrows it.
 **A pattern is a comment.** `Pattern0Props map[string]T` says which values it holds but not
 which keys route to it. That is decoder data, and there is no decoder yet.
 
+Open beside them, and not a gap so much as an unmade decision: whether an object with no
+`additionalProperties` needs an overflow slot at all (issue #151). The corpus has **zero**
+closed structs, so today nearly every generated type carries `map[string]any`. §10's claim
+that `minProperties` is always inlinable rests on that slot existing, and `plan` cannot tell
+`additionalProperties: true` from its absence — the two accept identically — so a backend
+cannot adopt ogen's rule of dropping one and keeping the other.
+
 Both are why generated code is not yet a third validator in the differential harness (§3):
 it does not reject anything.

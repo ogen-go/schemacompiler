@@ -110,57 +110,10 @@ func storesAs(t GoType, want plan.KindSet, ok func(GoType) bool) bool {
 // holding raw JSON. It is what a check comparing whole values needs, since two raw
 // documents can differ byte for byte and be the same JSON value.
 func exact(t GoType) bool {
-	seen := make(map[GoType]bool)
-	var walk func(GoType) bool
-	walk = func(t GoType) bool {
-		if seen[t] {
-			return true
+	return Fold(t, true, func(ok bool, n Node) (bool, Action) {
+		if _, raw := n.Type.(*Any); raw {
+			return false, Stop
 		}
-		seen[t] = true
-		switch t := t.(type) {
-		case *Any:
-			return false
-		case *Named:
-			return walk(t.Underlying)
-		case *Pointer:
-			return walk(t.Elem)
-		case *Presence:
-			return walk(t.Elem)
-		case *Slice:
-			return walk(t.Elem)
-		case *Map:
-			return walk(t.Elem)
-		case *Interface:
-			for _, v := range t.Variants {
-				if !walk(v) {
-					return false
-				}
-			}
-			return true
-		case *Struct:
-			for _, f := range t.Fields {
-				if !walk(f.Type) {
-					return false
-				}
-			}
-			for _, p := range t.Patterns {
-				if !walk(p) {
-					return false
-				}
-			}
-			return t.Additional == nil || walk(t.Additional)
-		case *Tuple:
-			for _, e := range t.Elems {
-				if !walk(e) {
-					return false
-				}
-			}
-			return t.Rest == nil || walk(t.Rest)
-		case *Primitive, *Never:
-			return true
-		default:
-			panic(fmt.Sprintf("gogen: unhandled GoType variant %T", t))
-		}
-	}
-	return walk(t)
+		return ok, Descend
+	})
 }

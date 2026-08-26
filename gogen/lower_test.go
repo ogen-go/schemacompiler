@@ -168,6 +168,45 @@ func TestLowerShapes(t *testing.T) {
 	}
 }
 
+// TestLowerTypesTheOverflow pins that the overflow map follows the schema. `any` is what
+// `additionalProperties` absent and `additionalProperties: true` both mean — the two are
+// the same claim about what is accepted — and it is not what a stated schema means.
+func TestLowerTypesTheOverflow(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		defs string
+		want string
+	}{
+		{
+			"a reference is carried into the element type",
+			`"Pet":{"type":"object","properties":{"n":{"type":"string"}},"required":["n"],"additionalProperties":false},
+			 "T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":{"$ref":"#/$defs/Pet"}}`,
+			`struct { A string; AdditionalProps map[string]Pet }`,
+		},
+		{
+			"so is a scalar",
+			`"T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":{"type":"integer"}}`,
+			`struct { A string; AdditionalProps map[string]int64 }`,
+		},
+		{
+			"additionalProperties: true accepts anything, so the element type is anything",
+			`"T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":true}`,
+			`struct { A string; AdditionalProps map[string]any }`,
+		},
+		{
+			"and absent says the same thing",
+			`"T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"]}`,
+			`struct { A string; AdditionalProps map[string]any }`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			types := lower(t, fmt.Sprintf(
+				`{"$defs":{%s},"type":"object","properties":{"t":{"$ref":"#/$defs/T"}}}`, tt.defs))
+			require.Equal(t, tt.want, shape(t, types["T"].Underlying))
+		})
+	}
+}
+
 func TestLowerBreaksCyclesAtTheNode(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -3,7 +3,11 @@ package gogen_test
 import (
 	"context"
 	"fmt"
+	"go/ast"
 	"go/parser"
+	"go/printer"
+	"go/token"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -40,18 +44,37 @@ func lower(t *testing.T, schema string) map[string]*gogen.Named {
 // requireGoType parses want as a Go type expression. Holding an expectation that is not
 // Go is what the old hand-rolled notation allowed, and it is the failure this whole file
 // is meant to catch one layer down: a shape that reads right and does not compile.
-// TestExpectationsMustBeGo is the control for [requireGoType]: the notation this file used
-// to assert in parsed as nothing at all, so nothing could tell a wrong shape from a
-// misspelled one.
-func TestExpectationsMustBeGo(t *testing.T) {
-	_, err := parser.ParseExpr(`map[^a]string`)
-	require.Error(t, err, "the old notation must not pass for Go")
-}
+// shape renders t and strips what belongs to the declaration rather than the type: struct
+// tags and doc comments, which are rendering decisions and not lowering ones. It goes
+// through go/parser and go/printer to do it, so an expectation below is Go by construction
+// — the tables used to assert in a notation of their own, which reads like Go, is not Go,
+// and parses as nothing.
+var spaces = regexp.MustCompile(`[ \t]+`)
 
-func requireGoType(t *testing.T, want string) {
+func shape(t *testing.T, g gogen.GoType) string {
 	t.Helper()
-	_, err := parser.ParseExpr(want)
-	require.NoErrorf(t, err, "expectation %q is not a Go type expression", want)
+	src := gogen.TypeExpr(g)
+	expr, err := parser.ParseExpr(src)
+	require.NoErrorf(t, err, "rendered %q is not a Go type expression", src)
+
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if f, ok := n.(*ast.Field); ok {
+			f.Tag, f.Doc, f.Comment = nil, nil, nil
+		}
+		return true
+	})
+
+	var b strings.Builder
+	require.NoError(t, printer.Fprint(&b, token.NewFileSet(), expr))
+
+	one := strings.ReplaceAll(b.String(), "\n", "; ")
+	one = spaces.ReplaceAllString(one, " ")
+	one = strings.ReplaceAll(strings.ReplaceAll(one, "{ ; ", "{ "), " ; }", " }")
+	one = strings.ReplaceAll(strings.ReplaceAll(one, "{; ", "{ "), "; }", " }")
+	one = strings.ReplaceAll(one, "struct{ ", "struct { ")
+	_, err = parser.ParseExpr(one)
+	require.NoErrorf(t, err, "collapsed %q is not a Go type expression", one)
+	return one
 }
 
 func TestLowerShapes(t *testing.T) {
@@ -62,19 +85,19 @@ func TestLowerShapes(t *testing.T) {
 	}{
 		{
 			"required field", `{"type":"object","properties":{"a":{"type":"string"}},"required":["a"]}`,
-			`struct { A string; Extra map[string]any }`,
+			`struct { A string; AdditionalProps map[string]any }`,
 		},
 		{
 			"optional field", `{"type":"object","properties":{"a":{"type":"string"}}}`,
-			`struct { A Opt[string]; Extra map[string]any }`,
+			`struct { A opt.Opt[string]; AdditionalProps map[string]any }`,
 		},
 		{
 			"nullable required field", `{"type":"object","properties":{"a":{"type":["string","null"]}},"required":["a"]}`,
-			`struct { A Nullable[string]; Extra map[string]any }`,
+			`struct { A opt.Nullable[string]; AdditionalProps map[string]any }`,
 		},
 		{
 			"nullable optional field", `{"type":"object","properties":{"a":{"type":["string","null"]}}}`,
-			`struct { A OptNullable[string]; Extra map[string]any }`,
+			`struct { A opt.OptNullable[string]; AdditionalProps map[string]any }`,
 		},
 		{
 			"closed empty object", `{"type":"object","additionalProperties":false}`,
@@ -86,7 +109,7 @@ func TestLowerShapes(t *testing.T) {
 		},
 		{
 			"struct with overflow", `{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":{"type":"number"}}`,
-			`struct { A string; Extra map[string]float64 }`,
+			`struct { A string; AdditionalProps map[string]float64 }`,
 		},
 		{
 			"closed struct", `{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":false}`,
@@ -96,19 +119,19 @@ func TestLowerShapes(t *testing.T) {
 		// the map. Anything else needs a slot per governing rule, and a struct has slots.
 		{
 			"sole pattern rule", `{"type":"object","patternProperties":{"^a":{"type":"string"}},"additionalProperties":false}`,
-			`map[string]string /*"^a"*/`,
+			`map[string]string`,
 		},
 		{
 			"pattern rule beside open additional", `{"type":"object","patternProperties":{"^a":{"type":"string"}}}`,
-			`struct { Pattern0Props map[string]string /*"^a"*/; Extra map[string]any }`,
+			`struct { Pattern0Props map[string]string; AdditionalProps map[string]any }`,
 		},
 		{
 			"two rules keep their own element types", `{"type":"object","patternProperties":{"^a":{"type":"string"},"^b":{"type":"number"}},"additionalProperties":false}`,
-			`struct { Pattern0Props map[string]string /*"^a"*/; Pattern1Props map[string]float64 /*"^b"*/ }`,
+			`struct { Pattern0Props map[string]string; Pattern1Props map[string]float64 }`,
 		},
 		{
 			"pattern rule beside a declared field", `{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"patternProperties":{"^x":{"type":"number"}},"additionalProperties":false}`,
-			`struct { A string; Pattern0Props map[string]float64 /*"^x"*/ }`,
+			`struct { A string; Pattern0Props map[string]float64 }`,
 		},
 		{
 			"homogeneous array", `{"type":"array","items":{"type":"string"}}`,
@@ -125,11 +148,11 @@ func TestLowerShapes(t *testing.T) {
 		{"integer", `{"type":"integer"}`, `int64`},
 		{"format survives", `{"type":"string","format":"date-time"}`, `string`},
 		{"any", `{}`, `any`},
-		{"union", `{"oneOf":[{"type":"string"},{"type":"boolean"}]}`, `interface{ variant(string, bool) }`},
-		{"union with null alternative", `{"type":["string","boolean","null"]}`, `Nullable[interface{ variant(bool, string) }]`},
+		{"union", `{"oneOf":[{"type":"string"},{"type":"boolean"}]}`, `any`},
+		{"union with null alternative", `{"type":["string","boolean","null"]}`, `opt.Nullable[any]`},
 		{
 			"nested object is anonymous", `{"type":"object","properties":{"a":{"type":"object","properties":{"b":{"type":"string"}},"required":["b"]}},"required":["a"]}`,
-			`struct { A struct { B string; Extra map[string]any }; Extra map[string]any }`,
+			`struct { A struct { B string; AdditionalProps map[string]any }; AdditionalProps map[string]any }`,
 		},
 	}
 
@@ -139,9 +162,47 @@ func TestLowerShapes(t *testing.T) {
 			types := lower(t, schema)
 			decl, ok := types["T"]
 			require.True(t, ok, "lowered %v", types)
-			requireGoType(t, tt.want)
-			require.Equal(t, tt.want, gotypecheck.Type(decl.Underlying))
+			require.Equal(t, tt.want, shape(t, decl.Underlying))
 			require.False(t, decl.Recursive)
+		})
+	}
+}
+
+// TestLowerTypesTheOverflow pins that the overflow map follows the schema. `any` is what
+// `additionalProperties` absent and `additionalProperties: true` both mean — the two are
+// the same claim about what is accepted — and it is not what a stated schema means.
+func TestLowerTypesTheOverflow(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		defs string
+		want string
+	}{
+		{
+			"a reference is carried into the element type",
+			`"Pet":{"type":"object","properties":{"n":{"type":"string"}},"required":["n"],"additionalProperties":false},
+			 "T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":{"$ref":"#/$defs/Pet"}}`,
+			`struct { A string; AdditionalProps map[string]Pet }`,
+		},
+		{
+			"so is a scalar",
+			`"T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":{"type":"integer"}}`,
+			`struct { A string; AdditionalProps map[string]int64 }`,
+		},
+		{
+			"additionalProperties: true accepts anything, so the element type is anything",
+			`"T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":true}`,
+			`struct { A string; AdditionalProps map[string]any }`,
+		},
+		{
+			"and absent says the same thing",
+			`"T":{"type":"object","properties":{"a":{"type":"string"}},"required":["a"]}`,
+			`struct { A string; AdditionalProps map[string]any }`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			types := lower(t, fmt.Sprintf(
+				`{"$defs":{%s},"type":"object","properties":{"t":{"$ref":"#/$defs/T"}}}`, tt.defs))
+			require.Equal(t, tt.want, shape(t, types["T"].Underlying))
 		})
 	}
 }
@@ -156,7 +217,7 @@ func TestLowerBreaksCyclesAtTheNode(t *testing.T) {
 		{
 			name: "self reference through a field",
 			defs: `"Node":{"type":"object","properties":{"child":{"$ref":"#/$defs/Node"}}}`,
-			want: map[string]string{"Node": `struct { Child Opt[*Node]; Extra map[string]any }`},
+			want: map[string]string{"Node": `struct { Child opt.Opt[*Node]; AdditionalProps map[string]any }`},
 			// The cycle is Node -> Node: an opt.Opt stores its value inline, so
 			// without the pointer the type would not compile.
 			recursive: []string{"Node"},
@@ -164,20 +225,20 @@ func TestLowerBreaksCyclesAtTheNode(t *testing.T) {
 		{
 			name: "a slice already breaks the cycle",
 			defs: `"Tree":{"type":"object","properties":{"kids":{"type":"array","items":{"$ref":"#/$defs/Tree"}}}}`,
-			want: map[string]string{"Tree": `struct { Kids Opt[[]Tree]; Extra map[string]any }`},
+			want: map[string]string{"Tree": `struct { Kids opt.Opt[[]Tree]; AdditionalProps map[string]any }`},
 		},
 		{
 			name: "a map already breaks the cycle",
 			defs: `"Bag":{"type":"object","properties":{"more":{"type":"object","additionalProperties":{"$ref":"#/$defs/Bag"}}}}`,
-			want: map[string]string{"Bag": `struct { More Opt[map[string]Bag]; Extra map[string]any }`},
+			want: map[string]string{"Bag": `struct { More opt.Opt[map[string]Bag]; AdditionalProps map[string]any }`},
 		},
 		{
 			name: "mutual recursion points both ways",
 			defs: `"A":{"type":"object","properties":{"b":{"$ref":"#/$defs/B"}}},
 				"B":{"type":"object","properties":{"a":{"$ref":"#/$defs/A"}}}`,
 			want: map[string]string{
-				"A": `struct { B Opt[*B]; Extra map[string]any }`,
-				"B": `struct { A Opt[*A]; Extra map[string]any }`,
+				"A": `struct { B opt.Opt[*B]; AdditionalProps map[string]any }`,
+				"B": `struct { A opt.Opt[*A]; AdditionalProps map[string]any }`,
 			},
 			recursive: []string{"A", "B"},
 		},
@@ -188,8 +249,8 @@ func TestLowerBreaksCyclesAtTheNode(t *testing.T) {
 			defs: `"Node":{"type":"object","properties":{"child":{"$ref":"#/$defs/Node"}}},
 				"Holder":{"type":"object","properties":{"n":{"$ref":"#/$defs/Node"}},"required":["n"]}`,
 			want: map[string]string{
-				"Node":   `struct { Child Opt[*Node]; Extra map[string]any }`,
-				"Holder": `struct { N *Node; Extra map[string]any }`,
+				"Node":   `struct { Child opt.Opt[*Node]; AdditionalProps map[string]any }`,
+				"Holder": `struct { N *Node; AdditionalProps map[string]any }`,
 			},
 			recursive: []string{"Node"},
 		},
@@ -204,7 +265,7 @@ func TestLowerBreaksCyclesAtTheNode(t *testing.T) {
 			name: "cycle through a union alternative",
 			defs: `"Alt":{"type":"object","properties":{"v":{"oneOf":[{"type":"string"},{"$ref":"#/$defs/Alt"}]}}}`,
 			// A union is an interface, which is indirection the language already gives.
-			want: map[string]string{"Alt": `struct { V Opt[interface{ variant(string, Alt) }]; Extra map[string]any }`},
+			want: map[string]string{"Alt": `struct { V opt.Opt[any]; AdditionalProps map[string]any }`},
 		},
 	}
 
@@ -221,8 +282,7 @@ func TestLowerBreaksCyclesAtTheNode(t *testing.T) {
 			for name, want := range tt.want {
 				decl, ok := types[name]
 				require.True(t, ok, "no type %q in %v", name, types)
-				requireGoType(t, want)
-				require.Equal(t, want, gotypecheck.Type(decl.Underlying), "type %q", name)
+				require.Equal(t, want, shape(t, decl.Underlying), "type %q", name)
 			}
 			var got []string
 			for name, decl := range types {
@@ -252,7 +312,7 @@ func TestLowerIsReproducible(t *testing.T) {
 		require.NoError(t, err)
 		var b strings.Builder
 		for _, n := range types {
-			fmt.Fprintf(&b, "%s %s recursive=%v\n", n.Name, gotypecheck.Type(n.Underlying), n.Recursive)
+			fmt.Fprintf(&b, "%s %s recursive=%v\n", n.Name, shape(t, n.Underlying), n.Recursive)
 		}
 		return b.String()
 	}
@@ -298,14 +358,14 @@ func TestLowerHonoursFieldNameExtension(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, types, 1)
-	require.Equal(t, `struct { Slash string }`, gotypecheck.Type(types[0].Underlying))
+	require.Equal(t, `struct { Slash string }`, shape(t, types[0].Underlying))
 }
 
-// TestLoweredTypesCompile hands each fixture to the Go type checker. It is the assertion
-// [sig] cannot make: "invalid recursive type" is a property of the graph rather than of any
-// one type, so a test can assert a pointer appears exactly where it expects and still be
-// describing a package that does not build. go/parser does not see it either — such a file
-// parses — which is why this goes all the way to go/types.
+// TestLoweredTypesCompile renders each fixture and hands it to the Go type checker. It is
+// the assertion no shape comparison can make: "invalid recursive type" is a property of the
+// graph, not of any one type, so a test can assert a pointer appears exactly where it
+// expects and still describe a package that does not build. go/parser does not see it
+// either — such a file parses — which is why this goes all the way to go/types.
 func TestLoweredTypesCompile(t *testing.T) {
 	schemas := map[string]string{
 		"self reference":     `{"$defs":{"Node":{"type":"object","properties":{"child":{"$ref":"#/$defs/Node"}}}},"type":"object","properties":{"n":{"$ref":"#/$defs/Node"}}}`,
@@ -320,8 +380,9 @@ func TestLoweredTypesCompile(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			types, err := gogen.Lower(definitions(t, schema))
 			require.NoError(t, err)
-			src := gotypecheck.Source(types)
-			require.NoError(t, gotypecheck.Check(src), "rendered:\n%s", src)
+			files, err := gogen.Render(types, gogen.Options{})
+			require.NoError(t, err)
+			require.NoError(t, gotypecheck.Check(files, "../opt"), "rendered:\n%s", files[0].Content)
 		})
 	}
 }
@@ -330,15 +391,11 @@ func TestLoweredTypesCompile(t *testing.T) {
 // fixture is the "invalid recursive type" this is all here to prevent. If it ever stops
 // failing, [TestLoweredTypesCompile] has stopped proving anything.
 func TestLoweredTypesNeedTheRecursionPass(t *testing.T) {
-	require.ErrorContains(t, gotypecheck.Check(`package p
-
-type Opt[T any] struct {
-	val T
-	set bool
-}
-
-type Node struct {
-	Child Opt[Node]
-}
-`), "invalid recursive type")
+	node := &gogen.Named{ID: "/$defs/Node", Name: "Node"}
+	node.Underlying = &gogen.Struct{Fields: []gogen.Field{
+		{Name: "Child", JSON: "child", Type: &gogen.Presence{Elem: node, Optional: true}},
+	}}
+	files, err := gogen.Render([]*gogen.Named{node}, gogen.Options{})
+	require.NoError(t, err)
+	require.ErrorContains(t, gotypecheck.Check(files, "../opt"), "invalid recursive type")
 }

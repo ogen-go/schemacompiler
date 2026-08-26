@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ogen-go/schemacompiler/gogen"
-	"github.com/ogen-go/schemacompiler/internal/gotypecheck"
 )
 
 func edgeString(e gogen.Edge) string {
@@ -89,12 +88,12 @@ func TestFoldVisitsInPreOrder(t *testing.T) {
 	}
 	var got []string
 	gogen.Fold(s, 0, func(acc int, n gogen.Node) (int, gogen.Action) {
-		got = append(got, edgeString(n.Edge)+":"+gotypecheck.Type(n.Type))
+		got = append(got, edgeString(n.Edge)+":"+shape(t, n.Type))
 		return acc, gogen.Descend
 	})
 	require.Equal(t, []string{
-		"root:struct { A Opt[[]string] }",
-		"field(A)[0]:Opt[[]string]",
+		"root:struct { A opt.Opt[[]string] }",
+		"field(A)[0]:opt.Opt[[]string]",
 		"stored:[]string",
 		"elem*:string",
 	}, got)
@@ -159,7 +158,7 @@ func TestEveryVariantIsWalkable(t *testing.T) {
 				gogen.Fold(v, 0, func(acc int, _ gogen.Node) (int, gogen.Action) { return acc, gogen.Descend })
 			}, "Fold")
 			require.NotPanics(t, func() { _ = gogen.Kinds(v) }, "Kinds")
-			require.NotPanics(t, func() { _ = gotypecheck.Type(v) }, "gotypecheck.Type")
+			require.NotPanics(t, func() { _ = gogen.TypeExpr(v) }, "gogen.TypeExpr")
 		})
 	}
 }

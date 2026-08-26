@@ -47,6 +47,15 @@ func TestTypeName(t *testing.T) {
 		// Upper-casing the first word escapes every Go keyword, since all of them are
 		// lower-case: a schema named `type` needs no annotation.
 		{"/components/schemas/type", "Type"},
+
+		// A rune that cannot spell an identifier separates words rather than failing:
+		// real specs put sigils in property names, and dropping `@` invents nothing.
+		// Two names that drop to the same identifier collide, which is already an error.
+		{"/components/schemas/Pet/properties/@timestamp", "PetTimestamp"},
+		{"/components/schemas/Pet/properties/$ref", "PetRef"},
+		{"/components/schemas/Pet/properties/@odata.location", "PetOdataLocation"},
+		{"/components/schemas/Pet/properties/a~1b", "PetAB"},
+		{"/components/schemas/Pet!", "Pet"},
 	} {
 		t.Run(tt.pointer, func(t *testing.T) {
 			got, err := gogen.TypeName(tt.pointer)
@@ -58,13 +67,13 @@ func TestTypeName(t *testing.T) {
 
 // TestTypeNameRefuses pins the restrictive half: a name the rule cannot derive is an error
 // naming the pointer, never a sanitized guess. Inventing `Type2FA` from `2FA` would put a
-// name in the author's code that they did not write and cannot predict.
+// name in the author's code that they did not write and cannot predict. What survives the
+// widened separator rule is exactly that case — a name whose only content is a digit or
+// nothing at all.
 func TestTypeNameRefuses(t *testing.T) {
 	for _, tt := range []struct{ name, pointer string }{
 		{"leading digit", "/components/schemas/2FA"},
-		{"slash in a property name", "/components/schemas/Pet/properties/a~1b"},
-		{"pattern is not a name", "/components/schemas/Pet/patternProperties/^a.*$"},
-		{"punctuation", "/components/schemas/Pet!"},
+		{"a name that is all punctuation", "/$defs/+1"},
 		{"no nameable segment", "/components/schemas"},
 		{"root", "/"},
 		{"empty", ""},

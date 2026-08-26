@@ -14,12 +14,17 @@ material here, not the specification.
 ## 0. Shape
 
 ```go
-gogen.Lower(plans map[plan.SchemaID]plan.CompilationPlan, opts Options) ([]GoType, error)
-gogen.Render(types []GoType, opts Options) ([]File, error)
+gogen.Lower(plans map[plan.SchemaID]plan.CompilationPlan) ([]*Named, error)
+gogen.Render(types []*Named, opts Options) ([]File, error)
 ```
 
 Two stages, both public. `Lower` owns plan → Go semantics; `Render` owns source text. ogen
 may call `Render` or supply its own, which is the reason for the constraint in §4.
+
+`Lower` takes no options because none of its decisions are the caller's: §7 is the reason
+it takes the whole map rather than one plan, and a knob that changed a shape per call would
+give two callers two Go types for one schema. Every element of the result is a declaration,
+so `[]*Named` says what `[]GoType` would have left to a type assertion.
 
 ## 1. Naming
 
@@ -29,7 +34,8 @@ Restrictive and mechanical. The author names types; the backend does not guess.
   `$defs`, `definitions`, `allOf`, `additionalProperties`, `patternProperties`,
   `dependentSchemas`.
 - `items`/`prefixItems` → `Item`. `oneOf`/`anyOf` → `Variant<n>`.
-- Split each surviving segment on `[-_. ]`, upper-case each word, concatenate.
+- Split each surviving segment on `_` and on every rune that cannot appear in a Go
+  identifier, upper-case each word, concatenate.
 - No initialism table, no pluralization, no `Id` → `ID`. `title` never participates in a
   name; it is godoc.
 - `x-go-name` overrides outright. `Metadata.Extensions` already carries every `x-*` key,
@@ -43,9 +49,18 @@ pinned against a live ogen checkout by `TestGogenNamesOgenCorpus`.
 Two properties of the rule fell out rather than being designed, and both are worth knowing.
 Upper-casing the first word escapes every Go keyword for free, since all of them are
 lower-case: a schema named `type` becomes `Type` and needs no annotation. And the identifier
-check is what handles a name no rule could derive — a property named `slash/field` or
-`foo"bar` fails it and the author is asked for one, rather than being handed something
+check is what handles a name no rule could derive, rather than handing the author something
 sanitized that they did not write.
+
+The separator set is the widest of those two properties, and it was measured rather than
+chosen. Restricting it to `[-_. ]` left 25 of 15253 corpus properties unnameable — five
+distinct spellings, `$ref`, `$schema`, `@timestamp`, `@odata.location`, `+1` — in three
+documents including k8s and the GitHub API. Requiring `x-go-name` there means patching a
+specification the ogen user does not own. Treating a rune that cannot appear in an
+identifier as a separator invents nothing (it only drops), and two names that drop to the
+same identifier collide, which is already a hard error. What survives is the case the
+escape hatch is actually for: GitHub's `+1` and `-1` reaction counts drop to a leading
+digit and still ask the author for a name.
 
 ### Why the long spelling wins
 
@@ -173,3 +188,142 @@ One caveat remains, and is not a defect: `plan.ResidualChecks` compares
 shares the pointer with the structure predicate it derives. A backend that rebuilds or
 round-trips a plan breaks that comparison silently. `gogen` must not reconstruct plans it
 intends to call `ResidualChecks` on.
+
+## 7. Recursion is broken at the node, never at the edge
+
+A schema may reference itself, and `opt.Opt[T]` stores its value inline, so some references
+have to become pointers or the generated package does not compile. Which ones is the whole
+question.
+
+**Not the edge.** Choosing a minimal set of references to cut is the feedback arc set
+problem: NP-hard, and worse, without a canonical answer. Two documents referencing the same
+schema could cut differently and disagree about its Go shape.
+
+**The node.** If a type is a member of a cycle of inline storage, *every* direct reference
+to it is a pointer — including references from outside the cycle. SCC membership is
+canonical, so "several graphs referencing the same schema" dissolves: there is one answer
+per schema, and it does not depend on who asks or in what order.
+
+This is why `Lower` takes the whole document map. Lowering schema by schema would compute
+the components of a graph it cannot see.
+
+Three ordered passes, none reading a later one's output:
+
+1. **Shape** — from `plan.Representation` alone. References become `*Named` nodes, so the
+   lowered types are already a graph.
+2. **Components** — Tarjan over *Go-storage* edges, marking every type in a cycle.
+3. **Indirection** — each direct reference to a marked type becomes a `Pointer`.
+
+The edge set in pass 2 is not the frontend's. `internal/frontend` classifies recursion over
+instance-descent edges to answer §19's guarded/unguarded question; a `oneOf` alternative is
+a Go interface but not an instance descent, and an array item is a descent but is already
+indirect in Go. Same algorithm, different graph, so Tarjan lives in `internal/scc` and each
+caller brings its own edges.
+
+What counts as inline: struct fields, tuple slots, an `opt` wrapper, and a named type's own
+underlying type. What does not, because the language already indirects: slices, maps,
+interfaces, and pointers themselves.
+
+Only three `opt` types are needed rather than six. `opt.Opt[*Node]` breaks the cycle, so
+instantiating with a pointer is the entire adaptation — there is no parallel `OptPtr`.
+
+Measured over the 58 ogen documents: 1592 types lowered, **10 recursive (0.63%)**. Pointer
+indirection is the one thing lowering adds that an author sees in their own code, and it
+stays rare.
+
+## 8. `patternProperties` gets a slot per rule
+
+Rules do not share an element type, so a single map cannot hold them. The shape is ogen's,
+and it was already right (`gen/schema_gen.go`):
+
+| object | lowering |
+| --- | --- |
+| no fields, one rule, closed | `Map{Elem: T, Pattern: p}` |
+| no fields, no rules, open | `Map{Elem: T}` |
+| anything else | `Struct{Fields, Patterns: one Map per rule, Additional}` |
+
+Each map keeps its own pattern, because nothing downstream can re-derive it — the plan
+states the rules positionally, and a Go map type says only that its keys are strings.
+A declared field is never routed through a rule: the planner has already intersected every
+matching pattern schema into that field's plan (design §12.3), so its slot is exact.
+
+The first lowering widened two-or-more rules to `map[string]any`, which threw away every
+element type for no reason.
+
+### Routing: validate against all, store in the first
+
+A key is validated against every rule whose pattern it matches — JSON Schema conjoins them,
+and `additionalProperties` applies only when none matched. ogen's decoder template loops all
+patterns and sets `handled`, which is that rule, but it does two things we should not copy.
+
+It re-runs the value decoder inside each matching branch, reading a token the previous branch
+already consumed. Decode once into the value, then test the patterns against the key: at one
+or two rules per object that loop is nothing.
+
+And it stores the key in *every* matching map, so encoding emits it twice. Round-tripping
+`{"ab":"x"}` under `{"^a":{"type":"string"},"b$":{"type":"string"}}` gives
+`{"ab":"x","ab":"x"}`, and the Go value has two independent slots for one JSON key — a state
+no document corresponds to.
+
+Store in the **first** matching map instead. That is lossless: an accepted value under
+overlapping rules i < j satisfies both, so it lies in ⟦Sᵢ⟧ ∩ ⟦Sⱼ⟧ ⊆ ⟦Sᵢ⟧, and mapᵢ's element
+type was built to hold ⟦Sᵢ⟧. Every key then lives in exactly one slot and round-trip is
+identity.
+
+### Is the map/struct boundary itself sound?
+
+Yes, and separately from the routing bug above.
+
+The map case over-accepts *keys* and nothing else: `map[string]T` can hold a key no rule
+matches, which a closed object rejects. That is §24's permitted direction, and the check that
+closes it is `ObjectStructurePredicate` — subject to the §2 hazard below, but not to a
+representation that cannot hold an accepted value.
+
+A declared field never has to share its name with a rule, because the planner has already
+intersected every matching pattern schema into it (§12.3). `{"properties":{"abc":{"type":
+"string"}},"patternProperties":{"^a":{"type":"number"}}}` lowers `abc` to `Never`, which is
+right — the intersection is empty and the property can never be present.
+
+What it is not is *stable*. Adding a second `patternProperties` rule turns `map[string]T`
+into a struct of two maps; adding one `properties` entry turns it into a struct too. A
+one-keyword schema edit rewrites the generated API. That is inherent to letting the common
+`additionalProperties`-only case be a map at all, it is long-standing ogen behaviour, and it
+is a stability property rather than a soundness one — but it is the thing that will surprise
+someone, so it is written down here.
+
+### What it does not fix
+
+`ResidualChecks` reports **zero** residual work for `{"type":"object","patternProperties":
+{"^a":{"type":"string"}}}` at `DirectGoType`, because `objectRestates` discharges the
+`ObjectStructurePredicate` against the *plan's* representation, which carries the rules
+positionally. A `Map` with a `Pattern` now preserves the element type, but nothing in the Go
+type enforces that a key not matching any rule is rejected when the object is closed.
+
+So a backend reading `ResidualChecks` as its boundary still emits no validator here and
+silently over-accepts. That is §2's rule with a concrete instance behind it: the boundary is
+`preservedBy(GoType, expr)`, a property of the pair. `ResidualChecks` is discharged against
+a representation `Lower` did not choose, and goes stale the moment it chooses another.
+
+## 9. The type checker is the only witness for the recursion pass
+
+"Invalid recursive type" is a property of the whole graph, not of any one type. A test can
+assert a pointer appears exactly where it expects and still describe a package that does not
+build, and `go/parser` does not help — such a file parses. Only `go/types` sees it.
+
+`internal/gotypecheck` renders lowered types as one self-contained file and checks it. `opt`
+is restated in the preamble rather than imported, so the checker needs no importer; what
+matters is reproduced exactly, that the value is stored inline. Every fixture and all 57
+lowerable corpus documents go through it, and a control test pins that the checker really
+does reject the graph the recursion pass exists to prevent.
+
+It is also the *only* rendering of a `GoType` the tests have. The first version of these
+tests asserted against a compact notation of their own — `map[^a]string`, `opt[string]`,
+`sum(string|bool)` — which reads like Go, is not Go, and parses as nothing. A second
+notation is a second answer to "what does this lower to", and it is the one no tool can
+check: a table written in it can be wrong in a way that looks right. The tables hold Go
+type expressions now, `requireGoType` parses every expectation before comparing it, and a
+control test pins that `map[^a]string` does not parse.
+
+A pattern is a comment in that rendering, not part of the type. `map[^a]string` was the
+sharpest version of the problem: Go map keys here are always `string`, so the notation
+spelled a key type that does not exist.

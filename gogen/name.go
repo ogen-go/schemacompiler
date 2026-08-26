@@ -3,6 +3,7 @@ package gogen
 import (
 	"go/token"
 	"strings"
+	"unicode"
 
 	"github.com/go-faster/errors"
 )
@@ -16,10 +17,11 @@ const NameExtension = "x-go-name"
 // keyword is a container, and skipping it is what makes `/components/schemas/Pet` yield
 // `Pet` rather than `ComponentsSchemasPet`.
 //
-// `patternProperties` is here despite its children being regexes rather than names. That
-// is deliberate: a regex does not sanitize into an identifier without inventing something,
-// so the segment fails the identifier check below and the author is asked for a name. A
-// backend that guessed here would be guessing about the author's type names.
+// `patternProperties` is here despite its children being regexes rather than names, so a
+// rule reaches only the word characters of the pattern: `^a.*$` names `A`. Two patterns
+// whose word characters agree collide, which is a hard error, and that is the only guard
+// there is — a regex is not a name and an author with more than one should set
+// [NameExtension].
 var containerKeywords = map[string]bool{
 	"components":        true,
 	"schemas":           true,
@@ -84,9 +86,13 @@ func TypeName(pointer string) (string, error) {
 	return name, nil
 }
 
-// camel splits a segment on the separators a schema name is spelled with and upper-cases
-// each word. A leading digit survives here and is rejected by [checkIdentifier], which
-// reports the whole derived name rather than the fragment.
+// camel splits a segment on everything that cannot spell a Go identifier and upper-cases
+// each word, so `@odata.location` is `OdataLocation` and `$ref` is `Ref`.
+//
+// Dropping a rune that has no place in an identifier is not the same as guessing a name:
+// nothing is invented, and two names that drop to the same identifier collide, which is
+// already a hard error. What survives is a leading digit, rejected by [checkIdentifier]
+// so that `+1` still asks the author for a name rather than being silently mangled.
 func camel(seg string) string {
 	var b strings.Builder
 	for _, w := range strings.FieldsFunc(seg, isSeparator) {
@@ -98,7 +104,7 @@ func camel(seg string) string {
 }
 
 func isSeparator(r rune) bool {
-	return r == '-' || r == '_' || r == '.' || r == ' '
+	return r == '_' || !unicode.IsLetter(r) && !unicode.IsDigit(r)
 }
 
 func checkIdentifier(name string) error {

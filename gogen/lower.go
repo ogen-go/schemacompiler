@@ -118,11 +118,23 @@ func (l *lowerer) object(o *plan.ObjectRepresentation) (GoType, error) {
 	if err != nil {
 		return nil, err
 	}
+	patterns, err := l.patterns(o)
+	if err != nil {
+		return nil, err
+	}
+
+	// An object with nothing declared is a map when exactly one thing governs its keys:
+	// a lone pattern rule over a closed object, or `additionalProperties` with no rules.
+	// Anything else needs a slot per governing rule, and a struct is what has slots.
 	if len(o.Fields) == 0 {
-		if extra == nil {
+		switch {
+		case len(patterns) == 1 && extra == nil:
+			return patterns[0], nil
+		case len(patterns) == 0 && extra != nil:
+			return &Map{Elem: extra}, nil
+		case len(patterns) == 0 && extra == nil:
 			return &Struct{}, nil
 		}
-		return &Map{Elem: extra}, nil
 	}
 
 	fields := make([]Field, 0, len(o.Fields))
@@ -139,16 +151,28 @@ func (l *lowerer) object(o *plan.ObjectRepresentation) (GoType, error) {
 		taken[field.Name] = f.Name
 		fields = append(fields, field)
 	}
-	return &Struct{Fields: fields, Additional: extra}, nil
+	return &Struct{Fields: fields, Patterns: patterns, Additional: extra}, nil
 }
 
-// overflow is the type of every property no declared field covers, or nil when the object
-// admits none.
-//
-// Pattern rules do not have one type, so a rule and an open `additionalProperties` are
-// over-approximated to [Any] together. Widening storage is sound where widening
-// acceptance would not be: each rule's own predicates stay in the validation plan, so
-// what the over-approximation costs is a type, not a check (design §24).
+// patterns is one map per `patternProperties` rule, keeping the rule's own element type
+// and the regex that routes keys to it.
+func (l *lowerer) patterns(o *plan.ObjectRepresentation) ([]*Map, error) {
+	if len(o.PatternRules) == 0 {
+		return nil, nil
+	}
+	out := make([]*Map, len(o.PatternRules))
+	for i, r := range o.PatternRules {
+		elem, err := l.plan(r.Plan)
+		if err != nil {
+			return nil, errors.Wrapf(err, "patternProperties[%q]", r.Pattern)
+		}
+		out[i] = &Map{Elem: elem, Pattern: r.Pattern}
+	}
+	return out, nil
+}
+
+// overflow is the type of every property no declared field and no pattern rule covers, or
+// nil when the object admits none.
 func (l *lowerer) overflow(o *plan.ObjectRepresentation) (GoType, error) {
 	if o.Additional == nil {
 		return nil, errors.New("object representation states no additionalProperties plan")
@@ -157,19 +181,10 @@ func (l *lowerer) overflow(o *plan.ObjectRepresentation) (GoType, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, closed := add.(*Never)
-
-	switch {
-	case len(o.PatternRules) == 0:
-		if closed {
-			return nil, nil
-		}
-		return add, nil
-	case len(o.PatternRules) == 1 && closed:
-		return l.plan(o.PatternRules[0].Plan)
-	default:
-		return &Any{}, nil
+	if _, closed := add.(*Never); closed {
+		return nil, nil
 	}
+	return add, nil
 }
 
 func (l *lowerer) field(f plan.FieldRepresentation) (Field, error) {

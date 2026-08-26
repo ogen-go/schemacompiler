@@ -230,3 +230,53 @@ instantiating with a pointer is the entire adaptation — there is no parallel `
 Measured over the 58 ogen documents: 1592 types lowered, **10 recursive (0.63%)**. Pointer
 indirection is the one thing lowering adds that an author sees in their own code, and it
 stays rare.
+
+## 8. `patternProperties` gets a slot per rule
+
+Rules do not share an element type, so a single map cannot hold them. The shape is ogen's,
+and it was already right (`gen/schema_gen.go`):
+
+| object | lowering |
+| --- | --- |
+| no fields, one rule, closed | `Map{Elem: T, Pattern: p}` |
+| no fields, no rules, open | `Map{Elem: T}` |
+| anything else | `Struct{Fields, Patterns: one Map per rule, Additional}` |
+
+Each map keeps its own pattern, because nothing downstream can re-derive it — the plan
+states the rules positionally, and a Go map type says only that its keys are strings.
+A declared field is never routed through a rule: the planner has already intersected every
+matching pattern schema into that field's plan (design §12.3), so its slot is exact.
+
+The first lowering widened two-or-more rules to `map[string]any`, which threw away every
+element type for no reason.
+
+**Routing is to every matching rule, not the first.** JSON Schema conjoins the rules a key
+matches, and `additionalProperties` applies only when none matched. ogen's decoder gets this
+right — its template loops all patterns and sets `handled` — but it re-runs the value decoder
+inside each matching branch, reading a token that the previous branch already consumed. Our
+renderer must decode once and then route, or the overlapping case corrupts the stream.
+
+### What it does not fix
+
+`ResidualChecks` reports **zero** residual work for `{"type":"object","patternProperties":
+{"^a":{"type":"string"}}}` at `DirectGoType`, because `objectRestates` discharges the
+`ObjectStructurePredicate` against the *plan's* representation, which carries the rules
+positionally. A `Map` with a `Pattern` now preserves the element type, but nothing in the Go
+type enforces that a key not matching any rule is rejected when the object is closed.
+
+So a backend reading `ResidualChecks` as its boundary still emits no validator here and
+silently over-accepts. That is §2's rule with a concrete instance behind it: the boundary is
+`preservedBy(GoType, expr)`, a property of the pair. `ResidualChecks` is discharged against
+a representation `Lower` did not choose, and goes stale the moment it chooses another.
+
+## 9. The type checker is the only witness for the recursion pass
+
+"Invalid recursive type" is a property of the whole graph, not of any one type. A test can
+assert a pointer appears exactly where it expects and still describe a package that does not
+build, and `go/parser` does not help — such a file parses. Only `go/types` sees it.
+
+`internal/gotypecheck` renders lowered types as one self-contained file and checks it. `opt`
+is restated in the preamble rather than imported, so the checker needs no importer; what
+matters is reproduced exactly, that the value is stored inline. Every fixture and all 57
+lowerable corpus documents go through it, and a control test pins that the checker really
+does reject the graph the recursion pass exists to prevent.

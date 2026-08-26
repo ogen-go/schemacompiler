@@ -90,15 +90,29 @@ type Tuple struct {
 	Rest  GoType
 }
 
-// Map is an object with no declared fields, keyed by property name.
+// Map is an object stored by property name. Pattern is the `patternProperties` regex whose
+// values it holds, empty when it holds `additionalProperties` instead.
+//
+// The pattern is kept because it is what routes a key to this map at runtime, and because
+// nothing downstream can re-derive it: the plan states each rule positionally, and a Go
+// map type on its own says only that the keys are strings.
 type Map struct {
-	Elem GoType
+	Elem    GoType
+	Pattern string
 }
 
-// Struct is an object with declared fields. Additional is the type of every property no
-// field covers, nil when the object is closed.
+// Struct is an object with declared fields.
+//
+// Patterns is one map per `patternProperties` rule, in the plan's order, each keeping its
+// own element type. A key is routed to *every* map whose pattern it matches, not the first
+// — JSON Schema conjoins the matching rules (design §12.3) — and to Additional only when it
+// matches none. Additional is the type of those, nil when the object is closed.
+//
+// A declared field is never routed here: the planner has already intersected every matching
+// pattern schema into that field's own plan, so its slot is exact.
 type Struct struct {
 	Fields     []Field
+	Patterns   []*Map
 	Additional GoType
 }
 

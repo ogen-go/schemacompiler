@@ -62,7 +62,7 @@ type UniqueItemsPredicate struct{}
 //	Min <= n <= Max   (Max nil ⇒ no upper bound)
 //
 // This is the element-wise counterpart of [PredicateCountDispatch]'s branch match-count and,
-// like it, forces CapabilityLevel PredicateDispatch: a backend either emits the count or
+// like it, forces CapabilityLevel RawEvaluation: a backend either emits the count or
 // MUST refuse and surface the diagnostic (docs/integration.md §4). The count is a
 // validation step over the array's own representation; it does not change the stored shape.
 type ContainsCountPredicate struct {
@@ -76,7 +76,7 @@ type ContainsCountPredicate struct {
 //
 // Lowering contract. A backend runs Schema (a full [CompilationPlan]) against the whole
 // instance and inverts the outcome. Like [ContainsCountPredicate] this forces
-// CapabilityLevel PredicateDispatch: a backend either emits the sub-schema check or MUST
+// CapabilityLevel RawEvaluation: a backend either emits the sub-schema check or MUST
 // refuse and surface the diagnostic (docs/integration.md §4). Nothing about the stored
 // shape changes; the surrounding representation stays an over-approximation that only
 // this predicate narrows, which is what keeps the plan sound (design §24).
@@ -104,7 +104,7 @@ type NegationPredicate struct{ Schema CompilationPlan }
 // instance's kind is in the guard, and takes its verdict. Nothing about the stored shape
 // changes: the enclosing representation stays the over-approximation, and only this
 // predicate narrows it, which is what keeps the plan sound (design §24). Unlike
-// [NegationPredicate] this does not force PredicateDispatch — checking a value against a
+// [NegationPredicate] this does not force RawEvaluation — checking a value against a
 // shape is ordinary validation, so Schema's own capability is all it costs.
 type ShapePredicate struct{ Schema CompilationPlan }
 
@@ -195,7 +195,7 @@ type DependentRequiredPredicate struct{ Entries []DependentRequiredEntry }
 //
 // Lowering contract. Schema is a full [CompilationPlan] run once per key, so like
 // [ContainsCountPredicate] — its element-wise counterpart — this forces CapabilityLevel
-// PredicateDispatch: a backend either emits the per-key check or MUST refuse and surface
+// RawEvaluation: a backend either emits the per-key check or MUST refuse and surface
 // the diagnostic (docs/integration.md §4). The keys it sees include every name the
 // representation has no field for, which is why the plan also reports
 // [Requirements.RawEvaluation] here.

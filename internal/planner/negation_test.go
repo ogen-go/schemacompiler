@@ -51,7 +51,7 @@ func countNegations(t *testing.T, p plan.CompilationPlan) int {
 //
 // The operand is a `$ref`, which used to disqualify the negation outright. The target is
 // resolved and its own plan judged instead (issue #108), so the predicate survives and the
-// plan enforces the exclusion at PredicateDispatch.
+// plan enforces the exclusion at RawEvaluation.
 //
 // The subset relation is what distinguishes this from the partially-overlapping shape the
 // union-overlap check already rejects, so both orders and the declared/undeclared
@@ -109,7 +109,7 @@ func TestBuild_SubsumedOneOfBranchAmongThree(t *testing.T) {
 		"discriminator": {"propertyName": "petType"},
 		`+subsetPetDefs+`}`)
 
-	require.Equal(t, plan.PredicateDispatch, got.Plan.Capability)
+	require.Equal(t, plan.RawEvaluation, got.Plan.Capability)
 	require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced))
 	require.IsType(t, &plan.PredicateCountDispatch{}, got.Plan.Dispatch)
 }
@@ -176,7 +176,7 @@ func TestBuild_NegationIsGatedOnNestedFidelity(t *testing.T) {
 		{
 			name:   "the nested match count is priced, not approximated",
 			doc:    `{"not": {"type": "array", "contains": {"type": "string"}}}`,
-			reason: "PredicateDispatch prices the match count, it does not approximate it (#100)",
+			reason: "RawEvaluation prices the match count, it does not approximate it (#100)",
 			emit:   true,
 		},
 		{
@@ -238,11 +238,11 @@ func TestBuild_NegationIsGatedOnNestedFidelity(t *testing.T) {
 
 			if tt.emit {
 				require.Equal(t, 1, countNegations(t, got.Plan), tt.reason)
-				require.Equal(t, plan.PredicateDispatch, got.Plan.Capability, tt.reason)
+				require.Equal(t, plan.RawEvaluation, got.Plan.Capability, tt.reason)
 				require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced), tt.reason)
 			} else {
 				require.Zero(t, countNegations(t, got.Plan), tt.reason)
-				require.Less(t, got.Plan.Capability, plan.PredicateDispatch,
+				require.Less(t, got.Plan.Capability, plan.RawEvaluation,
 					"a dropped negation costs nothing at runtime")
 				require.True(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced),
 					"nothing left in the plan rejects what the dropped negation would have (#84)")

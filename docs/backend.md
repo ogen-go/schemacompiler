@@ -67,7 +67,8 @@ the rest are delegated to a compiled `nodetree` over the raw JSON. The rule that
 
 That is a property of the *pair*, and `gogen` chooses the lowering. `minProperties` over a
 struct that discards unknown properties cannot be inlined; the identical `minProperties`
-over a `map[string]T` can. `RawEvaluation` over-reports deliberately (integration.md §7) —
+over a `map[string]T` can. `Requirements.RawEvaluation` over-reports deliberately
+(integration.md §7) —
 it names checks a *typical* struct lowering breaks — so reading it as the boundary both
 delegates cases that do not need it and teaches the reader to trust a slot never meant to
 be exact.
@@ -118,7 +119,7 @@ Per-schema capability over the same 58 ogen documents, 1891 component schemas:
 | `DirectGoType` | 144 | 7.6% |
 | `GoTypeWithValidation` | 1123 | 59.4% |
 | `StaticDispatch` | 504 | 26.7% |
-| `PredicateDispatch` | 120 | 6.3% |
+| `RawEvaluation` | 120 | 6.3% |
 | `EvaluationStateValidation` / `DynamicSchemaResolution` / `Unsupported` | 0 | 0% |
 
 No schema in that corpus is refused. Across all 58 documents the diagnostics are 31

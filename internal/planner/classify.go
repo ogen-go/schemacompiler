@@ -20,7 +20,7 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 	switch disp.(type) {
 	case *plan.NoDispatch:
 	case *plan.PredicateCountDispatch:
-		return plan.PredicateDispatch
+		return plan.RawEvaluation
 	case *plan.KindDispatch, *plan.LiteralDispatch, *plan.PropertyDispatch, *plan.PresenceDispatch:
 		return plan.StaticDispatch
 	default:
@@ -55,7 +55,7 @@ func classify(rep plan.Representation, val plan.ValidationPlan, disp plan.Dispat
 //
 // A wider representation is not itself inexact: §24's contract is the biconditional
 // x ⊨ S ⟺ x ∈ ⟦G(S)⟧ ∧ V(S,x), so `string` for `{"type":"string","minLength":3}` is exact
-// once the kind-guarded MinLength runs (issue #95). Nor is cost: [plan.PredicateDispatch]
+// once the kind-guarded MinLength runs (issue #95). Nor is cost: [plan.RawEvaluation]
 // means match-counting is expensive, not approximate.
 //
 // g reports the gaps p's own structure does not show, and both are disqualifying: an

@@ -51,8 +51,8 @@ func capabilityString(c plan.CapabilityLevel) string {
 		return "go-type-with-validation"
 	case plan.StaticDispatch:
 		return "static-dispatch"
-	case plan.PredicateDispatch:
-		return "predicate-dispatch"
+	case plan.RawEvaluation:
+		return "raw-evaluation"
 	case plan.EvaluationStateValidation:
 		return "evaluation-state-validation"
 	case plan.DynamicSchemaResolution:

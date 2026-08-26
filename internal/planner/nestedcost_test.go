@@ -15,7 +15,7 @@ import (
 // array element, once per property key, once over the whole instance — and none of them is
 // something a plain Go type plus field validators can express.
 //
-// They must therefore price identically: [plan.PredicateDispatch] and a
+// They must therefore price identically: [plan.RawEvaluation] and a
 // [plan.DiagnosticCost] naming the work. `propertyNames` used to do neither, so a backend
 // consulting only the capability gate saw an ordinary validated object and had nowhere to
 // put the per-key check (design §24 forbids under-approximating the cost).
@@ -46,8 +46,8 @@ func TestBuild_NestedPlanPredicatesCostTheSame(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := planner.Build(tt.expr, nil)
 
-			require.Equal(t, plan.PredicateDispatch, got.Plan.Capability,
-				"a nested plan run at validation time is PredicateDispatch work")
+			require.Equal(t, plan.RawEvaluation, got.Plan.Capability,
+				"a nested plan run at validation time is RawEvaluation work")
 			require.True(t, hasKind(got.Diagnostics, plan.DiagnosticCost),
 				"the cost must be named, not left to the capability alone: %+v", got.Diagnostics)
 			require.False(t, hasKind(got.Diagnostics, plan.DiagnosticUnenforced),

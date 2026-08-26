@@ -109,17 +109,17 @@ func TestCompileUnenforcedIsGeneratable(t *testing.T) {
 		{
 			name:       "negation over an exactly modeled operand keeps its residual check",
 			schema:     `{"not":{"type":"integer"}}`,
-			capability: plan.PredicateDispatch,
+			capability: plan.RawEvaluation,
 		},
 		{
 			name:       "negation over an object operand keeps its residual check",
 			schema:     `{"not":{"type":"object","properties":{"a":{"type":"string","minLength":1}}}}`,
-			capability: plan.PredicateDispatch,
+			capability: plan.RawEvaluation,
 		},
 		{
 			name:       "negation over a reference to an exact target keeps its residual check",
 			schema:     `{"not":{"$ref":"#/$defs/S"},"$defs":{"S":{"type":"string"}}}`,
-			capability: plan.PredicateDispatch,
+			capability: plan.RawEvaluation,
 		},
 		{
 			name:       "negation over an unmodeled operand is dropped and nothing closes the gap",

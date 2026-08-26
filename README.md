@@ -28,7 +28,7 @@ schema can be lowered soundly.
 | `DirectGoType` | a plain Go type captures the value; no validator needed |
 | `GoTypeWithValidation` | known type plus residual predicates |
 | `StaticDispatch` | finite alternatives, discriminated at compile time |
-| `PredicateDispatch` | alternatives need predicate / match-count evaluation |
+| `RawEvaluation` | the check needs the raw JSON, not just the decoded value |
 | `EvaluationStateValidation` | needs `unevaluatedProperties` / `unevaluatedItems` tracking |
 | `DynamicSchemaResolution` | target depends on runtime `$dynamicRef` scope |
 | `Unsupported` | no sound conversion |

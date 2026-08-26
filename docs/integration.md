@@ -236,7 +236,7 @@ Detection/preference order in `gen/schema_gen_sum.go`: explicit `discriminator` 
 | `LiteralDispatch{Cases}` | `ValueDiscriminators` | Enum/const union (design §18, discriminator class 2); each `LiteralCase.Value` becomes one entry in `ValueToVariant`. |
 | `PropertyDispatch{Property, Cases, Tag}` | `Discriminator = Property`, `Mapping` built from `Cases` | Tagged union (design §18.2); this is ogen's explicit/implicit discriminator path. `TagDeclared`/`TagAsserted` mean an OpenAPI `discriminator` named the property (`handleExplicitDiscriminator`), `TagInferred` means it was recovered structurally (`implicitDiscriminatorKey`). `Tag` grades the disjointness evidence in three tiers (design §18, §15.3). `TagInferred` and `TagDeclared` are **proven**: every branch requires `Property`, pins it to a const/enum, and its cases cover every value it accepts; a branch that is itself an `allOf`/`anyOf`/`oneOf` is looked through, the pinned value set being the intersection over `allOf` members and the union over alternatives (issue #45). `TagAsserted` is **trusted, not proven**: every branch requires `Property` (OAS 3.0.3 line 2354 makes that mandatory) but leaves it unconstrained, so the `mapping` is taken as the "hint to shortcut validation and selection" OAS 3.0.3 line 2717 permits; the plan reports a `SeverityInfo` diagnostic of kind `DiagnosticAssumed`. Lowering is identical for all three — the tier tells a backend whether decoding the selected variant is guaranteed to accept every valid instance. Declared cases come from `mapping` when it names the branch, else from the branch's own const/enum — never from the referenced component's name, which constrains nothing in the instance. A declaration that cannot drive dispatch at all — a `mapping` entry resolving to no branch, a `propertyName` some branch does not require, no value selecting some branch, or two branches sharing a value — is reported as a `SeverityWarning` diagnostic and the plan falls back to structural inference and then to `PredicateCountDispatch`, so a backend never switches on a value the author did not write. |
 | `PresenceDispatch{Property, Present, Absent}` | `UniqueFields` (or a bespoke two-branch encoding) | `dependentSchemas`-shaped presence dispatch (design §12.7) has no exact ogen precedent (ogen's `UniqueFields` targets "which required field is present" disambiguation among ≥2 object variants, not a binary present/absent split against one schema); the generator should model this as a 2-case `UniqueFields` sum where one branch's unique field set is empty. |
-| `PredicateCountDispatch{Branches, Minimum, Maximum}` | **not representable in `SumSpec` today** | No ogen construct evaluates every branch and counts matches at runtime; static dispatch strategies all assume exactly one statically-determined branch wins. Follow the **PredicateDispatch lowering contract** below: emit the runtime match-count, or refuse and surface the plan's `SeverityWarning` diagnostic. Do not approximate it with a lossy `SumSpec` encoding. |
+| `PredicateCountDispatch{Branches, Minimum, Maximum}` | **not representable in `SumSpec` today** | No ogen construct evaluates every branch and counts matches at runtime; static dispatch strategies all assume exactly one statically-determined branch wins. Follow the **`PredicateCountDispatch` lowering contract** below: emit the runtime match-count, or refuse and surface the plan's `SeverityWarning` diagnostic. Do not approximate it with a lossy `SumSpec` encoding. |
 
 **`discriminator` outside `oneOf`/`anyOf`.** OAS 3.0.3 line 2705 also allows the keyword
 alongside `allOf`, and line 2761 lets a *parent* schema carry it while the alternatives are
@@ -247,11 +247,13 @@ backend must not synthesize the union itself from the plan — resolving the alt
 the whole document, and the parent's own schema accepts instances no child does, so a sum
 type over the children would under-approximate it (design §24).
 
-### PredicateDispatch lowering contract (runtime match-count)
+### `PredicateCountDispatch` lowering contract (runtime match-count)
 
 `PredicateCountDispatch` (overlapping `oneOf`/`anyOf`), `ContainsCountPredicate`
 (`contains`/`minContains`/`maxContains`, §4) and `NegationPredicate` (a `not` that survived
-normalization, §4) are the `PredicateDispatch`-level constructs. All are **representable** —
+normalization, §4), together with `PropertyNamesPredicate` (§4), are what floors a plan
+at `RawEvaluation`. Only the first selects a branch; the rest are validation that happens
+to need the document. All are **representable** —
 the plan is emitted, never dropped — but none has a static discriminator. A conforming
 backend has exactly two options for each: emit the runtime check described here, or refuse
 the schema and surface the plan's diagnostic. Silently narrowing to a static discriminator,
@@ -288,7 +290,7 @@ of the branch match-count above, and the same "emit or refuse" rule applies.
 
 **`NegationPredicate{Schema}`.** Run `Schema` (a full `CompilationPlan`) against the whole
 instance and invert the outcome: the instance is valid iff `Schema` rejects it. Like the two
-counts above it forces `CapabilityLevel.PredicateDispatch`, so it arrives already flagged.
+counts above it forces `CapabilityLevel.RawEvaluation`, so it arrives already flagged.
 
 Negation inverts approximation polarity, so this predicate is emitted **only** when the
 nested plan reproduces its schema exactly: a nested plan that accepts more than its schema
@@ -341,9 +343,9 @@ carry `plan.SetString`-applicable predicates. `plan.PredicateExpr` variant → t
 | `MinLengthPredicate`, `MaxLengthPredicate`, `PatternPredicate`, `FormatPredicate` | `Validators.String` |
 | `MinimumPredicate`, `MaximumPredicate`, `MultipleOfPredicate` | `Validators.Int` or `Validators.Float` (per `PrimitiveRepresentation.Numeric`) |
 | `MinItemsPredicate`, `MaxItemsPredicate`, `UniqueItemsPredicate` | `Validators.Array` |
-| `ContainsCountPredicate` | No direct `Validators.Array` field for match-counting; needs custom generated code (or `Validators.Ogen` custom-param escape hatch) per the **PredicateDispatch lowering contract** in §3. This predicate always also forces `CapabilityLevel.PredicateDispatch` (design's v1 scope), so it arrives already flagged. |
-| `NegationPredicate` | No `validate.*` field: generate a call to the nested plan's own validator and invert it, per the **PredicateDispatch lowering contract** in §3. Always also forces `CapabilityLevel.PredicateDispatch`. |
-| `ShapePredicate` | No `validate.*` field: generate a call to the nested plan's own decoder+validator and take its verdict, gated on `Applicability` as every guarded predicate is. See §4.1. Unlike `NegationPredicate` it does **not** force `PredicateDispatch`; it costs whatever `Schema.Capability` says. |
+| `ContainsCountPredicate` | No direct `Validators.Array` field for match-counting; needs custom generated code (or `Validators.Ogen` custom-param escape hatch) per the **`PredicateCountDispatch` lowering contract** in §3. This predicate always also forces `CapabilityLevel.RawEvaluation` (design's v1 scope), so it arrives already flagged. |
+| `NegationPredicate` | No `validate.*` field: generate a call to the nested plan's own validator and invert it, per the **`PredicateCountDispatch` lowering contract** in §3. Always also forces `CapabilityLevel.RawEvaluation`. |
+| `ShapePredicate` | No `validate.*` field: generate a call to the nested plan's own decoder+validator and take its verdict, gated on `Applicability` as every guarded predicate is. See §4.1. Unlike `NegationPredicate` it does **not** force `RawEvaluation`; it costs whatever `Schema.Capability` says. |
 | `RequiredPredicate`, `MinPropertiesPredicate`, `MaxPropertiesPredicate`, `DependentRequiredPredicate`, `PropertyNamesPredicate` | `Validators.Object` (or, for `PropertyNamesPredicate`, a per-key loop calling the nested plan's own validator — no existing single `validate.Object` field covers it, likely another `Ogen` custom-param case) |
 
 ### 4.1. `ShapePredicate` — a shape keyword written without a sibling `type`
@@ -421,7 +423,7 @@ predicate, which is the acceptance bug the wrapper exists to prevent.
 
 The generator should switch on `plan.CompilationPlan.Capability` before attempting to
 lower anything, and refuse — surfacing `Result.Diagnostics` to the user — for anything
-past `PredicateDispatch`. The gate is per plan and sound to use that way: a plan's
+past `RawEvaluation`. The gate is per plan and sound to use that way: a plan's
 capability is rolled up to at least that of every plan it references (design §22), so a
 generatable plan never points at a refused one. A reference that resolves to no compiled
 schema at all (a dangling or unfetchable `$ref`) makes the referring plan `Unsupported`
@@ -459,7 +461,7 @@ decides whether to generate, the diagnostics decide what the generated code is w
 | `DiagnosticCost` | Reproducing the schema exactly requires work at runtime — match counting, trial validation, a residual sub-schema. The plan is exact; `Capability` carries the price. | Generate; emit the validator. |
 | `DiagnosticAssumed` | The plan accepts a strict superset of the schema **even after the validator runs**, with the plan's own machinery bounding the excess: today only a `TagAsserted` discriminator, which trusts a declared tag instead of proving the branches disjoint, so a mis-tagged instance a second branch would also have matched is accepted. | Generate; emit the validator, but the accepted set is wider than the schema's — surface the diagnostic. |
 | `DiagnosticUnenforced` | The plan admits extra values and **nothing in it closes the gap**: a constraint was dropped and no residual check replaces it. The message names the construct. | Representable; the choice is the backend's. Generate anyway (ogen's permissive behavior for keywords it ignores) or refuse — but surface the diagnostic either way. |
-| `DiagnosticUnsupported` | No sound conversion exists for the construct. Always paired with a capability past `PredicateDispatch`, so the gate below refuses these anyway. | Refuse; surface the diagnostic. |
+| `DiagnosticUnsupported` | No sound conversion exists for the construct. Always paired with a capability past `RawEvaluation`, so the gate below refuses these anyway. | Refuse; surface the diagnostic. |
 
 A plan carrying no diagnostic of the last three kinds accepts exactly what its schema does,
 to the extent the lowering discharges its `Requirements` (§7).
@@ -469,7 +471,7 @@ to the extent the lowering discharges its `Requirements` (§7).
 | `DirectGoType` | **Yes** | Plain `ir.Type`, no validator. |
 | `GoTypeWithValidation` | **Yes** | `ir.Type` + `ir.Validators`. |
 | `StaticDispatch` | **Yes** | `ir.Type{Kind: KindSum}` with a `SumSpec` strategy from §3 (`TypeDiscriminator`/`ValueDiscriminators`/`Discriminator`+`Mapping`). |
-| `PredicateDispatch` | **Partial** | The *representation* is a sound over-approximation (design §24: the union of all branches) closed by re-running every branch's checks at decode time and counting matches, so the level is a cost, not a loss of fidelity — such plans carry only a `DiagnosticCost` — see the **PredicateDispatch lowering contract** in §3 for the exact match-count algorithm. ogen has no existing `SumSpec` shape for "runtime match-count over N branches," so until that lowering is built, treat as refuse-with-diagnostic; once built, it is a legitimate (if slower) generation target — the plan is not dropped, per the "no silent caps" rule. |
+| `RawEvaluation` | **Partial** | The level says the check needs the raw JSON document, not that fidelity is lost: such plans carry only a `DiagnosticCost`. For `PredicateCountDispatch` the *representation* is a sound over-approximation (design §24: the union of all branches), closed by re-running every branch's checks at decode time and counting matches — such plans carry only a `DiagnosticCost` — see the **`PredicateCountDispatch` lowering contract** in §3 for the exact match-count algorithm. ogen has no existing `SumSpec` shape for "runtime match-count over N branches," so until that lowering is built, treat as refuse-with-diagnostic; once built, it is a legitimate (if slower) generation target — the plan is not dropped, per the "no silent caps" rule. |
 | `EvaluationStateValidation` | **No — refuse** | No evaluated-annotation tracking in ogen (confirmed: no `unevaluatedProperties`/`dynamicRef` references in `gen/`). Surface the plan's `SeverityError` diagnostic. |
 | `DynamicSchemaResolution` | **No — refuse** | Same: no dynamic-scope resolution engine exists or is planned for v1. |
 | `Unsupported` | **No — refuse** | No sound conversion exists at all (e.g. an unguarded reference cycle, design §19); always carries a `SeverityError` diagnostic explaining why. |
@@ -498,7 +500,7 @@ stable across runs.
 | `UnboundedNumeric` | Numeric slots the schema does not bound, so a fixed-width Go type narrows them (design §24.2). | Choosing a type that holds every value the schema admits, or **declaring** the narrowing. | Values the schema accepts overflow or lose precision, unreported. |
 | `JSONEquality` | Checks defined by equality of JSON *values*, not of the decoded Go value. | Comparing at the JSON level. | The check rejects instances the schema accepts. |
 | `ECMARegex` | Patterns RE2 does not read the same way (design §11.10). | An ECMA-262 engine — `github.com/dlclark/regexp2` in `regexp2.ECMAScript` mode is what this repo and ogen's runtime use. | The pattern enforces something other than what the author wrote, in either direction. |
-| `EvaluationTracking` | Checks needing evaluated-location annotations: `unevaluatedProperties`, `unevaluatedItems`. | Annotation tracking through the whole applicator tree. | Nothing — the plan that produced the entry always has a capability past `PredicateDispatch`, so §6 already refuses it. Attribute by `Location.Pointer` (§7.2): other plans in the same document are unaffected. |
+| `EvaluationTracking` | Checks needing evaluated-location annotations: `unevaluatedProperties`, `unevaluatedItems`. | Annotation tracking through the whole applicator tree. | Nothing — the plan that produced the entry always has a capability past `RawEvaluation`, so §6 already refuses it. Attribute by `Location.Pointer` (§7.2): other plans in the same document are unaffected. |
 
 **Every slot over-reports on purpose.** A backend that handles a requirement it did not
 strictly need is correct; one that misses a real requirement is wrong *and silent*, which

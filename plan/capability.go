@@ -8,6 +8,12 @@ package plan
 // CapabilityLevel ranks how far a schema can be lowered into a Go representation,
 // from a direct type to constructs requiring runtime schema resolution (design §4.1).
 //
+// What the ladder ranks is **how much of the raw JSON document the generated code must
+// retain and inspect**, not how hard the construct feels (design §4.2). Read that way the
+// boundary between [StaticDispatch] and [RawEvaluation] is exactly the boundary between a
+// plan a backend may discharge by decode-then-validate and one it must evaluate against
+// the raw JSON, which is what [Requirements.RawEvaluation] reports per location.
+//
 // The levels are ordered: the capability of a composite is at least the maximum
 // capability of its parts (design §22).
 type CapabilityLevel uint8
@@ -19,8 +25,17 @@ const (
 	GoTypeWithValidation
 	// StaticDispatch selects among finite alternatives with a structural discriminator.
 	StaticDispatch
-	// PredicateDispatch selects among known alternatives via predicate/match-count evaluation.
-	PredicateDispatch
+	// RawEvaluation needs the raw JSON document while checking, not just the decoded
+	// value: a match count over every branch, a sub-schema run per array element or per
+	// property key, or a negation evaluated and inverted.
+	//
+	// Design §4.2 names this level `PredicateDispatch`. Only one of its four members —
+	// [PredicateCountDispatch] — selects anything; [ContainsCountPredicate],
+	// [NegationPredicate] and [PropertyNamesPredicate] are validation. Naming it for the
+	// exception is what let `propertyNames` sit at [GoTypeWithValidation] for its whole
+	// life while [Requirements.RawEvaluation] said it needed the document (issues #80,
+	// #128).
+	RawEvaluation
 	// EvaluationStateValidation depends on evaluated properties/items
 	// (unevaluatedProperties, unevaluatedItems).
 	EvaluationStateValidation

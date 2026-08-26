@@ -1,7 +1,9 @@
 package gogen
 
 import (
+	"encoding/json"
 	"slices"
+	"strconv"
 
 	"github.com/go-faster/errors"
 
@@ -66,12 +68,96 @@ func Lower(plans map[plan.SchemaID]plan.CompilationPlan) ([]*Named, error) {
 	return types, nil
 }
 
+// dedupeTypes keeps the first of each structurally identical alternative, in order.
+func dedupeTypes(variants []GoType) []GoType {
+	seen := make(map[string]bool, len(variants))
+	out := variants[:0:0]
+	for _, v := range variants {
+		key := TypeExpr(v)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, v)
+	}
+	return out
+}
+
 type lowerer struct {
 	named map[plan.SchemaID]*Named
 }
 
 func (l *lowerer) plan(p plan.CompilationPlan) (GoType, error) {
-	return l.rep(p.Representation)
+	t, err := l.rep(p.Representation)
+	if err != nil {
+		return nil, err
+	}
+	return l.dispatch(t, p.Dispatch), nil
+}
+
+// dispatch folds what the plan selects on into the stored shape.
+//
+// Only [plan.LiteralDispatch] changes it. The others pick between alternatives the
+// representation already holds — the shape is the same whichever branch runs — so what
+// they add is selection, which belongs to a decoder rather than to a type.
+func (l *lowerer) dispatch(t GoType, d plan.DispatchPlan) GoType {
+	lit, ok := d.(*plan.LiteralDispatch)
+	if !ok || len(lit.Cases) == 0 {
+		return t
+	}
+	values := make([]EnumValue, len(lit.Cases))
+	for i, c := range lit.Cases {
+		values[i] = EnumValue{Name: enumValueName(c.Value, c.Raw), Value: c.Value, Raw: c.Raw}
+	}
+	return &Enum{Elem: t, Values: values}
+}
+
+// enumValueName derives a constant name from a literal, or "" when it cannot.
+//
+// A name that cannot be derived is a rendering loss and not a semantic one — the value is
+// still in the plan and still enforced — so unlike a type name (§1) this does not refuse.
+// A leading digit is left in: the renderer prefixes the type name, so `1` becomes `Code1`,
+// and it is the prefixed spelling that has to be an identifier.
+func enumValueName(v any, raw []byte) string {
+	switch v := v.(type) {
+	case string:
+		return camel(v)
+	case bool:
+		return camel(strconv.FormatBool(v))
+	case nil:
+		return "Null"
+	default:
+		text, ok := numericText(v, raw)
+		if !ok {
+			return ""
+		}
+		return camel(text)
+	}
+}
+
+// numericText is a JSON number's source text.
+//
+// It reads [plan.LiteralCase.Raw] first, so a literal past float64's precision keeps the
+// digits the document wrote. The fallback covers every Go numeric spelling a literal may
+// arrive as rather than the one the plan documents: `LiteralCase.Value` says float64, and
+// the planner produces `int` for an integer, so a backend switching on float64 alone
+// misses every integer enum (issue #152).
+func numericText(v any, raw []byte) (string, bool) {
+	if len(raw) > 0 {
+		return string(raw), true
+	}
+	switch v := v.(type) {
+	case int:
+		return strconv.Itoa(v), true
+	case int64:
+		return strconv.FormatInt(v, 10), true
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64), true
+	case json.Number:
+		return v.String(), true
+	default:
+		return "", false
+	}
 }
 
 func (l *lowerer) rep(r plan.Representation) (GoType, error) {
@@ -298,6 +384,12 @@ func (l *lowerer) union(u *plan.UnionRepresentation) (GoType, error) {
 		}
 		variants = append(variants, t)
 	}
+
+	// Alternatives that lower to the same shape are one slot, not several. An `enum` of
+	// same-kinded literals reaches here as a union with one alternative per literal, and
+	// without this every string enum in a document would be an interface over N copies of
+	// `string` — which is to say, `any`.
+	variants = dedupeTypes(variants)
 
 	var inner GoType
 	switch len(variants) {

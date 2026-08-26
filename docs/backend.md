@@ -391,7 +391,36 @@ That is also why the counts above are per-type rather than per-keyword: the 4181
 `FormatPredicate`s the corpus contains live mostly in property sub-plans, and they will be
 classified against the field types that hold them.
 
-## 11. Two things `Render` cannot say yet
+## 11. `enum` is dispatch, not validation
+
+A plan carries `enum` and `const` as a `LiteralDispatch`, and emits **no predicate for
+them at all**. Both halves of the backend read past that at first: `Lower` read only the
+representation, and `Split` reads only `ValidationPlan`. So `{"type":"string","enum":
+["a","b"]}` lowered to `any` and carried zero checks — the enum unenforced, and the
+`string` lost with it.
+
+The representation is a union with one alternative per literal, so the fix has two parts.
+Deduplicating structurally identical alternatives turns that union back into `string`;
+folding `LiteralDispatch` into the shape gives the `Enum` that holds the admitted values.
+465 enums in the ogen corpus were `any` before this.
+
+The other four dispatch variants do not change the shape. `KindDispatch`,
+`PropertyDispatch` and `PredicateCountDispatch` pick between alternatives the representation
+already holds — the type is the same whichever branch runs — so what they add is selection,
+which belongs to a decoder.
+
+**Constants are all or nothing.** A named enum gets a `const` block; if any literal has no
+distinct Go constant name, none of them do. A partial set reads as the whole admitted set
+while being a subset of it. Three things disqualify one: a literal that camel-cases to
+nothing (`%%%`), two that camel-case to the same identifier (`1` and `-1`), and a value the
+element type cannot hold (an integer past `int64`, which would not compile). The type is
+correct either way, and the values stay in the IR.
+
+An enum nested in a field has no declaration to hang constants off, and keeps its values
+regardless — what is lost there is the spelling, not the constraint. Only 16 of the corpus's
+465 enums are named types.
+
+## 12. Two things `Render` cannot say yet
 
 **A sum renders as `any`.** It needs a discriminator to be worth more, and dispatch is not
 lowered. The alternatives go in the doc comment of the declaration or field that holds it —

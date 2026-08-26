@@ -47,6 +47,7 @@ func Render(types []*Named, opts Options) ([]File, error) {
 		fmt.Fprintf(&body.b, "type %s ", n.Name)
 		body.typ(n.Underlying)
 		body.b.WriteString("\n\n")
+		body.enumConsts(n)
 	}
 
 	var src strings.Builder
@@ -125,6 +126,10 @@ func (r *renderer) typ(t GoType) {
 		r.strukt(t)
 	case *Tuple:
 		r.tuple(t)
+	case *Enum:
+		// An enum is stored as its element; the literals are constants beside the
+		// declaration, and a decoder is what makes them the only admitted values.
+		r.typ(t.Elem)
 	case *Interface:
 		// A sum needs a discriminator to be worth more than this, and dispatch is not
 		// lowered yet. `any` accepts every alternative, which over-accepts in the one
@@ -239,6 +244,75 @@ func (r *renderer) doc(name string, m plan.Metadata) {
 			continue
 		}
 		b.WriteString("// " + l + "\n")
+	}
+}
+
+// enumConsts declares the literals of a named enum.
+//
+// Only a named one gets them: an enum nested in a field has no declaration to hang
+// constants off. It keeps its values in the plan either way, so what is lost there is the
+// spelling and not the constraint.
+func (r *renderer) enumConsts(n *Named) {
+	e, ok := n.Underlying.(*Enum)
+	if !ok {
+		return
+	}
+	lits := make([]string, len(e.Values))
+	taken := make(map[string]bool, len(e.Values))
+	for i, v := range e.Values {
+		lit, ok := goLiteral(v, e.Elem)
+		name := n.Name + v.Name
+		// All or nothing, and the type is correct either way. A partial constant set is
+		// worse than none: it reads as the whole admitted set while being a subset of it.
+		// Two literals that spell one identifier — `1` and `-1`, `1.5` and `15` — are a
+		// refusal for the same reason a colliding type name is (§1).
+		if !ok || v.Name == "" || checkIdentifier(name) != nil || taken[name] {
+			fmt.Fprintf(&r.b, "// %s admits %d literals with no distinct Go constant name.\n\n",
+				n.Name, len(e.Values))
+			return
+		}
+		taken[name] = true
+		lits[i] = lit
+	}
+
+	fmt.Fprintf(&r.b, "// The values %s admits.\nconst (\n", n.Name)
+	for i, v := range e.Values {
+		fmt.Fprintf(&r.b, "%s%s %s = %s\n", n.Name, v.Name, n.Name, lits[i])
+	}
+	r.b.WriteString(")\n\n")
+}
+
+// goLiteral is the Go source for one admitted value, or false when it has none.
+func goLiteral(v EnumValue, elem GoType) (string, bool) {
+	p, ok := deref(elem).(*Primitive)
+	if !ok {
+		return "", false
+	}
+	switch p.Kind {
+	case PrimitiveString:
+		s, ok := v.Value.(string)
+		return strconv.Quote(s), ok
+	case PrimitiveBool:
+		b, ok := v.Value.(bool)
+		return strconv.FormatBool(b), ok
+	case PrimitiveInt, PrimitiveFloat:
+		// A JSON number is already Go's spelling of one, so the document's own bytes are
+		// the literal — which is what keeps a value past float64's precision exact.
+		text, ok := numericText(v.Value, v.Raw)
+		if !ok {
+			return "", false
+		}
+		if p.Kind == PrimitiveInt {
+			// The element type has to be able to hold it. A document may write an
+			// integer past int64, and an untyped constant that overflows its type is a
+			// compile error rather than a rounded value.
+			if _, err := strconv.ParseInt(text, 10, 64); err != nil {
+				return "", false
+			}
+		}
+		return text, true
+	default:
+		return "", false
 	}
 }
 

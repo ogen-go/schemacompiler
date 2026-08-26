@@ -33,6 +33,8 @@ const (
 	EdgeTupleRest
 	// EdgeVariant links an [Interface] to the alternative at Index.
 	EdgeVariant
+	// EdgeEnumElem links an [Enum] to the type its literals are stored as.
+	EdgeEnumElem
 	// EdgeStored links a [Presence] to the type it wraps.
 	EdgeStored
 	// EdgePointee links a [Pointer] to the type it points at.
@@ -49,6 +51,7 @@ var edgeKindNames = [...]string{
 	EdgeTupleElem:  "tuple-elem",
 	EdgeTupleRest:  "tuple-rest",
 	EdgeVariant:    "variant",
+	EdgeEnumElem:   "enum-elem",
 	EdgeStored:     "stored",
 	EdgePointee:    "pointee",
 }
@@ -275,6 +278,15 @@ func apply(t GoType, f func(Node) GoType) {
 			t.Variants[i] = got
 		}
 
+	case *Enum:
+		v := struct {
+			Elem   GoType
+			Values []EnumValue
+		}(*t)
+		if got := f(Node{Type: v.Elem, Edge: Edge{Kind: EdgeEnumElem}}); got != stopWalk {
+			t.Elem = got
+		}
+
 	case *Presence:
 		v := struct {
 			Elem     GoType
@@ -328,6 +340,7 @@ func AllGoTypes() []GoType {
 		},
 		&Presence{Elem: &Any{}, Optional: true, Nullable: true},
 		&Interface{Variants: []GoType{&Any{}}},
+		&Enum{Elem: &Primitive{Kind: PrimitiveString}, Values: []EnumValue{{Name: "A", Value: "a", Raw: []byte(`"a"`)}}},
 		&Pointer{Elem: &Any{}},
 	}
 }

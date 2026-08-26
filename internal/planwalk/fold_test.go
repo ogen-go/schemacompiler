@@ -86,8 +86,8 @@ func TestFoldOrderAndEdges(t *testing.T) {
 				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: &plan.UnionRepresentation{
 					Alternatives: []plan.Representation{ref("alt0"), ref("alt1")},
 				}}}},
-				Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: &plan.RecursiveRepresentation{
-					Name: "R", Body: ref("body"),
+				Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: &plan.UnionRepresentation{
+					Alternatives: []plan.Representation{ref("body")},
 				}}},
 			}},
 			want: []string{
@@ -98,9 +98,9 @@ func TestFoldOrderAndEdges(t *testing.T) {
 				"alternative:alt0",
 				"alternative:alt1",
 				"validation",
-				"rest-item:*plan.RecursiveRepresentation",
-				"representation:*plan.RecursiveRepresentation",
-				"recursive-body:body",
+				"rest-item:*plan.UnionRepresentation",
+				"representation:*plan.UnionRepresentation",
+				"alternative:body",
 				"validation",
 				"validation",
 			},
@@ -290,7 +290,9 @@ func TestFoldEveryEdgeKindIsReachable(t *testing.T) {
 		{
 			Representation: &plan.ArrayRepresentation{
 				Prefix: []plan.ItemRepresentation{{Plan: plan.CompilationPlan{Representation: &plan.UnionRepresentation{
-					Alternatives: []plan.Representation{&plan.RecursiveRepresentation{Name: "R", Body: ref("b")}},
+					Alternatives: []plan.Representation{
+						&plan.UnionRepresentation{Alternatives: []plan.Representation{ref("b")}},
+					},
 				}}}},
 				Rest: plan.ItemRepresentation{Plan: plan.CompilationPlan{Representation: ref("rest")}},
 			},

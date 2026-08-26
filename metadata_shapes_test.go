@@ -45,8 +45,6 @@ func collectMetadata(r plan.Representation, prefix string, out map[string]plan.M
 		for _, alt := range r.Alternatives {
 			collectMetadata(alt, prefix, out)
 		}
-	case *plan.RecursiveRepresentation:
-		collectMetadata(r.Body, prefix, out)
 	}
 }
 

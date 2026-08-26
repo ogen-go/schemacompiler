@@ -37,9 +37,6 @@ const (
 	EdgeRestItem
 	// EdgeAlternative links a union representation to the alternative at Index.
 	EdgeAlternative
-	// EdgeRecursiveBody links a recursive representation to its body. Name is the
-	// binder the body's references resolve against.
-	EdgeRecursiveBody
 	// EdgeKindCase links a kind dispatch to the branch selected for Case.
 	EdgeKindCase
 	// EdgeLiteralCase links a literal dispatch to the branch selected when the whole
@@ -85,7 +82,6 @@ var edgeKindNames = [...]string{
 	EdgePrefixItem:          "prefix-item",
 	EdgeRestItem:            "rest-item",
 	EdgeAlternative:         "alternative",
-	EdgeRecursiveBody:       "recursive-body",
 	EdgeKindCase:            "kind-case",
 	EdgeLiteralCase:         "literal-case",
 	EdgePropertyCase:        "property-case",
@@ -117,8 +113,8 @@ func (k EdgeKind) String() string {
 // schema for documentation, never which sub-value a child applies to.
 type Edge struct {
 	Kind EdgeKind
-	// Name is the property name (EdgeField, EdgePropertyCase, EdgePresent, EdgeAbsent),
-	// the pattern (EdgePatternRule) or the recursion binder (EdgeRecursiveBody).
+	// Name is the property name (EdgeField, EdgePropertyCase, EdgePresent, EdgeAbsent)
+	// or the pattern (EdgePatternRule).
 	Name string
 	// Index is the position within the parent's slice: EdgeField, EdgePatternRule,
 	// EdgePrefixItem, EdgeAlternative, EdgeLiteralCase, EdgePropertyCase,

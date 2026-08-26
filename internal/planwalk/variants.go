@@ -15,7 +15,6 @@ func AllRepresentations() []plan.Representation {
 		&plan.ObjectRepresentation{},
 		&plan.ArrayRepresentation{},
 		&plan.UnionRepresentation{},
-		&plan.RecursiveRepresentation{},
 		&plan.ReferenceRepresentation{},
 	}
 }

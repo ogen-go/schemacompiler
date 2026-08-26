@@ -97,12 +97,6 @@ type UnionRepresentation struct {
 	Alternatives []Representation
 }
 
-// RecursiveRepresentation binds a name for a recursive Go type (design §19).
-type RecursiveRepresentation struct {
-	Name string
-	Body Representation
-}
-
 // ReferenceRepresentation refers to a named representation (a $ref target or recursion binder).
 type ReferenceRepresentation struct {
 	Name string
@@ -114,5 +108,4 @@ func (*PrimitiveRepresentation) isRepresentation() {}
 func (*ObjectRepresentation) isRepresentation()    {}
 func (*ArrayRepresentation) isRepresentation()     {}
 func (*UnionRepresentation) isRepresentation()     {}
-func (*RecursiveRepresentation) isRepresentation() {}
 func (*ReferenceRepresentation) isRepresentation() {}

@@ -69,13 +69,6 @@ func TestPlanDOTFollowsNestedReferences(t *testing.T) {
 			}},
 		},
 		{
-			name: "recursive body",
-			p: plan.CompilationPlan{Representation: &plan.RecursiveRepresentation{
-				Name: "Node",
-				Body: refRep("A"),
-			}},
-		},
-		{
 			name: "contains predicate plan",
 			p: plan.CompilationPlan{
 				Representation: &plan.ArrayRepresentation{},

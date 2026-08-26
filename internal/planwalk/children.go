@@ -155,14 +155,6 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 				return
 			}
 		}
-	case *plan.RecursiveRepresentation:
-		var t struct {
-			Name string
-			Body plan.Representation
-		} = *r
-		if !subRepresentation(t.Body, Edge{Kind: EdgeRecursiveBody, Name: t.Name}, yield) {
-			return
-		}
 	case *plan.ReferenceRepresentation:
 		var t struct {
 			Name string

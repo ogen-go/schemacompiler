@@ -286,12 +286,6 @@ func representationSummary(r plan.Representation) string {
 		} = *r
 		_ = t
 		return "union"
-	case *plan.RecursiveRepresentation:
-		var t struct {
-			Name string
-			Body plan.Representation
-		} = *r
-		return "rec:" + t.Name
 	case *plan.ReferenceRepresentation:
 		var t struct {
 			Name string

@@ -3,7 +3,7 @@ package planner_test
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -121,7 +121,7 @@ func branchID(t *testing.T, p plan.CompilationPlan) string {
 		for _, f := range r.Fields {
 			names = append(names, f.Name)
 		}
-		sort.Strings(names)
+		slices.Sort(names)
 		return strings.Join(names, "+")
 	default:
 		t.Fatalf("branch representation does not identify a branch: %#v", p.Representation)

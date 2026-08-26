@@ -1,7 +1,7 @@
 package planner
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/ogen-go/schemacompiler/plan"
@@ -27,7 +27,7 @@ func (b *builder) pickFormat(formats []string, path string) string {
 	case 1:
 		return names[0]
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	b.diag(path+"/format", plan.DiagnosticAdvisory, plan.SeverityInfo,
 		"conflicting formats ("+strings.Join(names, ", ")+") composed by an unordered intersection; "+
 			"the representation carries none, all remain validation-only")

@@ -5,11 +5,12 @@
 package conformance
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/go-faster/errors"
@@ -110,7 +111,7 @@ func TestNodetreeAgreesWithPlanterp(t *testing.T) {
 		for k := range unsupported {
 			keys = append(keys, k)
 		}
-		sort.Slice(keys, func(i, j int) bool { return unsupported[keys[i]] > unsupported[keys[j]] })
+		slices.SortFunc(keys, func(a, b string) int { return cmp.Compare(unsupported[b], unsupported[a]) })
 		for _, k := range keys {
 			t.Logf("  %-60s %d", k, unsupported[k])
 		}

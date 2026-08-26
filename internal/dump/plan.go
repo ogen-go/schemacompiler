@@ -3,7 +3,7 @@ package dump
 import (
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 
 	"github.com/ogen-go/schemacompiler/plan"
 )
@@ -365,7 +365,7 @@ func writeDispatch(t *tw, d plan.DispatchPlan, visiting map[plan.SchemaID]bool) 
 			for k := range g.Cases {
 				kinds = append(kinds, k)
 			}
-			sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
+			slices.Sort(kinds)
 			for _, k := range kinds {
 				t.line("case %s", jsonKindString(k))
 				t.enter(func() { writePlan(t, g.Cases[k], visiting) })
@@ -460,7 +460,7 @@ func writeResolution(t *tw, r plan.ResolutionPlan, visiting map[plan.SchemaID]bo
 			for a := range g.DynamicAnchors {
 				anchors = append(anchors, a)
 			}
-			sort.Strings(anchors)
+			slices.Sort(anchors)
 			for _, a := range anchors {
 				t.line("dynamicAnchor %q -> %v", a, g.DynamicAnchors[a])
 			}
@@ -477,7 +477,7 @@ func writeDefinitions(t *tw, defs map[plan.SchemaID]plan.CompilationPlan, visiti
 	for id := range defs {
 		ids = append(ids, id)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	slices.Sort(ids)
 
 	for _, id := range ids {
 		t.line("definition %q", id)

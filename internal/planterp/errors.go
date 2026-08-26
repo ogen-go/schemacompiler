@@ -2,6 +2,7 @@ package planterp
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/go-faster/errors"
@@ -34,11 +35,11 @@ func (e *ValidateError) Error() string {
 	}
 
 	var b strings.Builder
-	for i := len(chain) - 1; i >= 0; i-- {
+	for i, c := range slices.Backward(chain) {
 		if i != len(chain)-1 {
 			b.WriteString("\n  via: ")
 		}
-		chain[i].writeLine(&b)
+		c.writeLine(&b)
 	}
 	return b.String()
 }

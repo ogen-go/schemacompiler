@@ -26,13 +26,15 @@
 package conformance
 
 import (
+	"cmp"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -128,7 +130,7 @@ func collectReview(review *[]string, name string, capability plan.CapabilityLeve
 
 func logReviewList(t *testing.T, review []string) {
 	t.Helper()
-	sort.Strings(review)
+	slices.Sort(review)
 	var b strings.Builder
 	fmt.Fprintf(&b, "ogen-parity schemas flagged for human review (Unsupported or SeverityError, %d):\n", len(review))
 	for _, r := range review {
@@ -193,7 +195,7 @@ func bundleComponentSchemas(data []byte) ([]byte, error) {
 	for name := range doc.Components.Schemas {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	oneOf := make([]map[string]string, 0, len(names))
 	for _, name := range names {
@@ -234,9 +236,7 @@ func normalizeLegacyDraft(data []byte) ([]byte, error) {
 			if defs == nil {
 				defs = make(map[string]any, len(legacy))
 			}
-			for name, schema := range legacy {
-				defs[name] = schema
-			}
+			maps.Copy(defs, legacy)
 			root["$defs"] = defs
 			delete(root, "definitions")
 		}
@@ -301,7 +301,7 @@ func TestOgenLiveWalk(t *testing.T) {
 	if len(files) == 0 {
 		t.Skipf("no .json files found under %s/_testdata/positive or %s/gen/_testdata/jsonschema", root, root)
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
+	slices.SortFunc(files, func(a, b liveFile) int { return cmp.Compare(a.path, b.path) })
 
 	dist := make(map[distKey]int)
 	var review []string

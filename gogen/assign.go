@@ -2,7 +2,7 @@ package gogen
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/go-faster/errors"
@@ -42,7 +42,7 @@ func Assign(plans map[plan.SchemaID]plan.CompilationPlan) (Names, error) {
 	for id := range plans {
 		ids = append(ids, id)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	slices.Sort(ids)
 
 	names := make(Names, len(plans))
 	owners := make(map[string][]plan.SchemaID, len(plans))
@@ -63,7 +63,7 @@ func Assign(plans map[plan.SchemaID]plan.CompilationPlan) (Names, error) {
 			collided = append(collided, name)
 		}
 	}
-	sort.Strings(collided)
+	slices.Sort(collided)
 	for _, name := range collided {
 		errs = append(errs, &CollisionError{Name: name, Pointers: owners[name]})
 	}

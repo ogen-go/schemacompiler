@@ -23,7 +23,7 @@ func TestPlan_FieldsAreDumpedInSourceOrder(t *testing.T) {
 	got := compilePlan(t, unsortedProperties)
 
 	var names []string
-	for _, line := range strings.Split(got, "\n") {
+	for line := range strings.SplitSeq(got, "\n") {
 		line = strings.TrimSpace(line)
 		if after, ok := strings.CutPrefix(line, `field "`); ok {
 			name, _, _ := strings.Cut(after, `"`)

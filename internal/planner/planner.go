@@ -11,6 +11,8 @@
 package planner
 
 import (
+	"slices"
+
 	"github.com/ogen-go/schemacompiler/internal/frontend"
 	"github.com/ogen-go/schemacompiler/internal/ir"
 	"github.com/ogen-go/schemacompiler/plan"
@@ -120,10 +122,8 @@ func (b *builder) require(slot *[]plan.Location, path, detail string) {
 		Position: b.origin.Position,
 		Detail:   detail,
 	}
-	for _, seen := range *slot {
-		if seen == loc {
-			return
-		}
+	if slices.Contains(*slot, loc) {
+		return
 	}
 	*slot = append(*slot, loc)
 }

@@ -5,11 +5,12 @@
 package conformance
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"fmt"
 	"io/fs"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -188,11 +189,11 @@ func logDistribution(t *testing.T, dist map[distKey]int) {
 	for k, v := range dist {
 		rows = append(rows, row{k.capability, k.fidelity, v})
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].capability != rows[j].capability {
-			return rows[i].capability < rows[j].capability
-		}
-		return rows[i].fidelity < rows[j].fidelity
+	slices.SortFunc(rows, func(a, b row) int {
+		return cmp.Or(
+			cmp.Compare(a.capability, b.capability),
+			cmp.Compare(a.fidelity, b.fidelity),
+		)
 	})
 
 	var b strings.Builder
@@ -205,7 +206,7 @@ func logDistribution(t *testing.T, dist map[distKey]int) {
 
 func logFlagged(t *testing.T, flagged []string) {
 	t.Helper()
-	sort.Strings(flagged)
+	slices.Sort(flagged)
 	var b strings.Builder
 	fmt.Fprintf(&b, "schemas with a Warning/Error diagnostic (%d) — no silent caps:\n", len(flagged))
 	for _, f := range flagged {

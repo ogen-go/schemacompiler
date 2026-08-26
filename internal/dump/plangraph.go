@@ -1,9 +1,10 @@
 package dump
 
 import (
+	"cmp"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -122,7 +123,7 @@ func localReferenceTargets(p plan.CompilationPlan) []plan.SchemaID {
 		planwalk.Plan(child, collect)
 	})
 
-	sort.Slice(targets, func(i, j int) bool { return targets[i] < targets[j] })
+	slices.Sort(targets)
 	return targets
 }
 
@@ -165,7 +166,7 @@ func (g *planGraph) visitDispatch(id string, d plan.DispatchPlan) {
 		for k := range t.Cases {
 			kinds = append(kinds, k)
 		}
-		sort.Slice(kinds, func(i, j int) bool { return kinds[i] < kinds[j] })
+		slices.Sort(kinds)
 		for _, k := range kinds {
 			g.addBranch(id, jsonKindString(k), t.Cases[k])
 		}
@@ -215,8 +216,8 @@ func (g *planGraph) visitLiteralCases(id string, cases []plan.LiteralCase) {
 // value's formatted form), since JSON literals need not otherwise be orderable.
 func sortedLiteralCases(cases []plan.LiteralCase) []plan.LiteralCase {
 	out := append([]plan.LiteralCase(nil), cases...)
-	sort.Slice(out, func(i, j int) bool {
-		return fmt.Sprintf("%v", out[i].Value) < fmt.Sprintf("%v", out[j].Value)
+	slices.SortFunc(out, func(a, b plan.LiteralCase) int {
+		return cmp.Compare(fmt.Sprint(a.Value), fmt.Sprint(b.Value))
 	})
 	return out
 }

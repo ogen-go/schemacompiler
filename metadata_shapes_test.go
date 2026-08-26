@@ -2,7 +2,7 @@ package schemacompiler_test
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -255,6 +255,6 @@ func TestCompile_MetadataKeysAreDeterministic(t *testing.T) {
 	for k := range ext {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	require.Equal(t, "x-a,x-b,x-c", strings.Join(keys, ","))
 }

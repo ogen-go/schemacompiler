@@ -3,7 +3,7 @@ package conformance
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -54,6 +54,6 @@ func suiteFiles(t *testing.T) []string {
 		absent("JSON-Schema-Test-Suite submodule present at %s but empty", suiteRoot)
 	}
 
-	sort.Strings(files)
+	slices.Sort(files)
 	return files
 }

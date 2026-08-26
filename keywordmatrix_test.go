@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -178,7 +178,7 @@ func vacuousWitnesses(guard plan.KindSet) []string {
 			out = append(out, witness)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

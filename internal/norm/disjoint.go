@@ -46,7 +46,7 @@ func allPairwiseDisjoint(exprs []ir.Expr) bool {
 	if len(exprs) < 2 {
 		return false
 	}
-	for i := 0; i < len(exprs); i++ {
+	for i := range exprs {
 		for j := i + 1; j < len(exprs); j++ {
 			if !disjoint(exprs[i], exprs[j]) {
 				return false

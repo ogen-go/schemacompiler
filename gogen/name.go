@@ -55,7 +55,7 @@ var keywordAliases = map[string]string{
 // always the same: set [NameExtension].
 func TypeName(pointer string) (string, error) {
 	var b strings.Builder
-	for _, raw := range strings.Split(strings.TrimPrefix(pointer, "/"), "/") {
+	for raw := range strings.SplitSeq(strings.TrimPrefix(pointer, "/"), "/") {
 		if raw == "" {
 			continue
 		}

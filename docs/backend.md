@@ -315,3 +315,15 @@ is restated in the preamble rather than imported, so the checker needs no import
 matters is reproduced exactly, that the value is stored inline. Every fixture and all 57
 lowerable corpus documents go through it, and a control test pins that the checker really
 does reject the graph the recursion pass exists to prevent.
+
+It is also the *only* rendering of a `GoType` the tests have. The first version of these
+tests asserted against a compact notation of their own — `map[^a]string`, `opt[string]`,
+`sum(string|bool)` — which reads like Go, is not Go, and parses as nothing. A second
+notation is a second answer to "what does this lower to", and it is the one no tool can
+check: a table written in it can be wrong in a way that looks right. The tables hold Go
+type expressions now, `requireGoType` parses every expectation before comparing it, and a
+control test pins that `map[^a]string` does not parse.
+
+A pattern is a comment in that rendering, not part of the type. `map[^a]string` was the
+sharpest version of the problem: Go map keys here are always `string`, so the notation
+spelled a key type that does not exist.

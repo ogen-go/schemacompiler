@@ -55,7 +55,7 @@ func Verify(named []*gogen.Named) error {
 	return nil
 }
 
-// Source renders types as one self-contained Go file, in the order given.
+// Source renders named as one self-contained Go file, in the order given.
 func Source(named []*gogen.Named) string {
 	var b strings.Builder
 	b.WriteString(preamble)
@@ -63,9 +63,21 @@ func Source(named []*gogen.Named) string {
 		b.WriteString("\ntype ")
 		b.WriteString(n.Name)
 		b.WriteString(" ")
-		write(&b, n.Underlying)
+		b.WriteString(Type(n.Underlying))
 		b.WriteString("\n")
 	}
+	return b.String()
+}
+
+// Type renders t as a Go type expression, on one line.
+//
+// It is the only rendering of a [gogen.GoType] the tests have, deliberately: a compact
+// notation of its own would be a second answer to "what does this lower to", and the
+// interesting failures are the ones where that answer looks right and does not compile.
+// What a table holds here is Go, and [Check] is what says so.
+func Type(t gogen.GoType) string {
+	var b strings.Builder
+	write(&b, t)
 	return b.String()
 }
 
@@ -95,8 +107,16 @@ func write(b *strings.Builder, t gogen.GoType) {
 		b.WriteString("[]")
 		write(b, t.Elem)
 	case *gogen.Map:
+		// The key type is always string. A pattern is an annotation on the map, not part
+		// of its Go type, so it is a comment — which is also the only place it can go
+		// without spelling something Go does not mean.
 		b.WriteString("map[string]")
 		write(b, t.Elem)
+		if t.Pattern != "" {
+			b.WriteString(" /*")
+			b.WriteString(comment(t.Pattern))
+			b.WriteString("*/")
+		}
 	case *gogen.Presence:
 		switch {
 		case t.Optional && t.Nullable:
@@ -113,10 +133,17 @@ func write(b *strings.Builder, t gogen.GoType) {
 	case *gogen.Tuple:
 		writeTuple(b, t)
 	case *gogen.Interface:
-		// A sum is an interface whichever way it is spelled, and an interface holds its
-		// value behind indirection no matter what the variants are. Naming them would
-		// tell the checker nothing it does not already accept.
-		b.WriteString("any")
+		// A sum is an interface however it is spelled, and an interface holds its value
+		// behind indirection whatever the variants are. They are named in a method
+		// signature so that the rendering still says which types the sum is over.
+		b.WriteString("interface{ variant(")
+		for i, v := range t.Variants {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			write(b, v)
+		}
+		b.WriteString(") }")
 	case *gogen.Primitive:
 		b.WriteString(goPrimitive(t.Kind))
 	case *gogen.Any:
@@ -129,62 +156,79 @@ func write(b *strings.Builder, t gogen.GoType) {
 }
 
 func writeStruct(b *strings.Builder, t *gogen.Struct) {
-	b.WriteString("struct {\n")
+	if len(t.Fields) == 0 && len(t.Patterns) == 0 && t.Additional == nil {
+		b.WriteString("struct{}")
+		return
+	}
+
+	b.WriteString("struct { ")
 	taken := make(map[string]bool, len(t.Fields))
-	for _, f := range t.Fields {
+	for i, f := range t.Fields {
+		if i > 0 {
+			b.WriteString("; ")
+		}
 		taken[f.Name] = true
-		b.WriteString("\t")
 		b.WriteString(f.Name)
 		b.WriteString(" ")
 		write(b, f.Type)
-		b.WriteString(" `json:")
-		b.WriteString(strconv.Quote(f.JSON))
-		b.WriteString("`\n")
 	}
 	for i, p := range t.Patterns {
+		if len(t.Fields) > 0 || i > 0 {
+			b.WriteString("; ")
+		}
 		name := freeName("Pattern"+strconv.Itoa(i)+"Props", taken)
 		taken[name] = true
-		b.WriteString("\t")
 		b.WriteString(name)
 		b.WriteString(" ")
 		write(b, p)
-		b.WriteString(" // pattern ")
-		b.WriteString(strconv.Quote(p.Pattern))
-		b.WriteString("\n")
 	}
 	if t.Additional != nil {
-		b.WriteString("\t")
+		if len(t.Fields) > 0 || len(t.Patterns) > 0 {
+			b.WriteString("; ")
+		}
 		b.WriteString(freeName("Extra", taken))
 		b.WriteString(" map[string]")
 		write(b, t.Additional)
-		b.WriteString("\n")
 	}
-	b.WriteString("}")
+	b.WriteString(" }")
 }
 
 func writeTuple(b *strings.Builder, t *gogen.Tuple) {
-	b.WriteString("struct {\n")
+	if len(t.Elems) == 0 && t.Rest == nil {
+		b.WriteString("struct{}")
+		return
+	}
+
+	b.WriteString("struct { ")
 	taken := make(map[string]bool, len(t.Elems))
 	for i, e := range t.Elems {
+		if i > 0 {
+			b.WriteString("; ")
+		}
 		name := freeName("F"+strconv.Itoa(i), taken)
 		taken[name] = true
-		b.WriteString("\t")
 		b.WriteString(name)
 		b.WriteString(" ")
 		write(b, e)
-		b.WriteString("\n")
 	}
 	if t.Rest != nil {
-		b.WriteString("\t")
+		if len(t.Elems) > 0 {
+			b.WriteString("; ")
+		}
 		b.WriteString(freeName("Rest", taken))
 		b.WriteString(" []")
 		write(b, t.Rest)
-		b.WriteString("\n")
 	}
-	b.WriteString("}")
+	b.WriteString(" }")
 }
 
-// freeName is the overflow slot's name, kept clear of the declared fields it sits beside.
+// comment makes s safe inside a block comment. A `patternProperties` regex may contain
+// anything at all, and `*/` in one would end the comment early and the file with it.
+func comment(s string) string {
+	return strconv.Quote(strings.ReplaceAll(s, "*/", "*\\/"))
+}
+
+// freeName is a generated slot's name, kept clear of the declared fields it sits beside.
 // A schema may well declare a property called `extra`, and a duplicate field would fail
 // the check for a reason that is this renderer's rather than the lowering's.
 func freeName(want string, taken map[string]bool) string {

@@ -37,6 +37,16 @@ Restrictive and mechanical. The author names types; the backend does not guess.
 - A collision is an **error naming both pointers**. Never `Pet2`: a suffix makes adding one
   schema silently rename another author's type.
 
+Implemented in `gogen/name.go` (the rule) and `gogen/assign.go` (overrides and collisions),
+pinned against a live ogen checkout by `TestGogenNamesOgenCorpus`.
+
+Two properties of the rule fell out rather than being designed, and both are worth knowing.
+Upper-casing the first word escapes every Go keyword for free, since all of them are
+lower-case: a schema named `type` becomes `Type` and needs no annotation. And the identifier
+check is what handles a name no rule could derive — a property named `slash/field` or
+`foo"bar` fails it and the author is asked for one, rather than being handed something
+sanitized that they did not write.
+
 ### Why the long spelling wins
 
 Measured over 58 ogen corpus documents, 1891 named plans:
@@ -45,6 +55,11 @@ Measured over 58 ogen corpus documents, 1891 named plans:
 | --- | --- | --- | --- | --- | --- | --- |
 | full camel-case | 1891 | **0** | 20 | 41 | 66 | 82 |
 | last dot-segment only | 1701 | **81** | 16 | 28 | 35 | 45 |
+
+Measured again against the shipped rule: 1891 schemas across 58 documents, **zero
+collisions and zero schemas the rule cannot name**. On the JSON-Schema-Test-Suite, whose
+definition names are adversarial by construction, it refuses 5 of 96 — every one a name
+containing `%`, `~`, `/`, a quote, or nothing at all.
 
 The 82-character names are k8s reverse-DNS component names
 (`io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.CustomResourceDefinitionCondition`).

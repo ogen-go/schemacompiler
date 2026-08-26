@@ -127,25 +127,32 @@ constraint is dropped anywhere in it. `unevaluatedProperties` and `$dynamicRef` 
 account for roughly a fifth of the JSON-Schema-Test-Suite and none of this corpus; the
 suite is adversarial by construction and is not the workload.
 
-## 6. What this exposes in `plan`
+## 6. What this exposed in `plan`
 
-The backend is the first consumer to read these, and three do not survive contact.
-Measured over the ogen corpus and the suite together, 3854 object representations:
+The backend is the first consumer to read these closely, and three did not survive
+contact. All three are now closed; they are recorded because the shape recurs.
 
-- **`ObjectRepresentation.Additional` is never nil** — 0 of 3854 (3654 `Any`, 39 `Never`,
-  161 other). integration.md §0.1 documents nil as "does not reject", a reading nothing
-  produces and nothing tests. Worse, the sibling `ObjectStructurePredicate.Additional`
-  documents nil as the *opposite* — "admits any value". Two nils with opposite meanings on
-  adjacent types, one of them unreachable. Settle it before `Lower` reads either.
-- **`RecursiveRepresentation` is never constructed** — 0 occurrences, and the only
-  construction site in the repo is `planwalk`'s exhaustiveness table. Recursion reaches the
-  plan as `ReferenceRepresentation` against the `StaticReferenceGraph` instead. It is dead
-  API: either the planner should emit it or it should go.
+- **Four sub-plan slots were documented as meaningfully nil and are never nil** —
+  an object's `Additional` and an array's `Rest`, on both the representation and the
+  structure predicate, nil zero times in 12354 occurrences. The planner states every
+  sub-plan outright: `additionalProperties` absent is a plan over `AnyRepresentation`,
+  `false` one over `NeverRepresentation`. integration.md §0.1 called the
+  `Rest`-rejects/`Additional`-does-not asymmetry "deliberate, not an oversight" — a
+  careful distinction between two states that cannot occur.
+- **`RecursiveRepresentation` was never constructed.** Guarded recursion arrives as a
+  `ReferenceRepresentation` closing a cycle in the `StaticReferenceGraph`, and an
+  unguarded one is `Unsupported` before lowering. Neither interpreter had a case for it,
+  so emitting one would have failed both. Removed.
 - **`UnionRepresentation.Alternatives` is `[]Representation`, not `[]CompilationPlan`** —
-  1279 occurrences, so this is live and load-bearing. Sum lowering must therefore read
-  `Dispatch` for the branch plans and treat the representation as the storage shape alone.
+  1211 occurrences, so this is live and load-bearing. It is the storage shape alone;
+  branch plans live in `Dispatch`, which is what sum lowering reads.
 
-One further caveat, not a defect: `plan.ResidualChecks` compares
+`planwalk.ContractViolations` now enforces all three alongside the guard-width rule, over
+the keyword matrix, the suite walk and both ogen corpus walks. Each was a documented
+contract that nothing exercised, which is issue #60's shape one layer up: a rule nothing
+tests is a rule nobody notices breaking.
+
+One caveat remains, and is not a defect: `plan.ResidualChecks` compares
 `ObjectRepresentation.Additional` by **pointer identity**, which holds because the planner
 shares the pointer with the structure predicate it derives. A backend that rebuilds or
 round-trips a plan breaks that comparison silently. `gogen` must not reconstruct plans it

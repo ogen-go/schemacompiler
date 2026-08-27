@@ -19,8 +19,8 @@
     "Tag": {
       "type": "object",
       "properties": {
-        "name": {"type": "string"},
-        "score": {"type": "number"}
+        "name": {"type": "string", "minLength": 1},
+        "score": {"type": "number", "minimum": 0, "maximum": 10}
       },
       "required": ["name"],
       "additionalProperties": false
@@ -30,10 +30,10 @@
       "title": "A pet.",
       "properties": {
         "name": {"type": "string"},
-        "age": {"type": "integer"},
+        "age": {"type": "integer", "minimum": 0},
         "nickname": {"type": ["string", "null"]},
         "status": {"$ref": "#/$defs/Status"},
-        "tags": {"type": "array", "items": {"$ref": "#/$defs/Tag"}},
+        "tags": {"type": "array", "items": {"$ref": "#/$defs/Tag"}, "maxItems": 3},
         "parent": {"$ref": "#/$defs/Pet"},
         "shape": {"$ref": "#/$defs/Shape"},
         "at": {"$ref": "#/$defs/Point"}

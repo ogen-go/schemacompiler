@@ -32,7 +32,7 @@ func generated(t *testing.T) []byte {
 	require.True(t, ok)
 	types, err := gogen.Lower(graph.Definitions)
 	require.NoError(t, err)
-	files, err := gogen.Render(types, gogen.Options{Package: "gentest", Codec: true})
+	files, err := gogen.Render(types, gogen.Options{Package: "gentest", Codec: true, Validate: true})
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	return files[0].Content
@@ -223,4 +223,49 @@ func TestTupleInsideAnObjectRoundTrips(t *testing.T) {
 	out, err := json.Marshal(p)
 	require.NoError(t, err)
 	require.JSONEq(t, src, string(out))
+}
+
+func TestValidateAcceptsAValidValue(t *testing.T) {
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"Rex","nickname":null,"age":3,"tags":[{"name":"good"}],"at":[1,2]}`), &p))
+	require.NoError(t, p.Validate())
+}
+
+func TestValidateRejectsABoundTheTypeCannotState(t *testing.T) {
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"Rex","nickname":null,"age":-1}`), &p))
+	require.EqualError(t, p.Validate(), ".age: must be at least 0")
+}
+
+// TestValidateNamesWhereItFailed is why the path is carried rather than reconstructed: the
+// failing value is two levels down and nothing else identifies it.
+func TestValidateNamesWhereItFailed(t *testing.T) {
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"Rex","nickname":null,"tags":[{"name":"ok"},{"name":""}]}`), &p))
+	require.EqualError(t, p.Validate(), `.tags[1]: .name: must be at least 1 character`)
+}
+
+// TestValidateFollowsARecursiveField is the fixpoint at run time: Pet holds a Pet, so the
+// method has to call itself.
+func TestValidateFollowsARecursiveField(t *testing.T) {
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"Rex","nickname":null,"parent":{"name":"Max","nickname":null,"age":-2}}`), &p))
+	require.EqualError(t, p.Validate(), ".parent: .age: must be at least 0")
+}
+
+// TestValidateCountsTheItemsATupleEncodes is issue #161's worked example: `minItems` is a
+// bound on the array, and Point's shape states only its slots.
+func TestValidateCountsTheItemsATupleEncodes(t *testing.T) {
+	var p Point
+	require.NoError(t, json.Unmarshal([]byte(`[1,2]`), &p))
+	require.NoError(t, p.Validate())
+}
+
+// TestValidateIsNotCalledByDecoding says what generated code does not do. Decoding accepts
+// what the Go shape can hold, which over-accepts in the direction design §24 permits;
+// narrowing it is the caller's call to Validate.
+func TestValidateIsNotCalledByDecoding(t *testing.T) {
+	var g Tag
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"","score":99}`), &g))
+	require.Error(t, g.Validate())
 }

@@ -27,6 +27,10 @@ type Options struct {
 	// its own. A type that needs none gets none; one whose codec is not written yet says
 	// so in a comment rather than being left to encode wrongly in silence.
 	Codec bool
+	// Validate asks for the Validate method a type needs when its Go shape does not state
+	// everything the schema does. A type whose shape states all of it gets none, and what
+	// no check is written for yet is admitted in a comment (issue #161).
+	Validate bool
 }
 
 // File is one generated source file.
@@ -45,6 +49,12 @@ func Render(types []*Named, opts Options) ([]File, error) {
 	optPkg := cmpOr(opts.OptPackage, DefaultOptPackage)
 
 	var body renderer
+	var nodes map[*Named]*vnode
+	var needs map[*Named]bool
+	var unenforced map[string]int
+	if opts.Validate {
+		nodes, needs, unenforced = validators(types)
+	}
 	for _, n := range types {
 		body.doc(n.Name, n.Metadata)
 		body.variantNote(n.Name, n.Underlying)
@@ -58,6 +68,12 @@ func Render(types []*Named, opts Options) ([]File, error) {
 				fmt.Fprintf(&body.b, "// %s has no generated codec: %s.\n\n", n.Name, why)
 			}
 		}
+		if opts.Validate && needs[n] {
+			body.validator(n, nodes[n])
+		}
+	}
+	if opts.Validate {
+		body.unenforcedNote(unenforced)
 	}
 	if opts.Codec && body.usesSort {
 		body.b.WriteString(codecHelpers)
@@ -76,11 +92,20 @@ func Render(types []*Named, opts Options) ([]File, error) {
 	if body.usesJSON {
 		std = append(std, "encoding/json")
 	}
+	if body.usesErrors {
+		std = append(std, "errors")
+	}
 	if body.usesFmt {
 		std = append(std, "fmt")
 	}
+	if body.usesMath {
+		std = append(std, "math")
+	}
 	if body.usesSort {
 		std = append(std, "maps", "slices")
+	}
+	if body.usesUTF8 {
+		std = append(std, "unicode/utf8")
 	}
 	var other []string
 	if body.usesOpt {
@@ -146,11 +171,14 @@ type renderer struct {
 	// The import list is whatever the writer reached for. Deciding it by a second walk of
 	// the types would be a second opinion about what got rendered, and an import Go does
 	// not see used is a compile error rather than a warning.
-	usesOpt   bool
-	usesJSON  bool
-	usesFmt   bool
-	usesSort  bool
-	usesCanon bool
+	usesOpt    bool
+	usesJSON   bool
+	usesFmt    bool
+	usesSort   bool
+	usesCanon  bool
+	usesUTF8   bool
+	usesMath   bool
+	usesErrors bool
 }
 
 func (r *renderer) typ(t GoType) {

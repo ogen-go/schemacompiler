@@ -1,0 +1,7 @@
+# Go sources are LF everywhere. Generated files are compared against what the generator
+# produces, and a CRLF checkout makes that comparison fail on Windows for no reason.
+*.go text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf

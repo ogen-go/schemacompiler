@@ -50,9 +50,9 @@ func TestRender(t *testing.T) {
 		"type Pet struct {\n"+
 		"\t// Name is the pet's name.\n"+
 		"\tName string         `json:\"name\"`\n"+
-		"\tAge  opt.Opt[int64] `json:\"age,omitempty\"`\n"+
+		"\tAge  opt.Opt[int64] `json:\"age,omitzero\"`\n"+
 		"\t// Deprecated: this schema is marked deprecated.\n"+
-		"\tLegacy opt.Opt[string] `json:\"legacy,omitempty\"`\n"+
+		"\tLegacy opt.Opt[string] `json:\"legacy,omitzero\"`\n"+
 		"}\n", got)
 
 	// Fields keep the order the schema declared them in, and a property with no title and

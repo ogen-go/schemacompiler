@@ -223,6 +223,8 @@ func deref(t GoType) GoType {
 			t = x.Elem
 		case *Presence:
 			t = x.Elem
+		case *Enum:
+			t = x.Elem
 		case *Named:
 			t = x.Underlying
 		default:

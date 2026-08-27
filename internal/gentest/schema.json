@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "Status": {
+      "type": "string",
+      "enum": ["active", "archived"]
+    },
+    "Shape": {
+      "enum": [
+        {"kind": "circle", "r": 1},
+        {"kind": "square", "side": 2}
+      ]
+    },
+    "Point": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "string"}],
+      "items": false,
+      "minItems": 2
+    },
+    "Tag": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "score": {"type": "number"}
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "Pet": {
+      "type": "object",
+      "title": "A pet.",
+      "properties": {
+        "name": {"type": "string"},
+        "age": {"type": "integer"},
+        "nickname": {"type": ["string", "null"]},
+        "status": {"$ref": "#/$defs/Status"},
+        "tags": {"type": "array", "items": {"$ref": "#/$defs/Tag"}},
+        "parent": {"$ref": "#/$defs/Pet"},
+        "shape": {"$ref": "#/$defs/Shape"},
+        "at": {"$ref": "#/$defs/Point"}
+      },
+      "required": ["name", "nickname"]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "pet": {"$ref": "#/$defs/Pet"},
+    "tag": {"$ref": "#/$defs/Tag"},
+    "status": {"$ref": "#/$defs/Status"}
+  }
+}

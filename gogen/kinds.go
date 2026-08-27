@@ -28,6 +28,8 @@ func kinds(t GoType, seen map[GoType]bool) plan.KindSet {
 		return kinds(t.Underlying, seen)
 	case *Pointer:
 		return kinds(t.Elem, seen)
+	case *Enum:
+		return kinds(t.Elem, seen)
 	case *Presence:
 		k := kinds(t.Elem, seen)
 		if t.Nullable {
@@ -88,6 +90,8 @@ func storesAs(t GoType, want plan.KindSet, ok func(GoType) bool) bool {
 		case *Pointer:
 			return walk(t.Elem)
 		case *Presence:
+			return walk(t.Elem)
+		case *Enum:
 			return walk(t.Elem)
 		case *Interface:
 			for _, v := range t.Variants {

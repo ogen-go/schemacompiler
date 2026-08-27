@@ -172,7 +172,7 @@ func TestEveryVariantHasAnEdgeName(t *testing.T) {
 			seen[n.Edge.Kind] = true
 		}
 	}
-	require.Len(t, seen, 11, "every EdgeKind must be reachable from AllGoTypes")
+	require.Len(t, seen, 12, "every EdgeKind must be reachable from AllGoTypes")
 	for k := range seen {
 		require.NotContains(t, k.String(), "edge-kind(", "EdgeKind %d has no name", uint8(k))
 	}

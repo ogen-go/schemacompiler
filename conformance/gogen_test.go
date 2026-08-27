@@ -217,3 +217,75 @@ func TestGogenSplitsOgenCorpus(t *testing.T) {
 		t.Logf("  delegate %5d %s", delegated[k], k)
 	}
 }
+
+// TestGogenLowersEnums measures what dispatch is worth. `enum` and `const` reach a plan as
+// a [plan.LiteralDispatch] carrying no predicate, so a backend reading only the
+// representation lowered every one of them to `any`.
+func TestGogenLowersEnums(t *testing.T) {
+	var enums, named, withConsts, stillAny int
+	eachOgenDocument(t, func(_ string, defs map[plan.SchemaID]plan.CompilationPlan) {
+		types, err := gogen.Lower(defs)
+		if err != nil {
+			return
+		}
+		for _, n := range types {
+			gogen.Fold(n, 0, func(acc int, node gogen.Node) (int, gogen.Action) {
+				switch x := node.Type.(type) {
+				case *gogen.Enum:
+					enums++
+					if _, raw := x.Elem.(*gogen.Any); raw {
+						stillAny++
+					}
+				case *gogen.Any:
+					stillAny++
+				}
+				return acc, gogen.Descend
+			})
+			if e, ok := n.Underlying.(*gogen.Enum); ok {
+				named++
+				_ = e
+			}
+		}
+		files, err := gogen.Render(types, gogen.Options{})
+		require.NoError(t, err)
+		withConsts += strings.Count(string(files[0].Content), "const (")
+	})
+	require.NotZero(t, enums)
+	t.Logf("%d enums lowered, %d of them named types, %d const blocks rendered", enums, named, withConsts)
+}
+
+// TestGogenRendersCodecForCorpus measures what the codec covers. A type it cannot encode
+// says so in a comment rather than being left to encode wrongly in silence, so the count of
+// those comments is the honest coverage number.
+func TestGogenRendersCodecForCorpus(t *testing.T) {
+	reasons := map[string]int{}
+	var docs, methods int
+	eachOgenDocument(t, func(rel string, defs map[plan.SchemaID]plan.CompilationPlan) {
+		types, err := gogen.Lower(defs)
+		if err != nil {
+			return
+		}
+		files, err := gogen.Render(types, gogen.Options{Codec: true})
+		require.NoError(t, err, rel)
+		require.NoError(t, gotypecheck.Check(files, "../opt"), "%s does not type-check", rel)
+		docs++
+
+		src := string(files[0].Content)
+		methods += strings.Count(src, "func (s ") + strings.Count(src, "func (v *")
+		for line := range strings.SplitSeq(src, "\n") {
+			if _, why, ok := strings.Cut(line, "has no generated codec: "); ok {
+				reasons[strings.TrimSuffix(why, ".")]++
+			}
+		}
+	})
+
+	require.NotZero(t, docs)
+	skipped := 0
+	for _, n := range reasons {
+		skipped += n
+	}
+	t.Logf("%d documents, %d codec methods, %d types skipped", docs, methods, skipped)
+	for why, n := range reasons {
+		t.Logf("  skipped %4d: %s", n, why)
+	}
+}

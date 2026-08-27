@@ -391,7 +391,36 @@ That is also why the counts above are per-type rather than per-keyword: the 4181
 `FormatPredicate`s the corpus contains live mostly in property sub-plans, and they will be
 classified against the field types that hold them.
 
-## 11. Two things `Render` cannot say yet
+## 11. `enum` is dispatch, not validation
+
+A plan carries `enum` and `const` as a `LiteralDispatch`, and emits **no predicate for
+them at all**. Both halves of the backend read past that at first: `Lower` read only the
+representation, and `Split` reads only `ValidationPlan`. So `{"type":"string","enum":
+["a","b"]}` lowered to `any` and carried zero checks — the enum unenforced, and the
+`string` lost with it.
+
+The representation is a union with one alternative per literal, so the fix has two parts.
+Deduplicating structurally identical alternatives turns that union back into `string`;
+folding `LiteralDispatch` into the shape gives the `Enum` that holds the admitted values.
+465 enums in the ogen corpus were `any` before this.
+
+The other four dispatch variants do not change the shape. `KindDispatch`,
+`PropertyDispatch` and `PredicateCountDispatch` pick between alternatives the representation
+already holds — the type is the same whichever branch runs — so what they add is selection,
+which belongs to a decoder.
+
+**Constants are all or nothing.** A named enum gets a `const` block; if any literal has no
+distinct Go constant name, none of them do. A partial set reads as the whole admitted set
+while being a subset of it. Three things disqualify one: a literal that camel-cases to
+nothing (`%%%`), two that camel-case to the same identifier (`1` and `-1`), and a value the
+element type cannot hold (an integer past `int64`, which would not compile). The type is
+correct either way, and the values stay in the IR.
+
+An enum nested in a field has no declaration to hang constants off, and keeps its values
+regardless — what is lost there is the spelling, not the constraint. Only 16 of the corpus's
+465 enums are named types.
+
+## 12. Two things `Render` cannot say yet
 
 **A sum renders as `any`.** It needs a discriminator to be worth more, and dispatch is not
 lowered. The alternatives go in the doc comment of the declaration or field that holds it —
@@ -412,3 +441,96 @@ cannot adopt ogen's rule of dropping one and keeping the other.
 
 Both are why generated code is not yet a third validator in the differential harness (§3):
 it does not reject anything.
+
+## 13. The codec is where the discharges come due
+
+`Split` calls a check discharged when the Go type states it. Three of those are only true
+if a decoder makes them true, and until this there was no decoder:
+
+- `required` is discharged because the field is not `opt.Opt`, so the value has nowhere to
+  record that the property was missing. A decoder that accepted the object anyway would make
+  that reasoning false.
+- an `enum` is a `const` block, and Go constants restrict nothing.
+- a closed object rejects unknown properties, which is a claim about decoding and not about
+  the struct.
+
+So the generated methods are not a convenience over `encoding/json`. They are the second
+half of §10.
+
+**Stdlib, not `jx`.** Generated code imports `encoding/json` and nothing else, which keeps
+the type checker able to resolve it from source and costs a consumer no dependency. A faster
+codec is a rendering decision, and §0 already says ogen may supply its own `Render`.
+
+`opt` gained `encoding/json` for the same reason — a presence type that cannot serialize
+makes every containing type generate more code to work around it. It remains its only
+import, and `Options.OptPackage` is there for a backend that wants different presence types.
+
+**Presence is a struct tag, not generated code.** `json:",omitzero"` (Go 1.24) consults the
+field's `IsZero`, so `encoding/json` leaves an absent value out on its own. That is why
+`opt.Opt` and `opt.OptNullable` have `IsZero` and `opt.Nullable` deliberately does not — its
+zero *is* null, and null is a value the schema admits. `omitempty` would have been the wrong
+tag and a silent one: it does nothing at all for a struct type, so an absent value would be
+written as null under its own key.
+
+So a marshaller is generated only for what a tag cannot say: flattening the overflow map
+into the same object. A closed struct gets none. `map[string]T` and `[]T` already encode
+correctly. Enums need a decoder, and so does every object — `required`, unknown properties
+and the overflow map are all decode-side.
+
+**A null is not an absence.** `opt.Opt` is what a schema admitting no null lowers to, so a
+null there is a value that schema rejects; decoding it errors rather than taking it as
+absence, which would accept it and lose the difference on the way back out. `opt.Nullable`
+and `opt.OptNullable` take it as null, because for them it is admitted.
+
+**Enums with nothing to name.** An enum entry is a JSON literal inside an array, not a
+schema, so it has nowhere to carry an `x-go-name` and no constant can be derived from an
+object or an array. Those still get checked; what they lose is the constants, never the
+check. `{"enum":[{"a":1},{"b":2}]}` is `map[string]any`, and the decoder compares the
+instance in canonical form against the admitted values in canonical form — decoded and
+re-encoded, so key order and number spelling stop mattering, which is what JSON equality
+means. The generator canonicalizes the literals with the same two calls the generated code
+makes, so the two sides cannot disagree about what equal is.
+
+The admitted set is a switch over string cases. Nothing is stored: no package variable
+holding decoded values, nothing to initialize, no init order to depend on, and nothing a
+caller can reach into. Two literals sharing one canonical form — which float64 can do to two
+integers past its precision — is a refusal, for the reason a colliding constant name is.
+
+**A tuple is an array.** Without a codec `encoding/json` writes a struct as a JSON object,
+so a `prefixItems` schema round-tripped to `{"F0":1,"F1":2}` — not a wrong-looking array, a
+wrong kind. That is why "not written yet" was the wrong answer for it.
+
+Writing it turned up the reason it is not trivial. `prefixItems` applies only to the
+positions an instance has, so a shorter array is admitted unless `minItems` says otherwise,
+and a bare Go slot cannot tell an absent item from a zero one. Requiring every slot
+under-accepts, which §24 forbids; allowing fewer and then encoding them all puts back an item
+that was never there. So a slot past `minItems` is an `opt.Opt`, and encoding stops at the
+first absent one — an array is positional, and there is no way to write a later item without
+the earlier one.
+
+`plan.FieldRepresentation` carries a `Presence` and `plan.ItemRepresentation` does not, so
+this is the one place the backend reads the validation plan to decide *storage* (issue #157).
+
+**What is skipped, and why it says so.** A type whose codec is not written yet gets a
+comment naming the reason instead of a wrong codec. `patternProperties` is the one that
+remains: routing keys needs an ECMA-262 engine and Go's `regexp` is RE2 — issue #111 one
+layer down, where a decoder would route keys the schema does not. Over the corpus that is
+**0 types of 2834 methods across 57 documents**.
+
+**What is not skipped and not enforced.** Only `LiteralDispatch` folds into the shape. The
+three selection dispatches — `KindDispatch`, `PredicateCountDispatch`, `PropertyDispatch`,
+392 occurrences between them — have no generated code, and `Checks` cannot say so, because
+dispatch is not validation (issue #155). Adding `"type":"object"` to an object enum moves it
+from a literal dispatch to a predicate-count one and enforcement disappears with it.
+
+### Generated code that actually runs
+
+`internal/gentest` is the only check that builds what the backend produced rather than
+reading it. `types.go` is generated from `schema.json` and committed, so `go build ./...`
+compiles it and the tests decode and encode with it — three-state presence round-trips, a
+recursive `opt.Opt[*Pet]`, enum rejection, unknown-property rejection, and deterministic
+output over an overflow map. A test fails the build when the committed file stops matching
+what the generator produces.
+
+A codec that type-checks and does the wrong thing is exactly what §9's type checker cannot
+see.

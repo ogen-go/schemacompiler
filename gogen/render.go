@@ -23,6 +23,10 @@ type Options struct {
 	// OptPackage is the import path of [DefaultOptPackage]'s replacement, for a caller
 	// that vendors its own presence types. ogen does.
 	OptPackage string
+	// Codec asks for the JSON methods the types need beyond what [encoding/json] does on
+	// its own. A type that needs none gets none; one whose codec is not written yet says
+	// so in a comment rather than being left to encode wrongly in silence.
+	Codec bool
 }
 
 // File is one generated source file.
@@ -47,6 +51,18 @@ func Render(types []*Named, opts Options) ([]File, error) {
 		fmt.Fprintf(&body.b, "type %s ", n.Name)
 		body.typ(n.Underlying)
 		body.b.WriteString("\n\n")
+		body.enumConsts(n)
+		if opts.Codec {
+			if why := body.codec(n); why != "" {
+				fmt.Fprintf(&body.b, "// %s has no generated codec: %s.\n\n", n.Name, why)
+			}
+		}
+	}
+	if opts.Codec && body.usesSort {
+		body.b.WriteString(codecHelpers)
+	}
+	if opts.Codec && body.usesCanon {
+		body.b.WriteString(canonHelper)
 	}
 
 	var src strings.Builder
@@ -55,9 +71,21 @@ func Render(types []*Named, opts Options) ([]File, error) {
 	// Whether the import is needed is whether the writer reached for it. Deciding it by a
 	// second walk of the types would be a second opinion about what gets rendered, and an
 	// import Go does not see used is a compile error rather than a warning.
-	if body.usesOpt {
-		fmt.Fprintf(&src, "import %s\n\n", strconv.Quote(optPkg))
+	var std []string
+	if body.usesJSON {
+		std = append(std, "encoding/json")
 	}
+	if body.usesFmt {
+		std = append(std, "fmt")
+	}
+	if body.usesSort {
+		std = append(std, "maps", "slices")
+	}
+	var other []string
+	if body.usesOpt {
+		other = append(other, optPkg)
+	}
+	writeImports(&src, std, other)
 	src.WriteString(body.b.String())
 
 	formatted, err := format.Source([]byte(src.String()))
@@ -68,6 +96,29 @@ func Render(types []*Named, opts Options) ([]File, error) {
 		return nil, errors.Wrap(err, "format generated source")
 	}
 	return []File{{Name: "types.go", Content: formatted}}, nil
+}
+
+// writeImports keeps the standard library in its own group, which is where a Go author
+// puts it and where `goimports` would move it back to.
+func writeImports(src *strings.Builder, std, other []string) {
+	switch {
+	case len(std)+len(other) == 0:
+		return
+	case len(std)+len(other) == 1:
+		fmt.Fprintf(src, "import %s\n\n", strconv.Quote(append(std, other...)[0]))
+		return
+	}
+	src.WriteString("import (\n")
+	for _, p := range std {
+		fmt.Fprintf(src, "%s\n", strconv.Quote(p))
+	}
+	if len(std) > 0 && len(other) > 0 {
+		src.WriteString("\n")
+	}
+	for _, p := range other {
+		fmt.Fprintf(src, "%s\n", strconv.Quote(p))
+	}
+	src.WriteString(")\n\n")
 }
 
 func cmpOr(v, def string) string {
@@ -90,8 +141,15 @@ func TypeExpr(t GoType) string {
 // renderer accumulates source and records whether the presence types were reached, so the
 // import list is decided by the same pass that writes the code needing it.
 type renderer struct {
-	b       strings.Builder
-	usesOpt bool
+	b strings.Builder
+	// The import list is whatever the writer reached for. Deciding it by a second walk of
+	// the types would be a second opinion about what got rendered, and an import Go does
+	// not see used is a compile error rather than a warning.
+	usesOpt   bool
+	usesJSON  bool
+	usesFmt   bool
+	usesSort  bool
+	usesCanon bool
 }
 
 func (r *renderer) typ(t GoType) {
@@ -125,6 +183,10 @@ func (r *renderer) typ(t GoType) {
 		r.strukt(t)
 	case *Tuple:
 		r.tuple(t)
+	case *Enum:
+		// An enum is stored as its element; the literals are constants beside the
+		// declaration, and a decoder is what makes them the only admitted values.
+		r.typ(t.Elem)
 	case *Interface:
 		// A sum needs a discriminator to be worth more than this, and dispatch is not
 		// lowered yet. `any` accepts every alternative, which over-accepts in the one
@@ -205,11 +267,15 @@ func (r *renderer) tuple(t *Tuple) {
 	b.WriteString("}")
 }
 
-// jsonTag is the property name plus omitempty for a field that may be absent. A field that
-// may not is tagged without it: writing the zero value is what the schema asks for.
+// jsonTag is the property name plus `omitzero` for a field that may be absent.
+//
+// Not `omitempty`: that does nothing at all for a struct type, so an unset [opt.Opt] would
+// be written as its own zero value rather than left out. `omitzero` (Go 1.24) consults the
+// field's `IsZero` method, which is why [opt.Opt] and [opt.OptNullable] have one and
+// [opt.Nullable] deliberately does not — its zero is null, and null is written.
 func jsonTag(f Field) string {
 	if p, ok := f.Type.(*Presence); ok && p.Optional {
-		return f.JSON + ",omitempty"
+		return f.JSON + ",omitzero"
 	}
 	return f.JSON
 }
@@ -239,6 +305,75 @@ func (r *renderer) doc(name string, m plan.Metadata) {
 			continue
 		}
 		b.WriteString("// " + l + "\n")
+	}
+}
+
+// enumConsts declares the literals of a named enum.
+//
+// Only a named one gets them: an enum nested in a field has no declaration to hang
+// constants off. It keeps its values in the plan either way, so what is lost there is the
+// spelling and not the constraint.
+func (r *renderer) enumConsts(n *Named) {
+	e, ok := n.Underlying.(*Enum)
+	if !ok {
+		return
+	}
+	lits := make([]string, len(e.Values))
+	taken := make(map[string]bool, len(e.Values))
+	for i, v := range e.Values {
+		lit, ok := goLiteral(v, e.Elem)
+		name := n.Name + v.Name
+		// All or nothing, and the type is correct either way. A partial constant set is
+		// worse than none: it reads as the whole admitted set while being a subset of it.
+		// Two literals that spell one identifier — `1` and `-1`, `1.5` and `15` — are a
+		// refusal for the same reason a colliding type name is (§1).
+		if !ok || v.Name == "" || checkIdentifier(name) != nil || taken[name] {
+			fmt.Fprintf(&r.b, "// The %d values %s admits have no distinct Go constant names.\n\n",
+				len(e.Values), n.Name)
+			return
+		}
+		taken[name] = true
+		lits[i] = lit
+	}
+
+	fmt.Fprintf(&r.b, "// The values %s admits.\nconst (\n", n.Name)
+	for i, v := range e.Values {
+		fmt.Fprintf(&r.b, "%s%s %s = %s\n", n.Name, v.Name, n.Name, lits[i])
+	}
+	r.b.WriteString(")\n\n")
+}
+
+// goLiteral is the Go source for one admitted value, or false when it has none.
+func goLiteral(v EnumValue, elem GoType) (string, bool) {
+	p, ok := deref(elem).(*Primitive)
+	if !ok {
+		return "", false
+	}
+	switch p.Kind {
+	case PrimitiveString:
+		s, ok := v.Value.(string)
+		return strconv.Quote(s), ok
+	case PrimitiveBool:
+		b, ok := v.Value.(bool)
+		return strconv.FormatBool(b), ok
+	case PrimitiveInt, PrimitiveFloat:
+		// A JSON number is already Go's spelling of one, so the document's own bytes are
+		// the literal — which is what keeps a value past float64's precision exact.
+		text, ok := numericText(v.Value, v.Raw)
+		if !ok {
+			return "", false
+		}
+		if p.Kind == PrimitiveInt {
+			// The element type has to be able to hold it. A document may write an
+			// integer past int64, and an untyped constant that overflows its type is a
+			// compile error rather than a rounded value.
+			if _, err := strconv.ParseInt(text, 10, 64); err != nil {
+				return "", false
+			}
+		}
+		return text, true
+	default:
+		return "", false
 	}
 }
 

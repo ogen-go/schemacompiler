@@ -144,6 +144,28 @@ type Presence struct {
 	Nullable bool
 }
 
+// Enum is a value restricted to a fixed set of literals. Elem is what one is stored as.
+//
+// The literals live here rather than in the validation plan because that is where the plan
+// puts them: `enum` and `const` reach a plan as a [plan.LiteralDispatch], not as a
+// predicate, so a backend reading only [plan.ValidationPlan] enforces nothing at all.
+type Enum struct {
+	Elem   GoType
+	Values []EnumValue
+}
+
+// EnumValue is one admitted literal.
+type EnumValue struct {
+	// Name is the Go constant's name, without the type prefix a renderer adds. It is
+	// empty when no identifier could be derived, which is a rendering loss and not a
+	// semantic one: Value and Raw still say what is admitted.
+	Name  string
+	Value any
+	// Raw is the literal's exact JSON source, kept so a renderer can emit a number past
+	// float64's precision the way the document wrote it.
+	Raw []byte
+}
+
 // Interface is a sum of alternatives, one of which holds the value.
 type Interface struct {
 	Variants []GoType
@@ -164,5 +186,6 @@ func (*Tuple) isGoType()     {}
 func (*Map) isGoType()       {}
 func (*Struct) isGoType()    {}
 func (*Presence) isGoType()  {}
+func (*Enum) isGoType()      {}
 func (*Interface) isGoType() {}
 func (*Pointer) isGoType()   {}

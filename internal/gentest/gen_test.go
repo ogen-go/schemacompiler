@@ -16,6 +16,7 @@ import (
 
 	"github.com/ogen-go/schemacompiler"
 	"github.com/ogen-go/schemacompiler/gogen"
+	"github.com/ogen-go/schemacompiler/opt"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -88,18 +89,36 @@ func TestThreeStatePresenceRoundTrips(t *testing.T) {
 	}
 }
 
-func TestAbsentAndNullAreNotTheSame(t *testing.T) {
-	var absent, null Pet
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"a","nickname":null}`), &absent))
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"a","nickname":null,"age":null}`), &null))
+// TestNullIsNotAbsence is the ogen-like invariant. `age` is optional and not nullable, so
+// an explicit null is a value the schema rejects. Taking it as absence would accept it and
+// lose the difference on the way back out.
+func TestNullIsNotAbsence(t *testing.T) {
+	var p Pet
+	err := json.Unmarshal([]byte(`{"name":"a","nickname":null,"age":null}`), &p)
+	require.ErrorContains(t, err, `decode "age"`)
+	require.ErrorContains(t, err, "not an admitted value")
 
-	require.False(t, absent.Age.IsSet())
-	require.False(t, null.Age.IsSet(), "a null in a non-nullable optional stays unset")
-
-	// The required nullable is present-null in both, and encoding writes the key back.
-	out, err := json.Marshal(absent)
+	// `nickname` is required and nullable, so its null is admitted and survives a round
+	// trip as a written key.
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"a","nickname":null}`), &p))
+	require.True(t, p.Nickname.IsNull())
+	out, err := json.Marshal(p)
 	require.NoError(t, err)
 	require.Contains(t, string(out), `"nickname":null`)
+	require.NotContains(t, string(out), `"age"`)
+}
+
+// TestOmitzeroCarriesPresence pins that the struct tags do the work encoding/json can do,
+// so the generator writes a marshaller only for what it cannot: flattening the overflow
+// map into the same object. `Tag` is closed, so it has no MarshalJSON at all.
+func TestOmitzeroCarriesPresence(t *testing.T) {
+	out, err := json.Marshal(Tag{Name: "x"})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"name":"x"}`, string(out), "an absent score is omitted by the tag alone")
+
+	out, err = json.Marshal(Tag{Name: "x", Score: opt.Some(1.5)})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"name":"x","score":1.5}`, string(out))
 }
 
 // TestEncodingIsDeterministic pins the sorted overflow walk: Go randomizes map iteration,

@@ -465,10 +465,22 @@ codec is a rendering decision, and §0 already says ogen may supply its own `Ren
 makes every containing type generate more code to work around it. It remains its only
 import, and `Options.OptPackage` is there for a backend that wants different presence types.
 
-**A struct needs methods; most types do not.** `map[string]T` and `[]T` already encode
-correctly. Objects need them because `omitempty` does not look inside `opt.Opt` and an
-overflow map has to be flattened into the same object rather than nested under a key. Enums
-need a decoder. Everything else is left alone.
+**Presence is a struct tag, not generated code.** `json:",omitzero"` (Go 1.24) consults the
+field's `IsZero`, so `encoding/json` leaves an absent value out on its own. That is why
+`opt.Opt` and `opt.OptNullable` have `IsZero` and `opt.Nullable` deliberately does not — its
+zero *is* null, and null is a value the schema admits. `omitempty` would have been the wrong
+tag and a silent one: it does nothing at all for a struct type, so an absent value would be
+written as null under its own key.
+
+So a marshaller is generated only for what a tag cannot say: flattening the overflow map
+into the same object. A closed struct gets none. `map[string]T` and `[]T` already encode
+correctly. Enums need a decoder, and so does every object — `required`, unknown properties
+and the overflow map are all decode-side.
+
+**A null is not an absence.** `opt.Opt` is what a schema admitting no null lowers to, so a
+null there is a value that schema rejects; decoding it errors rather than taking it as
+absence, which would accept it and lose the difference on the way back out. `opt.Nullable`
+and `opt.OptNullable` take it as null, because for them it is admitted.
 
 **What is skipped, and why it says so.** A type whose codec is not written yet gets a
 comment naming the reason instead of a wrong codec. Two reasons exist: `patternProperties`,

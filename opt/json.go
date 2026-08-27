@@ -1,6 +1,9 @@
 package opt
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+)
 
 // The presence types marshal as the value they hold, so an [Opt] of a type is encoded the
 // way that type is. Absence has no JSON spelling of its own: a value that is absent is one
@@ -13,7 +16,10 @@ import "encoding/json"
 // restating what these already know. A backend that wants a different codec supplies its
 // own presence types instead (`gogen.Options.OptPackage`).
 
-var jsonNull = []byte("null")
+var (
+	jsonNull           = []byte("null")
+	errNullNotAdmitted = errors.New("opt: null is not an admitted value here")
+)
 
 // MarshalJSON implements [json.Marshaler].
 func (o Opt[T]) MarshalJSON() ([]byte, error) {
@@ -23,13 +29,12 @@ func (o Opt[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(o.val)
 }
 
-// UnmarshalJSON implements [json.Unmarshaler]. A JSON null leaves the value unset: this
-// type has no null state, and a schema that admits null is lowered to [Nullable] or
-// [OptNullable] instead.
+// UnmarshalJSON implements [json.Unmarshaler]. A JSON null is an error: this type is what a
+// schema admitting no null lowers to, so a null here is a value the schema rejects. Taking
+// it as absence would accept it and lose the difference on the way back out.
 func (o *Opt[T]) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
-		o.Unset()
-		return nil
+		return errNullNotAdmitted
 	}
 	var v T
 	if err := json.Unmarshal(data, &v); err != nil {

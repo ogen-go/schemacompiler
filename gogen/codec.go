@@ -39,7 +39,12 @@ func (r *renderer) structCodec(n *Named, s *Struct) string {
 	r.usesJSON = true
 	r.usesFmt = true
 
-	r.marshalStruct(n, s)
+	// Encoding only needs writing when the overflow map has to be flattened into the same
+	// object, which is the one thing struct tags cannot say. Presence is already covered:
+	// `omitzero` consults the field's IsZero, so encoding/json leaves an absent one out.
+	if s.Additional != nil {
+		r.marshalStruct(n, s)
+	}
 	r.unmarshalStruct(n, s)
 	return ""
 }

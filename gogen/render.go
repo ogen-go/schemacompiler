@@ -263,11 +263,15 @@ func (r *renderer) tuple(t *Tuple) {
 	b.WriteString("}")
 }
 
-// jsonTag is the property name plus omitempty for a field that may be absent. A field that
-// may not is tagged without it: writing the zero value is what the schema asks for.
+// jsonTag is the property name plus `omitzero` for a field that may be absent.
+//
+// Not `omitempty`: that does nothing at all for a struct type, so an unset [opt.Opt] would
+// be written as its own zero value rather than left out. `omitzero` (Go 1.24) consults the
+// field's `IsZero` method, which is why [opt.Opt] and [opt.OptNullable] have one and
+// [opt.Nullable] deliberately does not — its zero is null, and null is written.
 func jsonTag(f Field) string {
 	if p, ok := f.Type.(*Presence); ok && p.Optional {
-		return f.JSON + ",omitempty"
+		return f.JSON + ",omitzero"
 	}
 	return f.JSON
 }

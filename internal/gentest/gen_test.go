@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,12 +40,18 @@ func generated(t *testing.T) []byte {
 
 // TestGeneratedFileIsCurrent fails when types.go stops matching what the backend produces,
 // so the tests below cannot quietly go on exercising an older codec than the one shipping.
+//
+// Line endings are normalized before comparing. .gitattributes pins these files to LF, but
+// the test should not depend on the checkout it is run from: a Windows clone with
+// core.autocrlf on would otherwise fail here over bytes no compiler cares about.
 func TestGeneratedFileIsCurrent(t *testing.T) {
 	want, err := os.ReadFile("types.go")
 	require.NoError(t, err)
-	require.Equal(t, string(want), string(generated(t)),
+	require.Equal(t, lf(want), lf(generated(t)),
 		"types.go is stale; regenerate it with `go test ./internal/gentest -update`")
 }
+
+func lf(b []byte) string { return strings.ReplaceAll(string(b), "\r\n", "\n") }
 
 func TestDecodeRejectsAMissingRequiredProperty(t *testing.T) {
 	var p Pet

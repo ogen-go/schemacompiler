@@ -48,6 +48,7 @@ func Render(types []*Named, opts Options) ([]File, error) {
 	for _, n := range types {
 		body.doc(n.Name, n.Metadata)
 		body.variantNote(n.Name, n.Underlying)
+		body.dispatchNote(n.Name, n.Checks.Dispatch)
 		fmt.Fprintf(&body.b, "type %s ", n.Name)
 		body.typ(n.Underlying)
 		body.b.WriteString("\n\n")
@@ -391,6 +392,17 @@ func (r *renderer) variantNote(name string, t GoType) {
 		alts[i] = strings.Join(strings.Fields(TypeExpr(v)), " ")
 	}
 	fmt.Fprintf(b, "// %s is one of: %s.\n", name, strings.Join(alts, ", "))
+}
+
+// dispatchNote admits that the plan selects a branch and nothing generated does
+// (docs/backend.md §14). It is a line comment for the reason [variantNote] is: Go block
+// comments do not nest.
+func (r *renderer) dispatchNote(name string, d DispatchCheck) {
+	if d.Disposition == Discharged {
+		return
+	}
+	fmt.Fprintf(&r.b, "// %s has an unenforced %s dispatch: nothing generated selects a branch, so every alternative is admitted.\n",
+		name, d.Kind)
 }
 
 func lowerFirst(s string) string {

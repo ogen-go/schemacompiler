@@ -18,6 +18,7 @@ import (
 	"github.com/ogen-go/schemacompiler"
 	"github.com/ogen-go/schemacompiler/gogen"
 	"github.com/ogen-go/schemacompiler/internal/gotypecheck"
+	"github.com/ogen-go/schemacompiler/internal/planwalk"
 	"github.com/ogen-go/schemacompiler/plan"
 )
 
@@ -287,5 +288,60 @@ func TestGogenRendersCodecForCorpus(t *testing.T) {
 	t.Logf("%d documents, %d codec methods, %d types skipped", docs, methods, skipped)
 	for why, n := range reasons {
 		t.Logf("  skipped %4d: %s", n, why)
+	}
+}
+
+// TestGogenDispatchOgenCorpus measures what docs/backend.md §14 admits: how many real
+// schemas select a branch that nothing generated evaluates.
+//
+// Two numbers, and the distance between them is the point. `planned` walks every plan in
+// the document, nested branches included, and is the population issue #155 counted.
+// `admitted` is what [gogen.Checks] can say, which is per declared type — the same
+// boundary [TestGogenSplitsOgenCorpus] counts predicates at, for the same reason: a nested
+// plan is carried by a nested type, and that type has no slot to carry a check in.
+func TestGogenDispatchOgenCorpus(t *testing.T) {
+	planned := map[string]int{}
+	admitted := map[gogen.DispatchKind]int{}
+	var lowered, outstanding int
+	eachOgenDocument(t, func(_ string, defs map[plan.SchemaID]plan.CompilationPlan) {
+		for _, p := range defs {
+			planwalk.Fold(p, 0, func(acc int, node planwalk.Node) (int, planwalk.Action) {
+				if node.Kind == planwalk.NodeDispatch && node.Dispatch != nil {
+					if _, none := node.Dispatch.(*plan.NoDispatch); !none {
+						planned[fmt.Sprintf("%T", node.Dispatch)]++
+					}
+				}
+				return acc, planwalk.Descend
+			})
+		}
+
+		types, err := gogen.Lower(defs)
+		if err != nil {
+			return
+		}
+		for _, n := range types {
+			lowered++
+			if n.Checks.Dispatch.Disposition != gogen.Discharged {
+				outstanding++
+				admitted[n.Checks.Dispatch.Kind]++
+			}
+		}
+	})
+
+	require.NotZero(t, lowered)
+	require.NotEmpty(t, planned)
+	t.Logf("%d types, %d admit an unenforced dispatch at the declaration (%.1f%%)",
+		lowered, outstanding, float64(outstanding)*100/float64(lowered))
+
+	kinds := make([]string, 0, len(planned))
+	for k := range planned {
+		kinds = append(kinds, k)
+	}
+	slices.SortFunc(kinds, func(a, b string) int { return planned[b] - planned[a] })
+	for _, k := range kinds {
+		t.Logf("  planned  %5d %s", planned[k], k)
+	}
+	for k, n := range admitted {
+		t.Logf("  admitted %5d %s dispatch", n, k)
 	}
 }

@@ -154,3 +154,29 @@ func TestRecursiveTypeRoundTrips(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, src, string(out))
 }
+
+// TestStructuredEnumIsEnforced is the case with nothing to name. An enum entry is a JSON
+// literal inside an array, not a schema, so it has nowhere to carry an `x-go-name` and no
+// constant can be derived from it. The value is handed back as what the schema said it was,
+// and the admitted set is still checked.
+func TestStructuredEnumIsEnforced(t *testing.T) {
+	var s Shape
+	require.NoError(t, json.Unmarshal([]byte(`{"kind":"circle","r":1}`), &s))
+	require.Equal(t, "circle", s["kind"])
+
+	// Key order and number spelling are not what JSON equality is about.
+	require.NoError(t, json.Unmarshal([]byte(`{"r":1.0,"kind":"circle"}`), &s))
+	require.Equal(t, "circle", s["kind"])
+
+	require.ErrorContains(t, json.Unmarshal([]byte(`{"kind":"circle","r":2}`), &s), "is not an admitted Shape")
+	require.ErrorContains(t, json.Unmarshal([]byte(`{"kind":"triangle"}`), &s), "is not an admitted Shape")
+}
+
+func TestStructuredEnumRoundTrips(t *testing.T) {
+	const src = `{"name":"a","nickname":null,"shape":{"kind":"square","side":2}}`
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(src), &p))
+	out, err := json.Marshal(p)
+	require.NoError(t, err)
+	require.JSONEq(t, src, string(out))
+}

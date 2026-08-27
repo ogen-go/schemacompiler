@@ -1,6 +1,7 @@
 package gogen
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,12 +30,136 @@ func (r *renderer) codec(n *Named) string {
 	}
 }
 
+// enumCodec enforces the admitted values. Two ways, and the difference is only how the
+// comparison is written.
+//
+// Literals with a Go form are compared as Go values, which is exact and cheap. Everything
+// else — an object, an array, a mixed-kind set — is compared as a decoded JSON value, so
+// key order and number spelling do not matter, and the value handed back is whatever the
+// schema said it was. There is nothing to name in that case and nothing to name it with:
+// an enum entry is a JSON literal inside an array, not a schema, so it has nowhere to carry
+// an `x-go-name`. What it loses is the constants, never the check.
+func (r *renderer) enumCodec(n *Named, e *Enum) string {
+	if lits, ok := goLiterals(e); ok {
+		r.primitiveEnumCodec(n, e, lits)
+		return ""
+	}
+	cases, ok := canonicalCases(e)
+	if !ok {
+		return "two admitted values share one canonical form"
+	}
+
+	if s, ok := deref(e.Elem).(*Struct); ok {
+		if len(s.Patterns) > 0 {
+			return patternReason
+		}
+		r.usesJSON, r.usesFmt, r.usesSort = true, true, true
+		if s.Additional != nil {
+			r.marshalStruct(n, s)
+		}
+		fmt.Fprintf(&r.b, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (s *%s) UnmarshalJSON(data []byte) error {\n", n.Name)
+		r.enumGuard(n, cases)
+		r.unmarshalStructBody(n, s)
+		r.b.WriteString("}\n\n")
+		return ""
+	}
+	if _, ok := deref(e.Elem).(*Presence); ok {
+		return "an enum whose values include null needs a decoder that dispatches on kind"
+	}
+
+	r.usesJSON, r.usesFmt = true, true
+	p := &r.b
+	fmt.Fprintf(p, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (v *%s) UnmarshalJSON(data []byte) error {\n", n.Name)
+	r.enumGuard(n, cases)
+	p.WriteString("var out ")
+	r.typ(e.Elem)
+	p.WriteString("\nif err := json.Unmarshal(data, &out); err != nil {\nreturn err\n}\n")
+	fmt.Fprintf(p, "*v = %s(out)\nreturn nil\n}\n\n", n.Name)
+	return ""
+}
+
+// enumGuard writes the membership check: the instance in canonical form against the
+// admitted values in canonical form.
+//
+// Canonical means decoded and re-encoded, so object key order and number spelling stop
+// mattering — which is what JSON equality means. The generator canonicalizes the literals
+// with the same two calls the generated code makes on the instance, so the two sides cannot
+// disagree about what equal is. Nothing is stored: the admitted set is a list of string
+// cases in a switch, not a package variable holding decoded values.
+func (r *renderer) enumGuard(n *Named, cases []string) {
+	r.usesCanon = true
+	quoted := make([]string, len(cases))
+	for i, c := range cases {
+		quoted[i] = strconv.Quote(c)
+	}
+	fmt.Fprintf(&r.b, "canon, err := canonicalJSON(data)\nif err != nil {\nreturn err\n}\n"+
+		"switch canon {\ncase %s:\ndefault:\nreturn fmt.Errorf(\"%%s is not an admitted %s\", data)\n}\n",
+		strings.Join(quoted, ", "), n.Name)
+}
+
+// canonicalCases is every admitted value in canonical form, or false when two of them share
+// one — which float64 can do to two integers past its precision. Refusing there is the same
+// rule as a colliding constant name: a check that cannot tell two admitted values apart is
+// not one to generate.
+func canonicalCases(e *Enum) ([]string, bool) {
+	out := make([]string, 0, len(e.Values))
+	seen := make(map[string]bool, len(e.Values))
+	for _, v := range e.Values {
+		c, err := canonicalJSON(rawOf(v))
+		if err != nil || seen[c] {
+			return nil, false
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out, true
+}
+
+// canonicalJSON is the generator's half of the comparison, and is the two calls the
+// generated helper makes.
+func canonicalJSON(data []byte) (string, error) {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return "", err
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// rawOf is the literal's source bytes, or its Go value re-encoded when the plan kept none.
+func rawOf(v EnumValue) []byte {
+	if len(v.Raw) > 0 {
+		return v.Raw
+	}
+	out, err := json.Marshal(v.Value)
+	if err != nil {
+		return []byte("null")
+	}
+	return out
+}
+
+// goLiterals is the Go source of every admitted value, or false when one has none.
+func goLiterals(e *Enum) ([]string, bool) {
+	if _, ok := deref(e.Elem).(*Primitive); !ok {
+		return nil, false
+	}
+	lits := make([]string, len(e.Values))
+	for i, v := range e.Values {
+		lit, ok := goLiteral(v, e.Elem)
+		if !ok {
+			return nil, false
+		}
+		lits[i] = lit
+	}
+	return lits, true
+}
+
 func (r *renderer) structCodec(n *Named, s *Struct) string {
 	if len(s.Patterns) > 0 {
-		// A pattern routes keys by an ECMA-262 regex. Go's `regexp` is RE2 and answers
-		// differently on the constructs that differ, which is issue #111 one layer down:
-		// a decoder that used it would route keys the schema does not.
-		return "patternProperties needs an ECMA-262 engine in generated code"
+		return patternReason
 	}
 	r.usesJSON = true
 	r.usesFmt = true
@@ -98,8 +223,13 @@ func (r *renderer) encodeField(key, value, name string) {
 }
 
 func (r *renderer) unmarshalStruct(n *Named, s *Struct) {
+	fmt.Fprintf(&r.b, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (s *%s) UnmarshalJSON(data []byte) error {\n", n.Name)
+	r.unmarshalStructBody(n, s)
+	r.b.WriteString("}\n\n")
+}
+
+func (r *renderer) unmarshalStructBody(n *Named, s *Struct) {
 	p := &r.b
-	fmt.Fprintf(p, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (s *%s) UnmarshalJSON(data []byte) error {\n", n.Name)
 	p.WriteString("var raw map[string]json.RawMessage\nif err := json.Unmarshal(data, &raw); err != nil {\nreturn err\n}\n")
 	fmt.Fprintf(p, "var out %s\n", n.Name)
 
@@ -132,22 +262,11 @@ func (r *renderer) unmarshalStruct(n *Named, s *Struct) {
 		p.WriteString("if len(raw) > 0 {\nreturn fmt.Errorf(\"unexpected property %q\", sortedKeys(raw)[0])\n}\n")
 	}
 
-	p.WriteString("*s = out\nreturn nil\n}\n\n")
+	p.WriteString("*s = out\nreturn nil\n")
 }
 
-func (r *renderer) enumCodec(n *Named, e *Enum) string {
-	prim, ok := deref(e.Elem).(*Primitive)
-	if !ok {
-		return "an enum over mixed kinds needs a decoder that dispatches on kind"
-	}
-	lits := make([]string, len(e.Values))
-	for i, v := range e.Values {
-		lit, ok := goLiteral(v, e.Elem)
-		if !ok {
-			return "a literal with no Go form"
-		}
-		lits[i] = lit
-	}
+func (r *renderer) primitiveEnumCodec(n *Named, e *Enum, lits []string) {
+	prim := deref(e.Elem).(*Primitive)
 	r.usesJSON = true
 	r.usesFmt = true
 
@@ -157,7 +276,6 @@ func (r *renderer) enumCodec(n *Named, e *Enum) string {
 	fmt.Fprintf(p, "var raw %s\nif err := json.Unmarshal(data, &raw); err != nil {\nreturn err\n}\n", goPrimitive(prim.Kind))
 	fmt.Fprintf(p, "switch raw {\ncase %s:\n*v = %s(raw)\nreturn nil\ndefault:\n", strings.Join(lits, ", "), n.Name)
 	fmt.Fprintf(p, "return fmt.Errorf(\"%%v is not a valid %s\", raw)\n}\n}\n\n", n.Name)
-	return ""
 }
 
 // overflowName repeats the name the struct renderer gave the overflow slot, which is the
@@ -172,6 +290,30 @@ func overflowName(s *Struct) string {
 	}
 	return freeName("AdditionalProps", taken)
 }
+
+// patternReason is why a pattern-routing decoder is not written: Go's `regexp` is RE2 and
+// answers differently from ECMA-262 on the constructs that differ, which is issue #111 one
+// layer down — a decoder using it would route keys the schema does not.
+const patternReason = "patternProperties needs an ECMA-262 engine in generated code"
+
+// canonHelper is what an admitted-value check compares against. It holds no state: the
+// admitted set is a switch over string cases, so there is nothing to initialize, nothing a
+// caller can reach in, and no init order to depend on.
+const canonHelper = `
+// canonicalJSON re-encodes a value in one form, so two spellings of the same JSON compare
+// equal: object keys sort and numbers take a single format.
+func canonicalJSON(data []byte) (string, error) {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return "", err
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+`
 
 // codecHelpers are the two functions the generated methods share, emitted once per file so
 // each method stays about the type it belongs to.

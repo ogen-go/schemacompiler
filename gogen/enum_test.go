@@ -9,6 +9,7 @@ import (
 
 	"github.com/ogen-go/schemacompiler/gogen"
 	"github.com/ogen-go/schemacompiler/internal/gotypecheck"
+	"github.com/ogen-go/schemacompiler/plan"
 )
 
 // TestLowerEnumIsNotAny is the hole this closes. `enum` and `const` reach a plan as a
@@ -111,4 +112,74 @@ func TestRenderEnumCompiles(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, gotypecheck.Check(files, "../opt"), "rendered:\n%s", files[0].Content)
 	require.Equal(t, 4, strings.Count(string(files[0].Content), "const ("))
+}
+
+// TestRenderStructuredEnumIsEnforced covers the case with nothing to name. An enum entry is
+// a JSON literal inside an array, not a schema, so it has nowhere to carry an `x-go-name`
+// and no constant can be derived from it. The value is handed back as what the schema said
+// it was, and the admitted set is still checked.
+func TestRenderStructuredEnumIsEnforced(t *testing.T) {
+	for _, tt := range []struct{ name, def, want string }{
+		{"object", `{"enum":[{"a":1},{"b":2}]}`, "type T map[string]any"},
+		{"array", `{"enum":[["x"],["y"]]}`, "type T []any"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			src := renderCodec(t, fmt.Sprintf(`{"$defs":{"T":%s},"$ref":"#/$defs/T"}`, tt.def))
+			require.Contains(t, src, tt.want)
+			require.Contains(t, src, "no distinct Go constant names")
+			require.Contains(t, src, "is not an admitted T")
+			require.NotContains(t, src, "const (")
+			// No package state: the admitted set is a switch over string cases.
+			require.NotContains(t, src, "\nvar ")
+		})
+	}
+}
+
+// TestRenderRefusesAmbiguousCanonicalForms keeps the check able to tell two admitted values
+// apart. float64 collapses two integers past its precision onto one canonical form, and a
+// check that cannot distinguish them is not one to generate.
+func TestRenderRefusesAmbiguousCanonicalForms(t *testing.T) {
+	src := renderCodec(t,
+		`{"$defs":{"T":{"enum":[[10000000000000000000000001],[10000000000000000000000002]]}},"$ref":"#/$defs/T"}`)
+	require.Contains(t, src, "share one canonical form")
+	require.NotContains(t, src, "is not an admitted T")
+}
+
+// TestRenderEnumEnforcesEvenWhenUnnameable separates the two failures. A literal that no
+// identifier can spell costs the constants; it does not cost the check, which compares
+// values and never names.
+func TestRenderEnumEnforcesEvenWhenUnnameable(t *testing.T) {
+	src := renderCodec(t, `{"$defs":{"T":{"type":"string","enum":["%%%","ok"]}},"$ref":"#/$defs/T"}`)
+	require.NotContains(t, src, "const (")
+	require.Contains(t, src, `case "%%%", "ok":`)
+}
+
+// TestObjectEnumBesideATypeIsNotLowered records a gap rather than a behavior. Adding
+// `type: object` to an object enum makes the planner choose [plan.PredicateCountDispatch]
+// at [plan.RawEvaluation] instead of a literal dispatch — the branches are trial-validated,
+// not compared — and that variant is not lowered, so nothing generated enforces it.
+//
+// The three selection dispatches are all in this position (issue #155). What makes it worth
+// pinning is that `Checks` cannot see it either: dispatch is not validation, so a backend
+// reads zero delegated checks and concludes nothing is missing.
+func TestObjectEnumBesideATypeIsNotLowered(t *testing.T) {
+	defs := definitions(t, `{"$defs":{"T":{"type":"object",
+		"properties":{"a":{"type":"integer"}},"required":["a"],"additionalProperties":false,
+		"enum":[{"a":1},{"a":2}]}},"$ref":"#/$defs/T"}`)
+	require.IsType(t, &plan.PredicateCountDispatch{}, defs["/$defs/T"].Dispatch)
+
+	types, err := gogen.Lower(defs)
+	require.NoError(t, err)
+	require.IsType(t, &gogen.Struct{}, types[0].Underlying, "no Enum, so no admitted-value check")
+	require.True(t, types[0].Checks.Empty(), "and nothing in Checks says so either")
+}
+
+func renderCodec(t *testing.T, schema string) string {
+	t.Helper()
+	types, err := gogen.Lower(definitions(t, schema))
+	require.NoError(t, err)
+	files, err := gogen.Render(types, gogen.Options{Codec: true})
+	require.NoError(t, err)
+	require.NoError(t, gotypecheck.Check(files, "../opt"), "rendered:\n%s", files[0].Content)
+	return string(files[0].Content)
 }

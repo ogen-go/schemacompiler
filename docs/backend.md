@@ -482,12 +482,31 @@ null there is a value that schema rejects; decoding it errors rather than taking
 absence, which would accept it and lose the difference on the way back out. `opt.Nullable`
 and `opt.OptNullable` take it as null, because for them it is admitted.
 
+**Enums with nothing to name.** An enum entry is a JSON literal inside an array, not a
+schema, so it has nowhere to carry an `x-go-name` and no constant can be derived from an
+object or an array. Those still get checked; what they lose is the constants, never the
+check. `{"enum":[{"a":1},{"b":2}]}` is `map[string]any`, and the decoder compares the
+instance in canonical form against the admitted values in canonical form — decoded and
+re-encoded, so key order and number spelling stop mattering, which is what JSON equality
+means. The generator canonicalizes the literals with the same two calls the generated code
+makes, so the two sides cannot disagree about what equal is.
+
+The admitted set is a switch over string cases. Nothing is stored: no package variable
+holding decoded values, nothing to initialize, no init order to depend on, and nothing a
+caller can reach into. Two literals sharing one canonical form — which float64 can do to two
+integers past its precision — is a refusal, for the reason a colliding constant name is.
+
 **What is skipped, and why it says so.** A type whose codec is not written yet gets a
-comment naming the reason instead of a wrong codec. Two reasons exist: `patternProperties`,
-because routing keys needs an ECMA-262 engine and Go's `regexp` is RE2 — issue #111 one
-layer down, where a decoder would route keys the schema does not; and an enum over mixed
-kinds, which needs a decoder that dispatches on kind. Over the corpus that is **2 types of
-2832 methods across 57 documents**.
+comment naming the reason instead of a wrong codec. `patternProperties` is the one that
+remains: routing keys needs an ECMA-262 engine and Go's `regexp` is RE2 — issue #111 one
+layer down, where a decoder would route keys the schema does not. Over the corpus that is
+**0 types of 2834 methods across 57 documents**.
+
+**What is not skipped and not enforced.** Only `LiteralDispatch` folds into the shape. The
+three selection dispatches — `KindDispatch`, `PredicateCountDispatch`, `PropertyDispatch`,
+392 occurrences between them — have no generated code, and `Checks` cannot say so, because
+dispatch is not validation (issue #155). Adding `"type":"object"` to an object enum moves it
+from a literal dispatch to a predicate-count one and enforcement disappears with it.
 
 ### Generated code that actually runs
 

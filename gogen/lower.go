@@ -1,7 +1,6 @@
 package gogen
 
 import (
-	"encoding/json"
 	"slices"
 	"strconv"
 
@@ -138,10 +137,9 @@ func enumValueName(v any, raw []byte) string {
 // numericText is a JSON number's source text.
 //
 // It reads [plan.LiteralCase.Raw] first, so a literal past float64's precision keeps the
-// digits the document wrote. The fallback covers every Go numeric spelling a literal may
-// arrive as rather than the one the plan documents: `LiteralCase.Value` says float64, and
-// the planner produces `int` for an integer, so a backend switching on float64 alone
-// misses every integer enum (issue #152).
+// digits the document wrote. The fallback covers every numeric spelling [plan.LiteralCase]
+// documents: an integer arrives as int, not float64, so a backend switching on float64
+// alone misses every integer enum (issue #152).
 func numericText(v any, raw []byte) (string, bool) {
 	if len(raw) > 0 {
 		return string(raw), true
@@ -151,10 +149,10 @@ func numericText(v any, raw []byte) (string, bool) {
 		return strconv.Itoa(v), true
 	case int64:
 		return strconv.FormatInt(v, 10), true
+	case uint64:
+		return strconv.FormatUint(v, 10), true
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64), true
-	case json.Number:
-		return v.String(), true
 	default:
 		return "", false
 	}

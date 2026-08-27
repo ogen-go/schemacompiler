@@ -154,15 +154,15 @@ func TestRenderEnumEnforcesEvenWhenUnnameable(t *testing.T) {
 	require.Contains(t, src, `case "%%%", "ok":`)
 }
 
-// TestObjectEnumBesideATypeIsNotLowered records a gap rather than a behavior. Adding
+// TestObjectEnumBesideATypeIsAdmitted pins the surprise issue #155 opens with. Adding
 // `type: object` to an object enum makes the planner choose [plan.PredicateCountDispatch]
 // at [plan.RawEvaluation] instead of a literal dispatch — the branches are trial-validated,
 // not compared — and that variant is not lowered, so nothing generated enforces it.
 //
-// The three selection dispatches are all in this position (issue #155). What makes it worth
-// pinning is that `Checks` cannot see it either: dispatch is not validation, so a backend
-// reads zero delegated checks and concludes nothing is missing.
-func TestObjectEnumBesideATypeIsNotLowered(t *testing.T) {
+// Nothing is wrong with the plan: trial validation is the right answer for overlapping
+// branches. What was wrong is that a backend could not tell the two apart, and what is
+// asserted here is that it now can.
+func TestObjectEnumBesideATypeIsAdmitted(t *testing.T) {
 	defs := definitions(t, `{"$defs":{"T":{"type":"object",
 		"properties":{"a":{"type":"integer"}},"required":["a"],"additionalProperties":false,
 		"enum":[{"a":1},{"a":2}]}},"$ref":"#/$defs/T"}`)
@@ -171,7 +171,31 @@ func TestObjectEnumBesideATypeIsNotLowered(t *testing.T) {
 	types, err := gogen.Lower(defs)
 	require.NoError(t, err)
 	require.IsType(t, &gogen.Struct{}, types[0].Underlying, "no Enum, so no admitted-value check")
-	require.True(t, types[0].Checks.Empty(), "and nothing in Checks says so either")
+	require.Equal(t, gogen.DispatchCheck{
+		Kind:        gogen.DispatchPredicateCount,
+		Disposition: gogen.Delegate,
+	}, types[0].Checks.Dispatch)
+	require.False(t, types[0].Checks.Empty(), "an unenforced dispatch is not nothing to do")
+
+	files, err := gogen.Render(types, gogen.Options{})
+	require.NoError(t, err)
+	require.Contains(t, string(files[0].Content), "has an unenforced predicate-count dispatch")
+}
+
+// TestObjectEnumWithoutATypeIsDischarged is the same schema without `type`, which the
+// planner reads as a [plan.LiteralDispatch]. `Lower` folds it into an [gogen.Enum] and the
+// codec compares canonical JSON, so the dispatch is discharged and nothing is admitted.
+func TestObjectEnumWithoutATypeIsDischarged(t *testing.T) {
+	defs := definitions(t, `{"$defs":{"T":{"enum":[{"a":1},{"b":2}]}},"$ref":"#/$defs/T"}`)
+	require.IsType(t, &plan.LiteralDispatch{}, defs["/$defs/T"].Dispatch)
+
+	types, err := gogen.Lower(defs)
+	require.NoError(t, err)
+	require.Equal(t, gogen.Discharged, types[0].Checks.Dispatch.Disposition)
+
+	files, err := gogen.Render(types, gogen.Options{})
+	require.NoError(t, err)
+	require.NotContains(t, string(files[0].Content), "unenforced")
 }
 
 func renderCodec(t *testing.T, schema string) string {

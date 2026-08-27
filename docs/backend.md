@@ -521,9 +521,9 @@ layer down, where a decoder would route keys the schema does not. Over the corpu
 
 **What is not skipped and not enforced.** Only `LiteralDispatch` folds into the shape. The
 three selection dispatches — `KindDispatch`, `PredicateCountDispatch`, `PropertyDispatch`,
-392 occurrences between them — have no generated code, and `Checks` cannot say so, because
-dispatch is not validation (issue #155). Adding `"type":"object"` to an object enum moves it
-from a literal dispatch to a predicate-count one and enforcement disappears with it.
+392 occurrences between them — have no generated code. Adding `"type":"object"` to an object
+enum moves it from a literal dispatch to a predicate-count one and enforcement disappears
+with it. What `Checks` says about that is §14.
 
 ### Generated code that actually runs
 
@@ -536,3 +536,40 @@ what the generator produces.
 
 A codec that type-checks and does the wrong thing is exactly what §9's type checker cannot
 see.
+
+## 14. An unlowered dispatch is admitted, not hidden
+
+Dispatch is a fourth concern of a plan beside representation, validation and resolution
+(design §9), and `Split` classified only `ValidationPlan.Predicates`. So a backend read
+`len(Checks.Delegate) == 0`, concluded nothing had been left undone, and was wrong: the sum
+a `KindDispatch` selects over still decodes as `any`. That is the same shape as the `enum`
+hole of §11 — the information is in the plan, both halves of the backend read past it, and
+nothing said so.
+
+`Checks` now carries a `DispatchCheck`: which variant selects, and what the chosen Go type
+left to do about it. The answers are `Classify`'s three, because a backend acts on dispatch
+the way it acts on a predicate. `Lower` folds a `LiteralDispatch` into an `Enum` and the
+codec compares canonical JSON (§13), so that one is **discharged**. A literal dispatch the
+type did not fold, `KindDispatch`, `PropertyDispatch` and `PresenceDispatch` are **inline**:
+a kind, a tag property and a property's presence are each decidable from the decoded value.
+`PredicateCountDispatch` trial-validates every branch, which is what design §4.2's
+`RawEvaluation` exists to name, so it is **delegated** — the same reading `preservedBy`
+takes of the four predicate variants that never survive lowering (§10).
+
+Admitting is not enforcing, and the disposition says what a backend *must* do, never what it
+has done. `Render` writes a line comment on the declaration — a line comment for §12's
+reason, Go block comments do not nest — and `Checks.Empty()` is false for it, so the one
+signal that said "this type needs no validator" stops saying it for a type that needs one.
+Generated code still admits every alternative, which over-accepts in the direction design
+§24 permits. Refusing instead would be honest and would refuse a quarter of the corpus.
+
+**Measured.** Across every plan in the ogen corpus, nested branches included: 245
+`KindDispatch`, 129 `PredicateCountDispatch`, 18 `PropertyDispatch`, no `PresenceDispatch`
+at all — against 4966 `LiteralDispatch` that do fold.
+
+**What this does not reach.** Only 43 of 1592 lowered types (2.7%) carry one of those
+admissions: 27 predicate-count, 10 property, 6 kind. The rest of the 392 sit in plans nested
+inside a declaration, and a nested plan is carried by a nested Go type, which has no `Checks`
+slot — only `Named` does. It is the same boundary §10 counts predicates at, and it is a
+`gogen` limitation rather than something `plan` was not ready for: the plan says it, and a
+per-node pairing of the two trees is what would read it.

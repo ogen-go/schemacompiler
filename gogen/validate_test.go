@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-faster/sdk/gold"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ogen-go/schemacompiler/gogen"
@@ -36,90 +37,27 @@ func body(t *testing.T, src, name string) string {
 	return end
 }
 
+// TestValidateChecksWhatTheTypeDoesNotState golden-files the whole rendered file rather
+// than the method body: what a check costs in imports is part of what it costs.
 func TestValidateChecksWhatTheTypeDoesNotState(t *testing.T) {
 	tests := []struct {
 		name   string
 		schema string
-		want   string
 	}{
-		{
-			name:   "a string bound is a rune count, not a byte count",
-			schema: `{"type":"string","minLength":2,"maxLength":4}`,
-			want: "\tif utf8.RuneCountInString(string(s)) < 2 {\n" +
-				"\t\treturn errors.New(\"must be at least 2 characters\")\n" +
-				"\t}\n" +
-				"\tif utf8.RuneCountInString(string(s)) > 4 {\n" +
-				"\t\treturn errors.New(\"must be at most 4 characters\")\n" +
-				"\t}",
-		},
-		{
-			name:   "an integer bound compares against an integer",
-			schema: `{"type":"integer","minimum":1,"exclusiveMaximum":10}`,
-			want: "\tif s < 1 {\n" +
-				"\t\treturn errors.New(\"must be at least 1\")\n" +
-				"\t}\n" +
-				"\tif s >= 10 {\n" +
-				"\t\treturn errors.New(\"must be less than 10\")\n" +
-				"\t}",
-		},
-		{
-			name:   "integrality over a float is a truncation test",
-			schema: `{"type":"number","multipleOf":0.5,"minimum":0}`,
-			want: "\tif s < 0.0 {\n" +
-				"\t\treturn errors.New(\"must be at least 0\")\n" +
-				"\t}\n" +
-				"\tif math.Mod(float64(s), 0.5) != 0 {\n" +
-				"\t\treturn errors.New(\"must be a multiple of 0.5\")\n" +
-				"\t}",
-		},
-		{
-			name:   "an item bound reads the slice the items were stored in",
-			schema: `{"type":"array","items":{"type":"string"},"minItems":1,"uniqueItems":true}`,
-			want: "\tif len(s) < 1 {\n" +
-				"\t\treturn errors.New(\"must have at least 1 item\")\n" +
-				"\t}\n" +
-				"\t{\n" +
-				"\t\tseen := make(map[string]struct{}, len(s))\n" +
-				"\t\tfor _, v := range s {\n" +
-				"\t\t\tif _, dup := seen[v]; dup {\n" +
-				"\t\t\t\treturn errors.New(\"must not contain duplicate items\")\n" +
-				"\t\t\t}\n" +
-				"\t\t\tseen[v] = struct{}{}\n" +
-				"\t\t}\n" +
-				"\t}",
-		},
-		{
-			name:   "a check on a property reaches through the presence the field stores",
-			schema: `{"type":"object","properties":{"a":{"type":"string","minLength":1}}}`,
-			want: "\tif v0, ok := s.A.Get(); ok {\n" +
-				"\t\tif utf8.RuneCountInString(string(v0)) < 1 {\n" +
-				"\t\t\treturn errors.New(\".a: must be at least 1 character\")\n" +
-				"\t\t}\n" +
-				"\t}",
-		},
-		{
-			name:   "an index only known at run time makes the path a format string",
-			schema: `{"type":"array","items":{"type":"string","maxLength":2}}`,
-			want: "\tfor i0, v0 := range s {\n" +
-				"\t\tif utf8.RuneCountInString(string(v0)) > 2 {\n" +
-				"\t\t\treturn fmt.Errorf(\"[%d]: must be at most 2 characters\", i0)\n" +
-				"\t\t}\n" +
-				"\t}",
-		},
-		{
-			name:   "a property required but stored optional is checked, not assumed",
-			schema: `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}},"dependentRequired":{"a":["b"]}}`,
-			want: "\tif s.A.IsSet() {\n" +
-				"\t\tif !s.B.IsSet() {\n" +
-				"\t\t\treturn errors.New(\"property \\\"b\\\" is required when \\\"a\\\" is present\")\n" +
-				"\t\t}\n" +
-				"\t}",
-		},
+		{"string_bounds", `{"type":"string","minLength":2,"maxLength":4}`},
+		{"integer_bounds", `{"type":"integer","minimum":1,"exclusiveMaximum":10}`},
+		{"float_domain", `{"type":"number","multipleOf":0.5,"minimum":0}`},
+		{"array_bounds", `{"type":"array","items":{"type":"string"},"minItems":1,"uniqueItems":true}`},
+		{"property_reached_through_presence", `{"type":"object","properties":{"a":{"type":"string","minLength":1}}}`},
+		{"index_known_only_at_run_time", `{"type":"array","items":{"type":"string","maxLength":2}}`},
+		{"dependent_required", `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}},"dependentRequired":{"a":["b"]}}`},
+		{"object_property_count", `{"type":"object","properties":{"a":{"type":"string"}},"minProperties":1,"maxProperties":3}`},
+		{"map_property_count", `{"type":"object","additionalProperties":{"type":"string"},"minProperties":2}`},
+		{"pattern_properties", `{"type":"object","patternProperties":{"^a":{"type":"string","minLength":2}}}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			src := validated(t, `{"$defs":{"T":`+tt.schema+`},"$ref":"#/$defs/T"}`)
-			require.Equal(t, tt.want, body(t, src, "T"))
+			gold.Str(t, validated(t, `{"$defs":{"T":`+tt.schema+`},"$ref":"#/$defs/T"}`), tt.name+".go.golden")
 		})
 	}
 }

@@ -14,11 +14,11 @@ import (
 // Pet is a pet.
 type Pet struct {
 	Name     string               `json:"name"`
-	Age      opt.Opt[int64]       `json:"age,omitempty"`
+	Age      opt.Opt[int64]       `json:"age,omitzero"`
 	Nickname opt.Nullable[string] `json:"nickname"`
-	Status   opt.Opt[Status]      `json:"status,omitempty"`
-	Tags     opt.Opt[[]Tag]       `json:"tags,omitempty"`
-	Parent   opt.Opt[*Pet]        `json:"parent,omitempty"`
+	Status   opt.Opt[Status]      `json:"status,omitzero"`
+	Tags     opt.Opt[[]Tag]       `json:"tags,omitzero"`
+	Parent   opt.Opt[*Pet]        `json:"parent,omitzero"`
 	// AdditionalProps holds the properties no field and no pattern covers.
 	AdditionalProps map[string]any
 }
@@ -199,38 +199,7 @@ func (v *Status) UnmarshalJSON(data []byte) error {
 
 type Tag struct {
 	Name  string           `json:"name"`
-	Score opt.Opt[float64] `json:"score,omitempty"`
-}
-
-// MarshalJSON implements json.Marshaler.
-func (s Tag) MarshalJSON() ([]byte, error) {
-	b := []byte{'{'}
-	n := 0
-	var err error
-	if b, err = encodeKey(b, &n, "name"); err != nil {
-		return nil, err
-	}
-	{
-		d, err := json.Marshal(s.Name)
-		if err != nil {
-			return nil, fmt.Errorf("encode %q: %w", "name", err)
-		}
-		b = append(b, d...)
-	}
-	if v, ok := s.Score.Get(); ok {
-		if b, err = encodeKey(b, &n, "score"); err != nil {
-			return nil, err
-		}
-		{
-			d, err := json.Marshal(v)
-			if err != nil {
-				return nil, fmt.Errorf("encode %q: %w", "score", err)
-			}
-			b = append(b, d...)
-		}
-	}
-	b = append(b, '}')
-	return b, nil
+	Score opt.Opt[float64] `json:"score,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.

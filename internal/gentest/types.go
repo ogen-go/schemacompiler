@@ -4,9 +4,11 @@ package gentest
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/ogen-go/schemacompiler/opt"
 )
@@ -211,6 +213,38 @@ func (s *Pet) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Validate reports the first constraint s does not satisfy.
+func (s Pet) Validate() error {
+	if v0, ok := s.Age.Get(); ok {
+		if v0 < 0 {
+			return errors.New(".age: must be at least 0")
+		}
+	}
+	if v0, ok := s.Tags.Get(); ok {
+		if len(v0) > 3 {
+			return errors.New(".tags: must have at most 3 items")
+		}
+		for i1, v1 := range v0 {
+			if err := v1.Validate(); err != nil {
+				return fmt.Errorf(".tags[%d]: %w", i1, err)
+			}
+		}
+	}
+	if v0, ok := s.Parent.Get(); ok {
+		if v0 != nil {
+			if err := (*v0).Validate(); err != nil {
+				return fmt.Errorf(".parent: %w", err)
+			}
+		}
+	}
+	if v0, ok := s.At.Get(); ok {
+		if err := v0.Validate(); err != nil {
+			return fmt.Errorf(".at: %w", err)
+		}
+	}
+	return nil
+}
+
 type Point struct {
 	F0 float64
 	F1 float64
@@ -295,6 +329,22 @@ func (s *Point) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Validate reports the first constraint s does not satisfy.
+func (s Point) Validate() error {
+	{
+		count := 0
+		count++
+		count++
+		if s.F2.IsSet() {
+			count++
+		}
+		if count < 2 {
+			return errors.New("must have at least 2 items")
+		}
+	}
+	return nil
+}
+
 type Shape map[string]any
 
 // The 2 values Shape admits have no distinct Go constant names.
@@ -372,6 +422,22 @@ func (s *Tag) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unexpected property %q", sortedKeys(raw)[0])
 	}
 	*s = out
+	return nil
+}
+
+// Validate reports the first constraint s does not satisfy.
+func (s Tag) Validate() error {
+	if utf8.RuneCountInString(string(s.Name)) < 1 {
+		return errors.New(".name: must be at least 1 character")
+	}
+	if v0, ok := s.Score.Get(); ok {
+		if v0 < 0.0 {
+			return errors.New(".score: must be at least 0")
+		}
+		if v0 > 10.0 {
+			return errors.New(".score: must be at most 10")
+		}
+	}
 	return nil
 }
 

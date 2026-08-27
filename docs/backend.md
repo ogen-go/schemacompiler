@@ -504,12 +504,14 @@ Writing it turned up the reason it is not trivial. `prefixItems` applies only to
 positions an instance has, so a shorter array is admitted unless `minItems` says otherwise,
 and a bare Go slot cannot tell an absent item from a zero one. Requiring every slot
 under-accepts, which §24 forbids; allowing fewer and then encoding them all puts back an item
-that was never there. So a slot past `minItems` is an `opt.Opt`, and encoding stops at the
+that was never there. So an optional slot is an `opt.Opt`, and encoding stops at the
 first absent one — an array is positional, and there is no way to write a later item without
 the earlier one.
 
-`plan.FieldRepresentation` carries a `Presence` and `plan.ItemRepresentation` does not, so
-this is the one place the backend reads the validation plan to decide *storage* (issue #157).
+Which slots those are is `plan.ItemRepresentation.Presence`, mirroring
+`plan.FieldRepresentation.Presence`: the planner sets slot `i` required iff `i < minItems`.
+The backend reads storage out of the representation alone, as §7 says it should — it used to
+recover the bound from `MinItemsPredicate` in the validation plan (issue #157).
 
 **What is skipped, and why it says so.** A type whose codec is not written yet gets a
 comment naming the reason instead of a wrong codec. `patternProperties` is the one that

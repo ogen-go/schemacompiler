@@ -151,6 +151,10 @@ func TestLowerShapes(t *testing.T) {
 			"minItems makes the slots it covers required", `{"type":"array","prefixItems":[{"type":"string"},{"type":"boolean"}],"items":false,"minItems":1}`,
 			`struct { F0 string; F1 opt.Opt[bool] }`,
 		},
+		{
+			"minItems past the prefix requires every slot", `{"type":"array","prefixItems":[{"type":"string"},{"type":"boolean"}],"minItems":4}`,
+			`struct { F0 string; F1 bool; Rest []any }`,
+		},
 		{"integer", `{"type":"integer"}`, `int64`},
 		{"format survives", `{"type":"string","format":"date-time"}`, `string`},
 		{"any", `{}`, `any`},

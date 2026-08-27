@@ -119,12 +119,10 @@ func writeRepresentation(t *tw, r plan.Representation, visiting map[plan.SchemaI
 		t.line("Array")
 		t.enter(func() {
 			for i, p := range g.Prefix {
-				t.line("prefix[%d]", i)
-				t.enter(func() { writeItem(t, p, visiting) })
+				writeItem(t, fmt.Sprintf("prefix[%d]", i), p, visiting)
 			}
 			if g.Rest.Plan.Representation != nil {
-				t.line("rest")
-				t.enter(func() { writeItem(t, g.Rest, visiting) })
+				writeItem(t, "rest", g.Rest, visiting)
 			}
 		})
 	case *plan.UnionRepresentation:
@@ -176,13 +174,17 @@ func writePatternField(t *tw, p plan.PatternFieldRepresentation, visiting map[pl
 	})
 }
 
-func writeItem(t *tw, i plan.ItemRepresentation, visiting map[plan.SchemaID]bool) {
+func writeItem(t *tw, label string, i plan.ItemRepresentation, visiting map[plan.SchemaID]bool) {
 	var g struct {
 		Plan     plan.CompilationPlan
+		Presence plan.PresenceMode
 		Metadata plan.Metadata
 	} = i
-	writeMetadata(t, g.Metadata)
-	writePlan(t, g.Plan, visiting)
+	t.line("%s presence=%s", label, presenceString(g.Presence))
+	t.enter(func() {
+		writeMetadata(t, g.Metadata)
+		writePlan(t, g.Plan, visiting)
+	})
 }
 
 func presenceString(p plan.PresenceMode) string {

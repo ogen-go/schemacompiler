@@ -54,13 +54,13 @@ type PatternFieldRepresentation struct {
 	Metadata Metadata
 }
 
-// PresenceMode captures whether a field must be present (design §7.1, §12.2).
+// PresenceMode captures whether a field or array slot must be present (design §7.1, §12.2).
 type PresenceMode uint8
 
 const (
-	// PresenceRequired means the property must be present.
+	// PresenceRequired means the property or slot must be present.
 	PresenceRequired PresenceMode = iota
-	// PresenceOptional means the property may be absent.
+	// PresenceOptional means the property or slot may be absent.
 	PresenceOptional
 )
 
@@ -81,8 +81,16 @@ type FieldRepresentation struct {
 
 // ItemRepresentation is one array position: the plan of the values stored there plus the
 // annotations of the sub-schema it came from.
+//
+// Presence mirrors [FieldRepresentation.Presence] (design §7.1): `prefixItems` applies
+// only to the positions an instance has, so a slot is required exactly when `minItems`
+// covers it. There is no Nullable counterpart: a null element is a value stored at that
+// position, so it stays inside Plan rather than being lifted out of it.
 type ItemRepresentation struct {
-	Plan     CompilationPlan
+	Plan CompilationPlan
+	// Presence describes a Prefix slot. [ArrayRepresentation.Rest] is always
+	// PresenceOptional, since nothing requires an instance to reach past the prefix.
+	Presence PresenceMode
 	Metadata Metadata
 }
 

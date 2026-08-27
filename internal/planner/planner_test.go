@@ -556,6 +556,44 @@ func TestBuild_ArrayRepresentation_PrefixAndRest(t *testing.T) {
 	require.Equal(t, &plan.PrimitiveRepresentation{Kind: plan.KindNumber}, arr.Rest.Plan.Representation)
 }
 
+func TestBuild_ArrayItemPresence(t *testing.T) {
+	prefixItem := func(k plan.KindSet) ir.ItemExpr {
+		return ir.ItemExpr{Schema: &ir.All{Operands: []ir.Expr{&ir.Kinds{Set: k}}}}
+	}
+	for _, tt := range []struct {
+		name     string
+		minItems uint64
+		want     []plan.PresenceMode
+	}{
+		{"no minItems", 0, []plan.PresenceMode{plan.PresenceOptional, plan.PresenceOptional, plan.PresenceOptional}},
+		{"minItems covers a prefix", 2, []plan.PresenceMode{plan.PresenceRequired, plan.PresenceRequired, plan.PresenceOptional}},
+		{"minItems past the prefix", 5, []plan.PresenceMode{plan.PresenceRequired, plan.PresenceRequired, plan.PresenceRequired}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			operands := []ir.Expr{
+				&ir.Kinds{Set: plan.SetArray},
+				&ir.Shape{Detail: &ir.ArrayShape{PrefixItems: []ir.ItemExpr{
+					prefixItem(plan.SetString), prefixItem(plan.SetNumber), prefixItem(plan.SetBoolean),
+				}}},
+			}
+			if tt.minItems > 0 {
+				operands = append(operands, &ir.Predicate{Guard: plan.SetArray, Detail: &ir.MinItemsDetail{Value: tt.minItems}})
+			}
+
+			got := planner.Build(&ir.All{Operands: operands}, nil)
+
+			arr, ok := got.Plan.Representation.(*plan.ArrayRepresentation)
+			require.True(t, ok)
+			presence := make([]plan.PresenceMode, 0, len(arr.Prefix))
+			for _, it := range arr.Prefix {
+				presence = append(presence, it.Presence)
+			}
+			require.Equal(t, tt.want, presence)
+			require.Equal(t, plan.PresenceOptional, arr.Rest.Presence)
+		})
+	}
+}
+
 func TestBuild_Never(t *testing.T) {
 	got := planner.Build(&ir.Never{}, nil)
 	require.Equal(t, &plan.NeverRepresentation{}, got.Plan.Representation)

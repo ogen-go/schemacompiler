@@ -24,7 +24,7 @@ func (r *renderer) codec(n *Named) string {
 	case *Enum:
 		return r.enumCodec(n, u)
 	case *Tuple:
-		return "a tuple is encoded as an array, which is not written yet"
+		return r.tupleCodec(n, u)
 	default:
 		return ""
 	}
@@ -289,6 +289,108 @@ func overflowName(s *Struct) string {
 		taken[freeName("Pattern"+strconv.Itoa(i)+"Props", taken)] = true
 	}
 	return freeName("AdditionalProps", taken)
+}
+
+// tupleCodec writes a tuple as the JSON array it is.
+//
+// Without it a tuple encodes as a JSON *object* — `{"F0":"x","F1":true}` — because that is
+// what encoding/json does with a struct, so this is not a convenience but the difference
+// between right and wrong output.
+//
+// A slot past `minItems` is optional, and encoding stops at the first absent one: an array
+// is positional, so there is no way to write a later item without the earlier one. A slot
+// before it is required, and the decoder enforces that for the reason it enforces a required
+// property — a bare slot has nowhere to record that the item was missing.
+func (r *renderer) tupleCodec(n *Named, t *Tuple) string {
+	if len(t.Elems) == 0 {
+		return ""
+	}
+	r.usesJSON, r.usesFmt = true, true
+
+	p := &r.b
+	fmt.Fprintf(p, "// MarshalJSON implements json.Marshaler.\nfunc (s %s) MarshalJSON() ([]byte, error) {\n", n.Name)
+	p.WriteString("b := []byte{'['}\nn := 0\n")
+	for i, e := range t.Elems {
+		name := tupleField(t, i)
+		if pres, ok := e.(*Presence); ok && pres.Optional {
+			fmt.Fprintf(p, "if v, ok := s.%s.Get(); ok {\n", name)
+			r.appendItem("v", i)
+			fmt.Fprintf(p, "} else if n < %d {\n"+
+				"return nil, fmt.Errorf(\"item %d is set but item %%d is not; an array has no gap\", n)\n}\n", i, i)
+			continue
+		}
+		r.appendItem("s."+name, i)
+	}
+	if t.Rest != nil {
+		fmt.Fprintf(p, "for _, v := range s.%s {\n", freeName("Rest", tupleTaken(t)))
+		r.appendItem("v", -1)
+		p.WriteString("}\n")
+	}
+	p.WriteString("b = append(b, ']')\nreturn b, nil\n}\n\n")
+
+	fmt.Fprintf(p, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (s *%s) UnmarshalJSON(data []byte) error {\n", n.Name)
+	p.WriteString("var raw []json.RawMessage\nif err := json.Unmarshal(data, &raw); err != nil {\nreturn err\n}\n")
+	fmt.Fprintf(p, "var out %s\n", n.Name)
+	for i, e := range t.Elems {
+		name := tupleField(t, i)
+		fmt.Fprintf(p, "if len(raw) > %d {\nif err := json.Unmarshal(raw[%d], &out.%s); err != nil {\n"+
+			"return fmt.Errorf(\"decode item %d: %%w\", err)\n}\n", i, i, name, i)
+		if pres, ok := e.(*Presence); !ok || !pres.Optional {
+			fmt.Fprintf(p, "} else {\nreturn fmt.Errorf(\"missing item %d\")\n}\n", i)
+			continue
+		}
+		p.WriteString("}\n")
+	}
+	if t.Rest != nil {
+		rest := freeName("Rest", tupleTaken(t))
+		fmt.Fprintf(p, "if len(raw) > %d {\nout.%s = make([]", len(t.Elems), rest)
+		r.typ(t.Rest)
+		fmt.Fprintf(p, ", 0, len(raw)-%d)\nfor i, item := range raw[%d:] {\nvar e ", len(t.Elems), len(t.Elems))
+		r.typ(t.Rest)
+		fmt.Fprintf(p, "\nif err := json.Unmarshal(item, &e); err != nil {\n"+
+			"return fmt.Errorf(\"decode item %%d: %%w\", i+%d, err)\n}\n", len(t.Elems))
+		fmt.Fprintf(p, "out.%s = append(out.%s, e)\n}\n}\n", rest, rest)
+	} else {
+		fmt.Fprintf(p, "if len(raw) > %d {\nreturn fmt.Errorf(\"expected at most %d items, got %%d\", len(raw))\n}\n",
+			len(t.Elems), len(t.Elems))
+	}
+	p.WriteString("*s = out\nreturn nil\n}\n\n")
+	return ""
+}
+
+// appendItem writes one array element, separated from the last.
+func (r *renderer) appendItem(value string, index int) {
+	p := &r.b
+	p.WriteString("if n > 0 {\nb = append(b, ',')\n}\nn++\n")
+	p.WriteString("{\nd, err := json.Marshal(" + value + ")\nif err != nil {\n")
+	if index < 0 {
+		p.WriteString("return nil, fmt.Errorf(\"encode item: %w\", err)\n")
+	} else {
+		fmt.Fprintf(p, "return nil, fmt.Errorf(\"encode item %d: %%w\", err)\n", index)
+	}
+	p.WriteString("}\nb = append(b, d...)\n}\n")
+}
+
+// tupleField repeats the name the tuple renderer gave slot i.
+func tupleField(t *Tuple, i int) string {
+	taken := make(map[string]bool, len(t.Elems))
+	var name string
+	for j := range t.Elems {
+		name = freeName("F"+strconv.Itoa(j), taken)
+		taken[name] = true
+		if j == i {
+			return name
+		}
+	}
+	return name
+}
+
+func tupleTaken(t *Tuple) map[string]bool {
+	taken := make(map[string]bool, len(t.Elems))
+	for j := range t.Elems {
+		taken[freeName("F"+strconv.Itoa(j), taken)] = true
+	}
+	return taken
 }
 
 // patternReason is why a pattern-routing decoder is not written: Go's `regexp` is RE2 and

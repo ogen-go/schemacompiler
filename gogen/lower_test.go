@@ -139,11 +139,17 @@ func TestLowerShapes(t *testing.T) {
 		},
 		{
 			"tuple", `{"type":"array","prefixItems":[{"type":"string"},{"type":"boolean"}],"items":false}`,
-			`struct { F0 string; F1 bool }`,
+			`struct { F0 opt.Opt[string]; F1 opt.Opt[bool] }`,
 		},
 		{
 			"tuple with rest", `{"type":"array","prefixItems":[{"type":"string"}],"items":{"type":"number"}}`,
-			`struct { F0 string; Rest []float64 }`,
+			`struct { F0 opt.Opt[string]; Rest []float64 }`,
+		},
+		// `prefixItems` applies to the positions an instance has, so a shorter array is
+		// admitted and every slot past `minItems` may be absent.
+		{
+			"minItems makes the slots it covers required", `{"type":"array","prefixItems":[{"type":"string"},{"type":"boolean"}],"items":false,"minItems":1}`,
+			`struct { F0 string; F1 opt.Opt[bool] }`,
 		},
 		{"integer", `{"type":"integer"}`, `int64`},
 		{"format survives", `{"type":"string","format":"date-time"}`, `string`},
@@ -257,7 +263,7 @@ func TestLowerBreaksCyclesAtTheNode(t *testing.T) {
 		{
 			name: "cycle through a tuple slot",
 			defs: `"Pair":{"type":"array","prefixItems":[{"type":"string"},{"$ref":"#/$defs/Pair"}],"items":false}`,
-			want: map[string]string{"Pair": `struct { F0 string; F1 *Pair }`},
+			want: map[string]string{"Pair": `struct { F0 opt.Opt[string]; F1 opt.Opt[*Pair] }`},
 			// prefixItems is a tuple slot, which stores inline like a struct field.
 			recursive: []string{"Pair"},
 		},

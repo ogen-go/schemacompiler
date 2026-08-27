@@ -496,6 +496,21 @@ holding decoded values, nothing to initialize, no init order to depend on, and n
 caller can reach into. Two literals sharing one canonical form — which float64 can do to two
 integers past its precision — is a refusal, for the reason a colliding constant name is.
 
+**A tuple is an array.** Without a codec `encoding/json` writes a struct as a JSON object,
+so a `prefixItems` schema round-tripped to `{"F0":1,"F1":2}` — not a wrong-looking array, a
+wrong kind. That is why "not written yet" was the wrong answer for it.
+
+Writing it turned up the reason it is not trivial. `prefixItems` applies only to the
+positions an instance has, so a shorter array is admitted unless `minItems` says otherwise,
+and a bare Go slot cannot tell an absent item from a zero one. Requiring every slot
+under-accepts, which §24 forbids; allowing fewer and then encoding them all puts back an item
+that was never there. So a slot past `minItems` is an `opt.Opt`, and encoding stops at the
+first absent one — an array is positional, and there is no way to write a later item without
+the earlier one.
+
+`plan.FieldRepresentation` carries a `Presence` and `plan.ItemRepresentation` does not, so
+this is the one place the backend reads the validation plan to decide *storage* (issue #157).
+
 **What is skipped, and why it says so.** A type whose codec is not written yet gets a
 comment naming the reason instead of a wrong codec. `patternProperties` is the one that
 remains: routing keys needs an ECMA-262 engine and Go's `regexp` is RE2 — issue #111 one

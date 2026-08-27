@@ -88,7 +88,7 @@ type lowerer struct {
 }
 
 func (l *lowerer) plan(p plan.CompilationPlan) (GoType, error) {
-	t, err := l.rep(p.Representation)
+	t, err := l.rep(p.Representation, p.Validation)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func numericText(v any, raw []byte) (string, bool) {
 	}
 }
 
-func (l *lowerer) rep(r plan.Representation) (GoType, error) {
+func (l *lowerer) rep(r plan.Representation, v plan.ValidationPlan) (GoType, error) {
 	switch r := r.(type) {
 	case nil:
 		return &Any{}, nil
@@ -173,7 +173,7 @@ func (l *lowerer) rep(r plan.Representation) (GoType, error) {
 	case *plan.ObjectRepresentation:
 		return l.object(r)
 	case *plan.ArrayRepresentation:
-		return l.array(r)
+		return l.array(r, minItems(v))
 	case *plan.UnionRepresentation:
 		return l.union(r)
 	case *plan.ReferenceRepresentation:
@@ -332,7 +332,23 @@ func withPresence(t GoType, optional, nullable bool) GoType {
 	return &Presence{Elem: t, Optional: optional, Nullable: nullable}
 }
 
-func (l *lowerer) array(a *plan.ArrayRepresentation) (GoType, error) {
+// minItems is the shortest array the plan admits, which is what says how many tuple slots
+// must be there.
+//
+// It is read from the validation plan because the representation does not carry it:
+// [plan.FieldRepresentation] has a Presence and [plan.ItemRepresentation] has none, so an
+// array is the one place presence has to be recovered rather than looked up (issue #157).
+func minItems(v plan.ValidationPlan) uint64 {
+	var n uint64
+	for _, gp := range v.Predicates {
+		if e, ok := gp.Expression.(*plan.MinItemsPredicate); ok && gp.Applicability.Has(plan.KindArray) {
+			n = max(n, e.Value)
+		}
+	}
+	return n
+}
+
+func (l *lowerer) array(a *plan.ArrayRepresentation, required uint64) (GoType, error) {
 	// A closed array reaches here two ways: no rest plan at all, and a rest plan over
 	// [plan.NeverRepresentation] from `items: false`. They mean the same thing, and a
 	// slice of a type holding no value is not a shape worth generating.
@@ -354,13 +370,17 @@ func (l *lowerer) array(a *plan.ArrayRepresentation) (GoType, error) {
 		return &Slice{Elem: rest}, nil
 	}
 
+	// `prefixItems` applies to the positions an instance has, so a shorter array is
+	// admitted unless `minItems` says otherwise. A slot past that is optional, and has to
+	// be: a bare slot cannot tell an absent item from a zero one, so encoding would put
+	// back a value the instance never carried.
 	elems := make([]GoType, len(a.Prefix))
 	for i, p := range a.Prefix {
 		t, err := l.plan(p.Plan)
 		if err != nil {
 			return nil, errors.Wrapf(err, "prefixItems[%d]", i)
 		}
-		elems[i] = t
+		elems[i] = withPresence(t, uint64(i) >= required, false)
 	}
 	return &Tuple{Elems: elems, Rest: rest}, nil
 }
@@ -378,7 +398,7 @@ func (l *lowerer) union(u *plan.UnionRepresentation) (GoType, error) {
 			nullable = true
 			continue
 		}
-		t, err := l.rep(alt)
+		t, err := l.rep(alt, plan.ValidationPlan{})
 		if err != nil {
 			return nil, errors.Wrapf(err, "alternative %d", i)
 		}

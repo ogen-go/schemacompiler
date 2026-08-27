@@ -10,6 +10,12 @@
         {"kind": "square", "side": 2}
       ]
     },
+    "Point": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "string"}],
+      "items": false,
+      "minItems": 2
+    },
     "Tag": {
       "type": "object",
       "properties": {
@@ -29,7 +35,8 @@
         "status": {"$ref": "#/$defs/Status"},
         "tags": {"type": "array", "items": {"$ref": "#/$defs/Tag"}},
         "parent": {"$ref": "#/$defs/Pet"},
-        "shape": {"$ref": "#/$defs/Shape"}
+        "shape": {"$ref": "#/$defs/Shape"},
+        "at": {"$ref": "#/$defs/Point"}
       },
       "required": ["name", "nickname"]
     }

@@ -180,3 +180,47 @@ func TestStructuredEnumRoundTrips(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, src, string(out))
 }
+
+// TestTupleIsAnArray is what a missing tuple codec costs: encoding/json writes a struct as
+// a JSON object, so without these methods a `prefixItems` schema round-trips to
+// `{"F0":1,"F1":2}` — not a wrong-looking array, a wrong kind.
+func TestTupleIsAnArray(t *testing.T) {
+	var p Point
+	require.NoError(t, json.Unmarshal([]byte(`[1,2]`), &p))
+	require.InDelta(t, 1.0, p.F0, 0)
+	require.InDelta(t, 2.0, p.F1, 0)
+	require.False(t, p.F2.IsSet(), "the third slot is past minItems, so it may be absent")
+
+	out, err := json.Marshal(p)
+	require.NoError(t, err)
+	require.Equal(t, `[1,2]`, string(out))
+}
+
+// TestTupleSlotPresence is why the slots are not all bare. `prefixItems` applies to the
+// positions an instance has, so a shorter array is admitted; a bare slot could not tell an
+// absent item from a zero one, and encoding would put back an item that was never there.
+func TestTupleSlotPresence(t *testing.T) {
+	for _, src := range []string{`[1,2]`, `[1,2,"here"]`} {
+		var p Point
+		require.NoError(t, json.Unmarshal([]byte(src), &p))
+		out, err := json.Marshal(p)
+		require.NoError(t, err)
+		require.Equal(t, src, string(out))
+	}
+
+	// The slots minItems covers are required, and the decoder is the only place that can
+	// say so — the same reasoning as a required property.
+	require.ErrorContains(t, json.Unmarshal([]byte(`[1]`), new(Point)), "missing item 1")
+
+	// `items: false` closes the array, as `additionalProperties: false` closes an object.
+	require.ErrorContains(t, json.Unmarshal([]byte(`[1,2,"x",4]`), new(Point)), "at most 3 items")
+}
+
+func TestTupleInsideAnObjectRoundTrips(t *testing.T) {
+	const src = `{"at":[1,2],"name":"a","nickname":null}`
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(src), &p))
+	out, err := json.Marshal(p)
+	require.NoError(t, err)
+	require.JSONEq(t, src, string(out))
+}

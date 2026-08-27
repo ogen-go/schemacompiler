@@ -19,6 +19,7 @@ type Pet struct {
 	Status   opt.Opt[Status]      `json:"status,omitzero"`
 	Tags     opt.Opt[[]Tag]       `json:"tags,omitzero"`
 	Parent   opt.Opt[*Pet]        `json:"parent,omitzero"`
+	Shape    opt.Opt[Shape]       `json:"shape,omitzero"`
 	// AdditionalProps holds the properties no field and no pattern covers.
 	AdditionalProps map[string]any
 }
@@ -96,6 +97,18 @@ func (s Pet) MarshalJSON() ([]byte, error) {
 			b = append(b, d...)
 		}
 	}
+	if v, ok := s.Shape.Get(); ok {
+		if b, err = encodeKey(b, &n, "shape"); err != nil {
+			return nil, err
+		}
+		{
+			d, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("encode %q: %w", "shape", err)
+			}
+			b = append(b, d...)
+		}
+	}
 	for _, k := range sortedKeys(s.AdditionalProps) {
 		if b, err = encodeKey(b, &n, k); err != nil {
 			return nil, err
@@ -159,6 +172,12 @@ func (s *Pet) UnmarshalJSON(data []byte) error {
 		}
 		delete(raw, "parent")
 	}
+	if v, ok := raw["shape"]; ok {
+		if err := json.Unmarshal(v, &out.Shape); err != nil {
+			return fmt.Errorf("decode %q: %w", "shape", err)
+		}
+		delete(raw, "shape")
+	}
 	if len(raw) > 0 {
 		out.AdditionalProps = make(map[string]any, len(raw))
 		for _, k := range sortedKeys(raw) {
@@ -170,6 +189,29 @@ func (s *Pet) UnmarshalJSON(data []byte) error {
 		}
 	}
 	*s = out
+	return nil
+}
+
+type Shape map[string]any
+
+// The 2 values Shape admits have no distinct Go constant names.
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (v *Shape) UnmarshalJSON(data []byte) error {
+	canon, err := canonicalJSON(data)
+	if err != nil {
+		return err
+	}
+	switch canon {
+	case "{\"kind\":\"circle\",\"r\":1}", "{\"kind\":\"square\",\"side\":2}":
+	default:
+		return fmt.Errorf("%s is not an admitted Shape", data)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return err
+	}
+	*v = Shape(out)
 	return nil
 }
 
@@ -246,4 +288,18 @@ func encodeKey(b []byte, n *int, k string) ([]byte, error) {
 // sortedKeys orders map iteration, so encoding a value twice produces the same bytes.
 func sortedKeys[T any](m map[string]T) []string {
 	return slices.Sorted(maps.Keys(m))
+}
+
+// canonicalJSON re-encodes a value in one form, so two spellings of the same JSON compare
+// equal: object keys sort and numbers take a single format.
+func canonicalJSON(data []byte) (string, error) {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return "", err
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }

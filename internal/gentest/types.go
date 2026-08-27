@@ -20,6 +20,7 @@ type Pet struct {
 	Tags     opt.Opt[[]Tag]       `json:"tags,omitzero"`
 	Parent   opt.Opt[*Pet]        `json:"parent,omitzero"`
 	Shape    opt.Opt[Shape]       `json:"shape,omitzero"`
+	At       opt.Opt[Point]       `json:"at,omitzero"`
 	// AdditionalProps holds the properties no field and no pattern covers.
 	AdditionalProps map[string]any
 }
@@ -109,6 +110,18 @@ func (s Pet) MarshalJSON() ([]byte, error) {
 			b = append(b, d...)
 		}
 	}
+	if v, ok := s.At.Get(); ok {
+		if b, err = encodeKey(b, &n, "at"); err != nil {
+			return nil, err
+		}
+		{
+			d, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("encode %q: %w", "at", err)
+			}
+			b = append(b, d...)
+		}
+	}
 	for _, k := range sortedKeys(s.AdditionalProps) {
 		if b, err = encodeKey(b, &n, k); err != nil {
 			return nil, err
@@ -178,6 +191,12 @@ func (s *Pet) UnmarshalJSON(data []byte) error {
 		}
 		delete(raw, "shape")
 	}
+	if v, ok := raw["at"]; ok {
+		if err := json.Unmarshal(v, &out.At); err != nil {
+			return fmt.Errorf("decode %q: %w", "at", err)
+		}
+		delete(raw, "at")
+	}
 	if len(raw) > 0 {
 		out.AdditionalProps = make(map[string]any, len(raw))
 		for _, k := range sortedKeys(raw) {
@@ -187,6 +206,90 @@ func (s *Pet) UnmarshalJSON(data []byte) error {
 			}
 			out.AdditionalProps[k] = e
 		}
+	}
+	*s = out
+	return nil
+}
+
+type Point struct {
+	F0 float64
+	F1 float64
+	F2 opt.Opt[string]
+}
+
+// MarshalJSON implements json.Marshaler.
+func (s Point) MarshalJSON() ([]byte, error) {
+	b := []byte{'['}
+	n := 0
+	if n > 0 {
+		b = append(b, ',')
+	}
+	n++
+	{
+		d, err := json.Marshal(s.F0)
+		if err != nil {
+			return nil, fmt.Errorf("encode item 0: %w", err)
+		}
+		b = append(b, d...)
+	}
+	if n > 0 {
+		b = append(b, ',')
+	}
+	n++
+	{
+		d, err := json.Marshal(s.F1)
+		if err != nil {
+			return nil, fmt.Errorf("encode item 1: %w", err)
+		}
+		b = append(b, d...)
+	}
+	if v, ok := s.F2.Get(); ok {
+		if n > 0 {
+			b = append(b, ',')
+		}
+		n++
+		{
+			d, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("encode item 2: %w", err)
+			}
+			b = append(b, d...)
+		}
+	} else if n < 2 {
+		return nil, fmt.Errorf("item 2 is set but item %d is not; an array has no gap", n)
+	}
+	b = append(b, ']')
+	return b, nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (s *Point) UnmarshalJSON(data []byte) error {
+	var raw []json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var out Point
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw[0], &out.F0); err != nil {
+			return fmt.Errorf("decode item 0: %w", err)
+		}
+	} else {
+		return fmt.Errorf("missing item 0")
+	}
+	if len(raw) > 1 {
+		if err := json.Unmarshal(raw[1], &out.F1); err != nil {
+			return fmt.Errorf("decode item 1: %w", err)
+		}
+	} else {
+		return fmt.Errorf("missing item 1")
+	}
+	if len(raw) > 2 {
+		if err := json.Unmarshal(raw[2], &out.F2); err != nil {
+			return fmt.Errorf("decode item 2: %w", err)
+		}
+	}
+	if len(raw) > 3 {
+		return fmt.Errorf("expected at most 3 items, got %d", len(raw))
 	}
 	*s = out
 	return nil

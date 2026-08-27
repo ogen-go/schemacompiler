@@ -137,12 +137,17 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 			Rest   plan.ItemRepresentation
 		} = *r
 		for i, it := range t.Prefix {
-			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgePrefixItem, Index: i}, Plan: itemPlan(it)}) {
+			sub, presence := item(it)
+			if !yield(Node{Kind: NodePlan, Edge: Edge{
+				Kind:     EdgePrefixItem,
+				Index:    i,
+				Presence: presence,
+			}, Plan: sub}) {
 				return
 			}
 		}
-		if rest := itemPlan(t.Rest); rest.Representation != nil {
-			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeRestItem}, Plan: rest}) {
+		if rest, presence := item(t.Rest); rest.Representation != nil {
+			if !yield(Node{Kind: NodePlan, Edge: Edge{Kind: EdgeRestItem, Presence: presence}, Plan: rest}) {
 				return
 			}
 		}
@@ -165,12 +170,13 @@ func representationChildren(r plan.Representation, yield func(Node) bool) {
 	}
 }
 
-func itemPlan(i plan.ItemRepresentation) plan.CompilationPlan {
+func item(i plan.ItemRepresentation) (plan.CompilationPlan, plan.PresenceMode) {
 	var t struct {
 		Plan     plan.CompilationPlan
+		Presence plan.PresenceMode
 		Metadata plan.Metadata
 	} = i
-	return t.Plan
+	return t.Plan, t.Presence
 }
 
 // subRepresentation yields one representation child, dropping an absent one. It reports

@@ -30,10 +30,10 @@ const (
 	// values. Name is the pattern and Index its position in PatternRules.
 	EdgePatternRule
 	// EdgePrefixItem links an array representation to the plan of the tuple slot at
-	// Index.
+	// Index. Presence is the slot's own.
 	EdgePrefixItem
 	// EdgeRestItem links an array representation to the plan of every item past the
-	// tuple prefix.
+	// tuple prefix, which is always PresenceOptional.
 	EdgeRestItem
 	// EdgeAlternative links a union representation to the alternative at Index.
 	EdgeAlternative
@@ -122,7 +122,8 @@ type Edge struct {
 	Index int
 	// Case is the dispatched-on kind (EdgeKindCase).
 	Case plan.JSONKind
-	// Presence and Nullable are the field's own (EdgeField).
+	// Presence is the slot's own (EdgeField, EdgePrefixItem, EdgeRestItem) and
+	// Nullable the field's (EdgeField).
 	Presence plan.PresenceMode
 	Nullable bool
 	// Tag is the provenance of the dispatch tag (EdgePropertyCase).

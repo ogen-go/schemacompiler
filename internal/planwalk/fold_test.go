@@ -270,6 +270,31 @@ func TestFoldEdgePayload(t *testing.T) {
 	require.False(t, guard.Applicability.Has(plan.KindNumber))
 }
 
+func TestFoldItemEdgePresence(t *testing.T) {
+	p := plan.CompilationPlan{
+		Representation: &plan.ArrayRepresentation{
+			Prefix: []plan.ItemRepresentation{
+				{Plan: leaf("first"), Presence: plan.PresenceRequired},
+				{Plan: leaf("second"), Presence: plan.PresenceOptional},
+			},
+			Rest: plan.ItemRepresentation{Plan: leaf("rest"), Presence: plan.PresenceOptional},
+		},
+	}
+
+	byEdge := map[planwalk.EdgeKind][]planwalk.Edge{}
+	planwalk.Fold(p, struct{}{}, func(acc struct{}, n planwalk.Node) (struct{}, planwalk.Action) {
+		byEdge[n.Edge.Kind] = append(byEdge[n.Edge.Kind], n.Edge)
+		return acc, planwalk.Descend
+	})
+
+	require.Len(t, byEdge[planwalk.EdgePrefixItem], 2)
+	require.Equal(t, plan.PresenceRequired, byEdge[planwalk.EdgePrefixItem][0].Presence)
+	require.Equal(t, plan.PresenceOptional, byEdge[planwalk.EdgePrefixItem][1].Presence)
+
+	require.Len(t, byEdge[planwalk.EdgeRestItem], 1)
+	require.Equal(t, plan.PresenceOptional, byEdge[planwalk.EdgeRestItem][0].Presence)
+}
+
 // TestFoldEveryEdgeKindIsReachable ties the EdgeKind list to the traversal: a kind that
 // no plan shape produces is either dead or a slot the traversal forgot to walk.
 func TestFoldEveryEdgeKindIsReachable(t *testing.T) {

@@ -342,15 +342,23 @@ func (b *builder) buildObject(c components, path string) plan.CompilationPlan {
 // buildArray infers an ArrayRepresentation (design §7, §13): a tuple prefix plus a
 // homogeneous rest, defaulting the rest to Any when `items` is absent (trailing
 // elements are unconstrained per spec default, so soundness requires admitting them).
+//
+// A prefix slot carries the same presence an object field does (design §7.1): `minItems`
+// is what says how many positions an instance must have, so slot i is required iff
+// i < minItems.
 func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	merged := mergeArrayShapes(c.shapes)
 
+	var minItems uint64
 	var val plan.ValidationPlan
 	capLevel := plan.DirectGoType
 	var resParts []plan.ResolutionPlan
 	for _, p := range c.predicates {
 		if p.Guard&plan.SetArray == 0 {
 			continue
+		}
+		if mi, ok := p.Detail.(*ir.MinItemsDetail); ok {
+			minItems = max(minItems, mi.Value)
 		}
 		m := b.mapPredicate(p, path)
 		if m.Expr != nil {
@@ -365,7 +373,11 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	prefix := make([]plan.ItemRepresentation, len(merged.prefix))
 	for i, pe := range merged.prefix {
 		sub := b.build(pe.Schema, path+"/prefixItems/"+strconv.Itoa(i))
-		prefix[i] = plan.ItemRepresentation{Plan: sub, Metadata: pe.Metadata}
+		presence := plan.PresenceOptional
+		if uint64(i) < minItems {
+			presence = plan.PresenceRequired
+		}
+		prefix[i] = plan.ItemRepresentation{Plan: sub, Presence: presence, Metadata: pe.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	}
@@ -374,16 +386,19 @@ func (b *builder) buildArray(c components, path string) plan.CompilationPlan {
 	switch {
 	case merged.items.Schema != nil:
 		sub := b.build(merged.items.Schema, path+"/items")
-		rest = plan.ItemRepresentation{Plan: sub, Metadata: merged.items.Metadata}
+		rest = plan.ItemRepresentation{Plan: sub, Presence: plan.PresenceOptional, Metadata: merged.items.Metadata}
 		capLevel = maxCapability(capLevel, sub.Capability)
 		resParts = append(resParts, sub.Resolution)
 	default:
-		rest = plan.ItemRepresentation{Plan: plan.CompilationPlan{
-			Representation: &plan.AnyRepresentation{},
-			Dispatch:       &plan.NoDispatch{},
-			Resolution:     &plan.FullyResolved{},
-			Capability:     plan.DirectGoType,
-		}}
+		rest = plan.ItemRepresentation{
+			Plan: plan.CompilationPlan{
+				Representation: &plan.AnyRepresentation{},
+				Dispatch:       &plan.NoDispatch{},
+				Resolution:     &plan.FullyResolved{},
+				Capability:     plan.DirectGoType,
+			},
+			Presence: plan.PresenceOptional,
+		}
 	}
 
 	if merged.unevaluated {

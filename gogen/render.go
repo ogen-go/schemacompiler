@@ -23,6 +23,10 @@ type Options struct {
 	// OptPackage is the import path of [DefaultOptPackage]'s replacement, for a caller
 	// that vendors its own presence types. ogen does.
 	OptPackage string
+	// Codec asks for the JSON methods the types need beyond what [encoding/json] does on
+	// its own. A type that needs none gets none; one whose codec is not written yet says
+	// so in a comment rather than being left to encode wrongly in silence.
+	Codec bool
 }
 
 // File is one generated source file.
@@ -48,6 +52,14 @@ func Render(types []*Named, opts Options) ([]File, error) {
 		body.typ(n.Underlying)
 		body.b.WriteString("\n\n")
 		body.enumConsts(n)
+		if opts.Codec {
+			if why := body.codec(n); why != "" {
+				fmt.Fprintf(&body.b, "// %s has no generated codec: %s.\n\n", n.Name, why)
+			}
+		}
+	}
+	if opts.Codec && body.usesSort {
+		body.b.WriteString(codecHelpers)
 	}
 
 	var src strings.Builder
@@ -56,9 +68,21 @@ func Render(types []*Named, opts Options) ([]File, error) {
 	// Whether the import is needed is whether the writer reached for it. Deciding it by a
 	// second walk of the types would be a second opinion about what gets rendered, and an
 	// import Go does not see used is a compile error rather than a warning.
-	if body.usesOpt {
-		fmt.Fprintf(&src, "import %s\n\n", strconv.Quote(optPkg))
+	var std []string
+	if body.usesJSON {
+		std = append(std, "encoding/json")
 	}
+	if body.usesFmt {
+		std = append(std, "fmt")
+	}
+	if body.usesSort {
+		std = append(std, "maps", "slices")
+	}
+	var other []string
+	if body.usesOpt {
+		other = append(other, optPkg)
+	}
+	writeImports(&src, std, other)
 	src.WriteString(body.b.String())
 
 	formatted, err := format.Source([]byte(src.String()))
@@ -69,6 +93,29 @@ func Render(types []*Named, opts Options) ([]File, error) {
 		return nil, errors.Wrap(err, "format generated source")
 	}
 	return []File{{Name: "types.go", Content: formatted}}, nil
+}
+
+// writeImports keeps the standard library in its own group, which is where a Go author
+// puts it and where `goimports` would move it back to.
+func writeImports(src *strings.Builder, std, other []string) {
+	switch {
+	case len(std)+len(other) == 0:
+		return
+	case len(std)+len(other) == 1:
+		fmt.Fprintf(src, "import %s\n\n", strconv.Quote(append(std, other...)[0]))
+		return
+	}
+	src.WriteString("import (\n")
+	for _, p := range std {
+		fmt.Fprintf(src, "%s\n", strconv.Quote(p))
+	}
+	if len(std) > 0 && len(other) > 0 {
+		src.WriteString("\n")
+	}
+	for _, p := range other {
+		fmt.Fprintf(src, "%s\n", strconv.Quote(p))
+	}
+	src.WriteString(")\n\n")
 }
 
 func cmpOr(v, def string) string {
@@ -91,8 +138,14 @@ func TypeExpr(t GoType) string {
 // renderer accumulates source and records whether the presence types were reached, so the
 // import list is decided by the same pass that writes the code needing it.
 type renderer struct {
-	b       strings.Builder
-	usesOpt bool
+	b strings.Builder
+	// The import list is whatever the writer reached for. Deciding it by a second walk of
+	// the types would be a second opinion about what got rendered, and an import Go does
+	// not see used is a compile error rather than a warning.
+	usesOpt  bool
+	usesJSON bool
+	usesFmt  bool
+	usesSort bool
 }
 
 func (r *renderer) typ(t GoType) {

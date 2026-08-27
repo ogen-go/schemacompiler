@@ -1,0 +1,130 @@
+// Package gentest compiles and runs generated code.
+//
+// Every other check of the backend reads what it produced. This one builds it: types.go is
+// generated from schema.json and committed, so `go build ./...` compiles it and the tests
+// below decode and encode with it. A codec that type-checks and does the wrong thing is
+// exactly what the type checker cannot see.
+package gentest
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/ogen-go/schemacompiler"
+	"github.com/ogen-go/schemacompiler/gogen"
+	"github.com/ogen-go/schemacompiler/plan"
+)
+
+// generated renders schema.json the way the committed file was rendered.
+func generated(t *testing.T) []byte {
+	t.Helper()
+	data, err := os.ReadFile("schema.json")
+	require.NoError(t, err)
+	res, err := schemacompiler.Compile(context.Background(), data, schemacompiler.Options{})
+	require.NoError(t, err)
+	graph, ok := res.Plan.Resolution.(*plan.StaticReferenceGraph)
+	require.True(t, ok)
+	types, err := gogen.Lower(graph.Definitions)
+	require.NoError(t, err)
+	files, err := gogen.Render(types, gogen.Options{Package: "gentest", Codec: true})
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	return files[0].Content
+}
+
+// TestGeneratedFileIsCurrent fails when types.go stops matching what the backend produces,
+// so the tests below cannot quietly go on exercising an older codec than the one shipping.
+func TestGeneratedFileIsCurrent(t *testing.T) {
+	want, err := os.ReadFile("types.go")
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(generated(t)),
+		"types.go is stale; regenerate it with `go test ./internal/gentest -update`")
+}
+
+func TestDecodeRejectsAMissingRequiredProperty(t *testing.T) {
+	var p Pet
+	err := json.Unmarshal([]byte(`{"nickname":null}`), &p)
+	require.ErrorContains(t, err, `missing required property "name"`)
+}
+
+// TestDecodeEnforcesTheEnum is what the const block cannot do: Go constants restrict
+// nothing, so the admitted values only hold if decoding checks them.
+func TestDecodeEnforcesTheEnum(t *testing.T) {
+	var s Status
+	require.NoError(t, json.Unmarshal([]byte(`"active"`), &s))
+	require.Equal(t, StatusActive, s)
+	require.ErrorContains(t, json.Unmarshal([]byte(`"nope"`), &s), "not a valid Status")
+}
+
+func TestDecodeRejectsAnUnknownPropertyOnAClosedObject(t *testing.T) {
+	var tag Tag
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"x"}`), &tag))
+	require.ErrorContains(t, json.Unmarshal([]byte(`{"name":"x","extra":1}`), &tag), `unexpected property "extra"`)
+}
+
+// TestThreeStatePresenceRoundTrips is the distinction the whole opt package exists for:
+// absent, present-null and present-value are three outcomes, and encoding has to put each
+// back where it came from.
+func TestThreeStatePresenceRoundTrips(t *testing.T) {
+	for _, src := range []string{
+		`{"name":"rex","nickname":null}`,
+		`{"name":"rex","nickname":"rexy"}`,
+		`{"age":3,"name":"rex","nickname":null}`,
+		`{"name":"rex","nickname":null,"status":"archived"}`,
+		`{"name":"rex","nickname":null,"tags":[{"name":"good"}]}`,
+		`{"name":"rex","nickname":null,"unknown":{"a":1}}`,
+	} {
+		t.Run(src, func(t *testing.T) {
+			var p Pet
+			require.NoError(t, json.Unmarshal([]byte(src), &p))
+			out, err := json.Marshal(p)
+			require.NoError(t, err)
+			require.JSONEq(t, src, string(out))
+		})
+	}
+}
+
+func TestAbsentAndNullAreNotTheSame(t *testing.T) {
+	var absent, null Pet
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"a","nickname":null}`), &absent))
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"a","nickname":null,"age":null}`), &null))
+
+	require.False(t, absent.Age.IsSet())
+	require.False(t, null.Age.IsSet(), "a null in a non-nullable optional stays unset")
+
+	// The required nullable is present-null in both, and encoding writes the key back.
+	out, err := json.Marshal(absent)
+	require.NoError(t, err)
+	require.Contains(t, string(out), `"nickname":null`)
+}
+
+// TestEncodingIsDeterministic pins the sorted overflow walk: Go randomizes map iteration,
+// so an unsorted encoder would produce different bytes for the same value.
+func TestEncodingIsDeterministic(t *testing.T) {
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"a","nickname":null,"x":1,"y":2,"z":3}`), &p))
+	first, err := json.Marshal(p)
+	require.NoError(t, err)
+	for range 32 {
+		again, err := json.Marshal(p)
+		require.NoError(t, err)
+		require.Equal(t, string(first), string(again))
+	}
+}
+
+func TestRecursiveTypeRoundTrips(t *testing.T) {
+	const src = `{"name":"child","nickname":null,"parent":{"name":"parent","nickname":null}}`
+	var p Pet
+	require.NoError(t, json.Unmarshal([]byte(src), &p))
+	parent, ok := p.Parent.Get()
+	require.True(t, ok)
+	require.Equal(t, "parent", parent.Name)
+
+	out, err := json.Marshal(p)
+	require.NoError(t, err)
+	require.JSONEq(t, src, string(out))
+}

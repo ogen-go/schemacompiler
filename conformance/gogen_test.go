@@ -253,3 +253,39 @@ func TestGogenLowersEnums(t *testing.T) {
 	require.NotZero(t, enums)
 	t.Logf("%d enums lowered, %d of them named types, %d const blocks rendered", enums, named, withConsts)
 }
+
+// TestGogenRendersCodecForCorpus measures what the codec covers. A type it cannot encode
+// says so in a comment rather than being left to encode wrongly in silence, so the count of
+// those comments is the honest coverage number.
+func TestGogenRendersCodecForCorpus(t *testing.T) {
+	reasons := map[string]int{}
+	var docs, methods int
+	eachOgenDocument(t, func(rel string, defs map[plan.SchemaID]plan.CompilationPlan) {
+		types, err := gogen.Lower(defs)
+		if err != nil {
+			return
+		}
+		files, err := gogen.Render(types, gogen.Options{Codec: true})
+		require.NoError(t, err, rel)
+		require.NoError(t, gotypecheck.Check(files, "../opt"), "%s does not type-check", rel)
+		docs++
+
+		src := string(files[0].Content)
+		methods += strings.Count(src, "func (s ") + strings.Count(src, "func (v *")
+		for line := range strings.SplitSeq(src, "\n") {
+			if _, why, ok := strings.Cut(line, "has no generated codec: "); ok {
+				reasons[strings.TrimSuffix(why, ".")]++
+			}
+		}
+	})
+
+	require.NotZero(t, docs)
+	skipped := 0
+	for _, n := range reasons {
+		skipped += n
+	}
+	t.Logf("%d documents, %d codec methods, %d types skipped", docs, methods, skipped)
+	for why, n := range reasons {
+		t.Logf("  skipped %4d: %s", n, why)
+	}
+}

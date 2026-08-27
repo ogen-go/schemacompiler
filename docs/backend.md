@@ -441,3 +441,50 @@ cannot adopt ogen's rule of dropping one and keeping the other.
 
 Both are why generated code is not yet a third validator in the differential harness (§3):
 it does not reject anything.
+
+## 13. The codec is where the discharges come due
+
+`Split` calls a check discharged when the Go type states it. Three of those are only true
+if a decoder makes them true, and until this there was no decoder:
+
+- `required` is discharged because the field is not `opt.Opt`, so the value has nowhere to
+  record that the property was missing. A decoder that accepted the object anyway would make
+  that reasoning false.
+- an `enum` is a `const` block, and Go constants restrict nothing.
+- a closed object rejects unknown properties, which is a claim about decoding and not about
+  the struct.
+
+So the generated methods are not a convenience over `encoding/json`. They are the second
+half of §10.
+
+**Stdlib, not `jx`.** Generated code imports `encoding/json` and nothing else, which keeps
+the type checker able to resolve it from source and costs a consumer no dependency. A faster
+codec is a rendering decision, and §0 already says ogen may supply its own `Render`.
+
+`opt` gained `encoding/json` for the same reason — a presence type that cannot serialize
+makes every containing type generate more code to work around it. It remains its only
+import, and `Options.OptPackage` is there for a backend that wants different presence types.
+
+**A struct needs methods; most types do not.** `map[string]T` and `[]T` already encode
+correctly. Objects need them because `omitempty` does not look inside `opt.Opt` and an
+overflow map has to be flattened into the same object rather than nested under a key. Enums
+need a decoder. Everything else is left alone.
+
+**What is skipped, and why it says so.** A type whose codec is not written yet gets a
+comment naming the reason instead of a wrong codec. Two reasons exist: `patternProperties`,
+because routing keys needs an ECMA-262 engine and Go's `regexp` is RE2 — issue #111 one
+layer down, where a decoder would route keys the schema does not; and an enum over mixed
+kinds, which needs a decoder that dispatches on kind. Over the corpus that is **2 types of
+2832 methods across 57 documents**.
+
+### Generated code that actually runs
+
+`internal/gentest` is the only check that builds what the backend produced rather than
+reading it. `types.go` is generated from `schema.json` and committed, so `go build ./...`
+compiles it and the tests decode and encode with it — three-state presence round-trips, a
+recursive `opt.Opt[*Pet]`, enum rejection, unknown-property rejection, and deterministic
+output over an overflow map. A test fails the build when the committed file stops matching
+what the generator produces.
+
+A codec that type-checks and does the wrong thing is exactly what §9's type checker cannot
+see.

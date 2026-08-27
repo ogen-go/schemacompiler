@@ -1,0 +1,36 @@
+{
+  "$defs": {
+    "Status": {
+      "type": "string",
+      "enum": ["active", "archived"]
+    },
+    "Tag": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "score": {"type": "number"}
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "Pet": {
+      "type": "object",
+      "title": "A pet.",
+      "properties": {
+        "name": {"type": "string"},
+        "age": {"type": "integer"},
+        "nickname": {"type": ["string", "null"]},
+        "status": {"$ref": "#/$defs/Status"},
+        "tags": {"type": "array", "items": {"$ref": "#/$defs/Tag"}},
+        "parent": {"$ref": "#/$defs/Pet"}
+      },
+      "required": ["name", "nickname"]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "pet": {"$ref": "#/$defs/Pet"},
+    "tag": {"$ref": "#/$defs/Tag"},
+    "status": {"$ref": "#/$defs/Status"}
+  }
+}

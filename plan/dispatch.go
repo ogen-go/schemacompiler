@@ -24,12 +24,18 @@ type LiteralDispatch struct {
 	Cases []LiteralCase
 }
 
-// LiteralCase pairs a comparable JSON literal with its plan. Value uses the JSON
-// canonical Go form (float64 for numbers, etc.); it is a slice rather than a map so
-// non-hashable literals (null, and by-value equality) are handled uniformly. Raw is the
-// exact JSON source bytes of the literal, preserved so a backend can emit numbers past
-// float64's precision (integers > 2^53, exact decimals) losslessly; it is nil for
-// literals synthesized without source bytes, in which case Value is authoritative.
+// LiteralCase pairs a JSON literal with its plan. Cases are a slice rather than a map so
+// non-hashable literals (null, and by-value equality) are handled uniformly.
+//
+// Raw is the authoritative form: the exact JSON source bytes of the literal, which keep a
+// number past float64's precision (integers > 2^53, exact decimals) lossless. Read it
+// first. It is nil only for a literal synthesized without source bytes, in which case
+// Value is the only form.
+//
+// Value is the decoded convenience, and its Go type is not canonicalized: a number arrives
+// as whichever spelling its source text decodes to. A consumer must handle exactly nil,
+// bool, string, int, int64, uint64, float64, []any and map[string]any — int64 only where
+// int is 32 bits, uint64 only above math.MaxInt64 (issue #152).
 type LiteralCase struct {
 	Value any
 	Raw   []byte

@@ -14,6 +14,8 @@ type T struct {
 	AdditionalProps map[string]any
 }
 
+// T has no generated codec: patternProperties needs an ECMA-262 engine in generated code.
+
 // Validate reports the first constraint s does not satisfy.
 func (s T) Validate() error {
 	for k0, v0 := range s.Pattern0Props {

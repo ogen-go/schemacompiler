@@ -3,7 +3,11 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/ogen-go/schemacompiler/opt"
 )
@@ -12,6 +16,66 @@ type T struct {
 	A opt.Opt[string] `json:"a,omitzero"`
 	// AdditionalProps holds the properties no field and no pattern covers.
 	AdditionalProps map[string]any
+}
+
+// MarshalJSON implements json.Marshaler.
+func (s T) MarshalJSON() ([]byte, error) {
+	b := []byte{'{'}
+	n := 0
+	var err error
+	if v, ok := s.A.Get(); ok {
+		if b, err = encodeKey(b, &n, "a"); err != nil {
+			return nil, err
+		}
+		{
+			d, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("encode %q: %w", "a", err)
+			}
+			b = append(b, d...)
+		}
+	}
+	for _, k := range sortedKeys(s.AdditionalProps) {
+		if b, err = encodeKey(b, &n, k); err != nil {
+			return nil, err
+		}
+		{
+			d, err := json.Marshal(s.AdditionalProps[k])
+			if err != nil {
+				return nil, fmt.Errorf("encode %q: %w", k, err)
+			}
+			b = append(b, d...)
+		}
+	}
+	b = append(b, '}')
+	return b, nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (s *T) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var out T
+	if v, ok := raw["a"]; ok {
+		if err := json.Unmarshal(v, &out.A); err != nil {
+			return fmt.Errorf("decode %q: %w", "a", err)
+		}
+		delete(raw, "a")
+	}
+	if len(raw) > 0 {
+		out.AdditionalProps = make(map[string]any, len(raw))
+		for _, k := range sortedKeys(raw) {
+			var e any
+			if err := json.Unmarshal(raw[k], &e); err != nil {
+				return fmt.Errorf("decode %q: %w", k, err)
+			}
+			out.AdditionalProps[k] = e
+		}
+	}
+	*s = out
+	return nil
 }
 
 // Validate reports the first constraint s does not satisfy.
@@ -37,4 +101,22 @@ func (s T) Validate() error {
 		}
 	}
 	return nil
+}
+
+func encodeKey(b []byte, n *int, k string) ([]byte, error) {
+	if *n > 0 {
+		b = append(b, ',')
+	}
+	*n++
+	key, err := json.Marshal(k)
+	if err != nil {
+		return nil, err
+	}
+	b = append(b, key...)
+	return append(b, ':'), nil
+}
+
+// sortedKeys orders map iteration, so encoding a value twice produces the same bytes.
+func sortedKeys[T any](m map[string]T) []string {
+	return slices.Sorted(maps.Keys(m))
 }

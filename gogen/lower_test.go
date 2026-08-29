@@ -100,6 +100,19 @@ func TestLowerShapes(t *testing.T) {
 			`struct { A opt.OptNullable[string]; AdditionalProps map[string]any }`,
 		},
 		{
+			// A sum holds its own null, so the field states only what the field adds.
+			"nullable required field over a sum",
+			`{"type":"object","properties":{"a":{"type":["string","boolean","null"]}},"required":["a"]}`,
+			`struct { A any; AdditionalProps map[string]any }`,
+		},
+		{
+			// Optionality survives that fold: `any` is nil for `null`, and there is no
+			// value it is for absent.
+			"nullable optional field over a sum",
+			`{"type":"object","properties":{"a":{"type":["string","boolean","null"]}}}`,
+			`struct { A opt.Opt[any]; AdditionalProps map[string]any }`,
+		},
+		{
 			"closed empty object", `{"type":"object","additionalProperties":false}`,
 			`struct{}`,
 		},

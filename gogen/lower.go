@@ -318,16 +318,57 @@ func fieldName(f plan.FieldRepresentation) (string, error) {
 // withPresence folds optionality and nullability into t. A type that is already a
 // [Presence] absorbs them rather than nesting: `{"type":["string","null"]}` on an optional
 // property is one opt.OptNullable, not an opt.Opt of an opt.Nullable.
+//
+// Nullability is dropped where the value already holds a null of its own; optionality
+// never is, because no Go value distinguishes absent from present.
 func withPresence(t GoType, optional, nullable bool) GoType {
 	if p, ok := t.(*Presence); ok {
 		p.Optional = p.Optional || optional
 		p.Nullable = p.Nullable || nullable
+		if p.Nullable {
+			if elem, ok := foldNull(p.Elem); ok {
+				p.Elem, p.Nullable = elem, false
+			}
+		}
+		if !p.Optional && !p.Nullable {
+			return p.Elem
+		}
 		return p
+	}
+	if nullable {
+		if elem, ok := foldNull(t); ok {
+			t, nullable = elem, false
+		}
 	}
 	if !optional && !nullable {
 		return t
 	}
 	return &Presence{Elem: t, Optional: optional, Nullable: nullable}
+}
+
+// foldNull returns t carrying a null of its own, for the types that store one: `any` does
+// by being nil, and a sum is stored as `any` (docs/backend.md §12). Saying so a second
+// time with a wrapper costs more than it states — a declaration written over
+// `opt.Nullable[any]` carries no methods at all, since a defined type does not inherit
+// them from the type it is defined as, so it decodes nothing. The null goes in as an
+// alternative instead, where a renderer that one day gives a sum a real shape will still
+// find it.
+//
+// Optionality has no such fold: nil is what `null` decodes to, and absent decodes to
+// nothing at all.
+func foldNull(t GoType) (GoType, bool) {
+	switch t := t.(type) {
+	case *Any:
+		return t, true
+	case *Interface:
+		for _, v := range t.Variants {
+			if p, ok := v.(*Primitive); ok && p.Kind == PrimitiveNull {
+				return t, true
+			}
+		}
+		return &Interface{Variants: append(slices.Clone(t.Variants), &Primitive{Kind: PrimitiveNull})}, true
+	}
+	return nil, false
 }
 
 func (l *lowerer) array(a *plan.ArrayRepresentation) (GoType, error) {
@@ -367,7 +408,8 @@ func (l *lowerer) array(a *plan.ArrayRepresentation) (GoType, error) {
 
 // union lowers alternatives to an interface sum, lifting a null alternative out into
 // [Presence]: `null` carries no value, so a variant for it would be a type with nothing
-// in it and a second way to spell what nullability already says.
+// in it and a second way to spell what nullability already says. Where the sum itself
+// holds a null, [withPresence] folds it straight back in.
 func (l *lowerer) union(u *plan.UnionRepresentation) (GoType, error) {
 	var (
 		variants []GoType
@@ -402,21 +444,5 @@ func (l *lowerer) union(u *plan.UnionRepresentation) (GoType, error) {
 		inner = &Interface{Variants: variants}
 	}
 
-	// A sum already holds a null: it is stored as `any` (§12), a nil interface is what
-	// [encoding/json] decodes `null` into, and it encodes one back. Saying so a second
-	// time with a presence wrapper costs more than it states — a declaration written over
-	// `opt.Nullable[any]` carries no methods at all, since a defined type does not inherit
-	// them from the type it is defined as, so it decodes nothing. The null goes in as an
-	// alternative instead, where a renderer that one day gives a sum a real shape will
-	// still find it.
-	if nullable {
-		switch inner.(type) {
-		case *Any:
-			nullable = false
-		case *Interface:
-			inner = &Interface{Variants: append(variants, &Primitive{Kind: PrimitiveNull})}
-			nullable = false
-		}
-	}
 	return withPresence(inner, false, nullable), nil
 }

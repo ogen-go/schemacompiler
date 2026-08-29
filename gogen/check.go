@@ -79,52 +79,57 @@ func (r *renderer) checkNode(v *vnode, expr string, p vpath, depth int) {
 	}
 	if v.call != nil {
 		if p.format != "" {
-			r.usesFmt = true
+			r.need("fmt")
 		}
 		fmt.Fprintf(&r.b, "if err := %s.Validate(); err != nil {\n%s\n}\n", expr, p.wrap("err"))
 	}
 	for _, k := range v.kids {
-		r.checkChild(k, expr, p, depth)
+		r.checkChild(v.t, k, expr, p, depth)
 	}
 }
 
-func (r *renderer) checkChild(k vchild, expr string, p vpath, depth int) {
+func (r *renderer) checkChild(parent GoType, k vchild, expr string, p vpath, depth int) {
 	b := &r.b
 	val, key, idx := "v"+strconv.Itoa(depth), "k"+strconv.Itoa(depth), "i"+strconv.Itoa(depth)
 	sel := expr
-	if k.sel != "" {
-		sel = expr + "." + k.sel
+	if name := selector(parent, k.edge); name != "" {
+		sel = expr + "." + name
 	}
-	switch k.kind {
-	case accessPresence:
+	rangeOver := func(over, loop string, seg vpath) {
+		r.need("fmt")
+		fmt.Fprintf(b, "for %s, %s := range %s {\n", loop, val, over)
+		r.checkNode(k.node, val, seg, depth+1)
+		b.WriteString("}\n")
+	}
+	switch k.edge.Kind {
+	case EdgeStored:
 		fmt.Fprintf(b, "if %s, ok := %s.Get(); ok {\n", val, expr)
 		r.checkNode(k.node, val, p, depth+1)
 		b.WriteString("}\n")
-	case accessPointer:
+	case EdgePointee:
 		fmt.Fprintf(b, "if %s != nil {\n", expr)
 		r.checkNode(k.node, "(*"+expr+")", p, depth+1)
 		b.WriteString("}\n")
-	case accessField:
-		r.checkNode(k.node, sel, p.static("."+k.json), depth)
-	case accessMapValue:
-		r.usesFmt = true
-		fmt.Fprintf(b, "for %s, %s := range %s {\n", key, val, sel)
-		r.checkNode(k.node, val, p.with("[%q]", key), depth+1)
-		b.WriteString("}\n")
-	case accessSliceElem:
-		r.usesFmt = true
-		fmt.Fprintf(b, "for %s, %s := range %s {\n", idx, val, sel)
-		r.checkNode(k.node, val, p.with("[%d]", idx), depth+1)
-		b.WriteString("}\n")
-	case accessTupleElem:
-		r.checkNode(k.node, sel, p.static("["+strconv.Itoa(k.index)+"]"), depth)
-	case accessTupleRest:
-		r.usesFmt = true
-		fmt.Fprintf(b, "for %s, %s := range %s {\n", idx, val, sel)
-		r.checkNode(k.node, val, p.with("[%d]", idx+"+"+strconv.Itoa(k.index)), depth+1)
-		b.WriteString("}\n")
+	case EdgeEnumElem:
+		// An enum is stored as its element, so there is nothing to reach through.
+		r.checkNode(k.node, expr, p, depth)
+	case EdgeField:
+		r.checkNode(k.node, sel, p.static("."+k.edge.JSON), depth)
+	case EdgePattern, EdgeAdditional:
+		rangeOver(sel, key, p.with("[%q]", key))
+	case EdgeElem:
+		if _, ok := deref(parent).(*Map); ok {
+			rangeOver(sel, key, p.with("[%q]", key))
+			return
+		}
+		rangeOver(sel, idx, p.with("[%d]", idx))
+	case EdgeTupleElem:
+		r.checkNode(k.node, sel, p.static("["+strconv.Itoa(k.edge.Index)+"]"), depth)
+	case EdgeTupleRest:
+		prefix := len(deref(parent).(*Tuple).Elems)
+		rangeOver(sel, idx, p.with("[%d]", idx+"+"+strconv.Itoa(prefix)))
 	default:
-		panic(fmt.Sprintf("gogen: unhandled accessKind %d", k.kind))
+		panic(fmt.Sprintf("gogen: unhandled EdgeKind %v under a validator", k.edge.Kind))
 	}
 }
 
@@ -168,10 +173,10 @@ func (r *renderer) predCode(t GoType, gp plan.GuardedPredicate, expr string, p v
 // path has arguments to format.
 func (r *renderer) markError(p vpath) {
 	if len(p.args) == 0 {
-		r.usesErrors = true
+		r.need("errors")
 		return
 	}
-	r.usesFmt = true
+	r.need("fmt")
 }
 
 func (r *renderer) reject(p vpath, cond, msg string) string {
@@ -183,7 +188,7 @@ func (r *renderer) length(t GoType, expr string, p vpath, v uint64, lower bool) 
 	if !isStringCore(t) {
 		return ""
 	}
-	r.usesUTF8 = true
+	r.need("unicode/utf8")
 	op, word := rejectBound(lower)
 	return r.reject(p, fmt.Sprintf("utf8.RuneCountInString(string(%s)) %s %d", expr, op, v),
 		"must be "+word+" "+plural(v, "character", "characters"))
@@ -212,7 +217,7 @@ func (r *renderer) multipleOf(t GoType, expr string, p vpath, v float64) string 
 	if isIntCore(t) && v == math.Trunc(v) {
 		return r.reject(p, fmt.Sprintf("%s%%%d != 0", expr, int64(v)), msg)
 	}
-	r.usesMath = true
+	r.need("math")
 	return r.reject(p, fmt.Sprintf("math.Mod(float64(%s), %s) != 0", expr, trimFloat(v)), msg)
 }
 
@@ -220,7 +225,7 @@ func (r *renderer) integral(t GoType, expr string, p vpath, d plan.NumericDomain
 	if d != plan.IntegerOnly || !isNumberCore(t) || isIntCore(t) {
 		return ""
 	}
-	r.usesMath = true
+	r.need("math")
 	return r.reject(p, fmt.Sprintf("%s != math.Trunc(%s)", expr, expr), "must be an integer")
 }
 
@@ -251,13 +256,13 @@ func tupleCount(t *Tuple, expr string) string {
 	var open int
 	for i := range t.Elems {
 		if pres, ok := t.Elems[i].(*Presence); ok && pres.Optional {
-			fmt.Fprintf(&b, "if %s {\n", presentExpr(expr+"."+tupleField(t, i), pres))
+			fmt.Fprintf(&b, "if %s {\n", presentExpr(expr+"."+slotsOfTuple(t).Elems[i], pres))
 			open++
 		}
 		b.WriteString("count++\n")
 	}
 	if t.Rest != nil {
-		fmt.Fprintf(&b, "count += len(%s.%s)\n", expr, tupleRestName(t))
+		fmt.Fprintf(&b, "count += len(%s.%s)\n", expr, slotsOfTuple(t).Rest)
 	}
 	b.WriteString(strings.Repeat("}\n", open))
 	return b.String()
@@ -281,10 +286,10 @@ func (r *renderer) propertyBound(t GoType, expr string, p vpath, v uint64, lower
 			b.WriteString("count++\n")
 		}
 		for i := range o.Patterns {
-			fmt.Fprintf(&b, "count += len(%s.%s)\n", expr, patternName(o, i))
+			fmt.Fprintf(&b, "count += len(%s.%s)\n", expr, slotsOf(o).Patterns[i])
 		}
 		if o.Additional != nil {
-			fmt.Fprintf(&b, "count += len(%s.%s)\n", expr, overflowName(o))
+			fmt.Fprintf(&b, "count += len(%s.%s)\n", expr, slotsOf(o).Additional)
 		}
 		fmt.Fprintf(&b, "if count %s %d {\nreturn %s\n}\n}\n", op, v, p.errorf(msg))
 		return b.String()

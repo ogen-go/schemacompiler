@@ -3,23 +3,9 @@ package gogen
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/ogen-go/schemacompiler/plan"
-)
-
-// accessKind is how a checked value is reached from the value holding it.
-type accessKind uint8
-
-const (
-	accessPresence accessKind = iota
-	accessPointer
-	accessField
-	accessMapValue
-	accessSliceElem
-	accessTupleElem
-	accessTupleRest
 )
 
 // vnode is one value's checks: what to test on it, whether it is a declared type that
@@ -34,12 +20,12 @@ type vnode struct {
 	kids  []vchild
 }
 
+// vchild is a checked value and the [Edge] it hangs off its holder by. The edge is the
+// walk's own vocabulary rather than a second one: how a value is reached is a property of
+// the Go type, and [Children] already answers it.
 type vchild struct {
-	kind  accessKind
-	sel   string
-	json  string
-	index int
-	node  *vnode
+	edge Edge
+	node *vnode
 }
 
 // vbuilder pairs the Go type tree with the plan tree. The plans are reachable from the
@@ -58,17 +44,19 @@ func (vb *vbuilder) admit(reason string) {
 }
 
 func (vb *vbuilder) node(t GoType, c Checks) *vnode {
-	switch x := t.(type) {
-	case *Named:
-		return &vnode{call: x}
-	case *Pointer:
-		return vb.wrap(accessPointer, x.Elem, c)
-	case *Presence:
-		return vb.wrap(accessPresence, x.Elem, c)
-	case *Enum:
-		// The admitted literals are enforced by the decoder, not here (§13); what is
-		// left is whatever the element itself carries.
-		return vb.node(x.Elem, c)
+	if named, ok := t.(*Named); ok {
+		return &vnode{t: t, call: named}
+	}
+	if e, elem, ok := boxed(t); ok {
+		return vb.wrap(t, e, vb.node(elem, c))
+	}
+	if enum, ok := t.(*Enum); ok {
+		// The literals are the decoder's (§13). What matters here is that c was split
+		// against the enum, which is what discharges the dispatch selecting them, so the
+		// element is walked with the same checks rather than re-split against itself.
+		for n := range Children(enum) {
+			return vb.wrap(t, n.Edge, vb.node(n.Type, c))
+		}
 	}
 
 	n := &vnode{t: t}
@@ -97,92 +85,126 @@ func (vb *vbuilder) node(t GoType, c Checks) *vnode {
 	return n
 }
 
-func (vb *vbuilder) wrap(kind accessKind, elem GoType, c Checks) *vnode {
-	inner := vb.node(elem, c)
-	if inner.empty() {
-		return &vnode{}
+// boxed reports that t holds its value behind a slot the enclosing shape decided on rather
+// than the value's own plan — presence and nullability (design §7.1), and the indirection
+// the recursion pass introduced. The checks are about the value, not the box.
+//
+// An enum is not one of these: the literals are part of what the value is, and the split
+// that discharges them is taken against the enum itself.
+func boxed(t GoType) (Edge, GoType, bool) {
+	switch t.(type) {
+	case *Presence, *Pointer:
+		for n := range Children(t) {
+			return n.Edge, n.Type, true
+		}
 	}
-	return &vnode{kids: []vchild{{kind: kind, node: inner}}}
+	return Edge{}, nil, false
+}
+
+func (vb *vbuilder) wrap(t GoType, e Edge, inner *vnode) *vnode {
+	if inner.empty() {
+		return &vnode{t: t}
+	}
+	return &vnode{t: t, kids: []vchild{{edge: e, node: inner}}}
 }
 
 // sub builds the checks of a sub-plan against the Go type that stores it. Splitting again
 // is the whole point: the disposition is a property of the pair (docs/backend.md §2), and
 // the pair at this depth is not the one the declaration was split against.
 //
-// The presence wrappers come off first. Whether a slot may be absent or null is the
-// enclosing shape's statement about the slot (design §7.1) — [plan.PropertyCheck] carries
-// it beside the plan, not inside it — so splitting the sub-plan against a wrapped type
-// would pair a value that admits null with a plan that asserts it is a string.
+// The boxes come off first. Whether a slot may be absent or null is the enclosing shape's
+// statement about the slot (design §7.1) — [plan.PropertyCheck] carries it beside the plan,
+// not inside it — so splitting the sub-plan against a wrapped type would pair a value that
+// admits null with a plan that asserts it is a string.
 func (vb *vbuilder) sub(t GoType, p plan.CompilationPlan) *vnode {
-	switch x := t.(type) {
-	case *Named:
-		return &vnode{call: x}
-	case *Pointer:
-		return vb.wrapSub(accessPointer, x.Elem, p)
-	case *Presence:
-		return vb.wrapSub(accessPresence, x.Elem, p)
+	if named, ok := t.(*Named); ok {
+		return &vnode{t: t, call: named}
+	}
+	if e, elem, ok := boxed(t); ok {
+		return vb.wrap(t, e, vb.sub(elem, p))
 	}
 	return vb.node(t, Split(t, p))
 }
 
-func (vb *vbuilder) wrapSub(kind accessKind, elem GoType, p plan.CompilationPlan) *vnode {
-	inner := vb.sub(elem, p)
-	if inner.empty() {
-		return &vnode{}
+// slots indexes a type's children by the edge that reaches them, so a plan's properties
+// and items can be looked up by the name or position the plan states them with.
+type slots struct {
+	fields     map[string]Node
+	patterns   map[string]Node
+	tuple      []Node
+	additional *Node
+	elem       *Node
+	rest       *Node
+}
+
+func childSlots(t GoType) slots {
+	s := slots{fields: map[string]Node{}, patterns: map[string]Node{}}
+	for n := range Children(t) {
+		switch n.Edge.Kind {
+		case EdgeField:
+			s.fields[n.Edge.JSON] = n
+		case EdgePattern:
+			s.patterns[n.Edge.Name] = n
+		case EdgeAdditional:
+			s.additional = &n
+		case EdgeElem:
+			s.elem = &n
+		case EdgeTupleElem:
+			s.tuple = append(s.tuple, n)
+		case EdgeTupleRest:
+			s.rest = &n
+		}
 	}
-	return &vnode{kids: []vchild{{kind: kind, node: inner}}}
+	return s
 }
 
 func (vb *vbuilder) object(t GoType, e *plan.ObjectStructurePredicate) []vchild {
-	switch s := deref(t).(type) {
-	case *Struct:
-		return vb.structObject(s, e)
-	case *Map:
-		return vb.mapObject(s, e)
-	default:
+	s := childSlots(t)
+	if _, ok := deref(t).(*Map); ok {
+		return vb.mapObject(t, s, e)
+	}
+	if _, ok := deref(t).(*Struct); !ok {
 		vb.admit("an object structure over a type that stores no object")
 		return nil
 	}
-}
 
-func (vb *vbuilder) structObject(s *Struct, e *plan.ObjectStructurePredicate) []vchild {
 	var kids []vchild
 	for _, pc := range e.Properties {
-		i := fieldIndex(s, pc.Name)
-		if i < 0 {
+		f, ok := s.fields[pc.Name]
+		if !ok {
 			vb.admit("a declared property no field stores")
 			continue
 		}
-		if pres, ok := s.Fields[i].Type.(*Presence); ok && pres.Nullable && !pc.Nullable {
+		if pres, ok := f.Type.(*Presence); ok && pres.Nullable && !pc.Nullable {
 			vb.admit("a null the Go type stores beside a property that does not admit one")
 		}
-		if n := vb.sub(s.Fields[i].Type, pc.Plan); !n.empty() {
-			kids = append(kids, vchild{kind: accessField, sel: s.Fields[i].Name, json: pc.Name, node: n})
-		}
+		kids = vb.appendKid(kids, f.Edge, f.Type, pc.Plan)
 	}
 	for _, pc := range e.Patterns {
-		i := patternIndex(s, pc.Pattern)
-		if i < 0 {
+		slot, ok := s.patterns[pc.Pattern]
+		if !ok {
 			vb.admit("a pattern rule no map stores")
 			continue
 		}
-		if n := vb.sub(s.Patterns[i].Elem, pc.Plan); !n.empty() {
-			kids = append(kids, vchild{kind: accessMapValue, sel: patternName(s, i), node: n})
+		m, ok := slot.Type.(*Map)
+		if !ok {
+			vb.admit("a pattern rule stored as something other than a map")
+			continue
 		}
+		kids = vb.appendKid(kids, slot.Edge, m.Elem, pc.Plan)
 	}
-	if e.Additional != nil && s.Additional != nil {
-		if n := vb.sub(s.Additional, *e.Additional); !n.empty() {
-			kids = append(kids, vchild{kind: accessMapValue, sel: overflowName(s), node: n})
-		}
+	if e.Additional != nil && s.additional != nil {
+		kids = vb.appendKid(kids, s.additional.Edge, s.additional.Type, *e.Additional)
 	}
 	return kids
 }
 
-func (vb *vbuilder) mapObject(m *Map, e *plan.ObjectStructurePredicate) []vchild {
+func (vb *vbuilder) mapObject(t GoType, s slots, e *plan.ObjectStructurePredicate) []vchild {
 	if len(e.Properties) > 0 {
 		vb.admit("a declared property inside a map, which holds one element type for every key")
 		return nil
 	}
+	m := deref(t).(*Map)
 	var p *plan.CompilationPlan
 	switch {
 	case m.Pattern != "":
@@ -194,53 +216,54 @@ func (vb *vbuilder) mapObject(m *Map, e *plan.ObjectStructurePredicate) []vchild
 	case len(e.Patterns) == 0:
 		p = e.Additional
 	}
-	if p == nil {
+	if p == nil || s.elem == nil {
 		vb.admit("an object structure a map cannot be paired with")
 		return nil
 	}
-	n := vb.sub(m.Elem, *p)
-	if n.empty() {
-		return nil
-	}
-	return []vchild{{kind: accessMapValue, node: n}}
+	return vb.appendKid(nil, s.elem.Edge, s.elem.Type, *p)
 }
 
 func (vb *vbuilder) array(t GoType, e *plan.ArrayStructurePredicate) []vchild {
-	switch a := deref(t).(type) {
+	s := childSlots(t)
+	switch deref(t).(type) {
 	case *Slice:
 		if len(e.Prefix) > 0 {
 			vb.admit("a prefix item inside a slice, which holds one element type for every index")
 			return nil
 		}
-		if e.Rest == nil {
+		if e.Rest == nil || s.elem == nil {
 			return nil
 		}
-		n := vb.sub(a.Elem, *e.Rest)
-		if n.empty() {
-			return nil
-		}
-		return []vchild{{kind: accessSliceElem, node: n}}
+		return vb.appendKid(nil, s.elem.Edge, s.elem.Type, *e.Rest)
 	case *Tuple:
 		var kids []vchild
 		for i, p := range e.Prefix {
-			if i >= len(a.Elems) {
+			if i >= len(s.tuple) {
 				vb.admit("a prefix item no tuple slot stores")
 				continue
 			}
-			if n := vb.sub(a.Elems[i], p); !n.empty() {
-				kids = append(kids, vchild{kind: accessTupleElem, sel: tupleField(a, i), index: i, node: n})
-			}
+			kids = vb.appendKid(kids, s.tuple[i].Edge, s.tuple[i].Type, p)
 		}
-		if e.Rest != nil && a.Rest != nil {
-			if n := vb.sub(a.Rest, *e.Rest); !n.empty() {
-				kids = append(kids, vchild{kind: accessTupleRest, sel: tupleRestName(a), index: len(a.Elems), node: n})
-			}
+		if e.Rest != nil && s.rest != nil {
+			kids = vb.appendKid(kids, s.rest.Edge, s.rest.Type, *e.Rest)
 		}
 		return kids
 	default:
 		vb.admit("an array structure over a type that stores no array")
 		return nil
 	}
+}
+
+// appendKid pairs a sub-plan with the type that stores it and hangs the result off e.
+//
+// The type is passed separately because [EdgePattern] does not carry it: a pattern slot is
+// a whole map, and the plan describes one of its values (walk.go says so where the edge is
+// built), so what is paired is the element while what is walked through is the map.
+func (vb *vbuilder) appendKid(kids []vchild, e Edge, t GoType, p plan.CompilationPlan) []vchild {
+	if v := vb.sub(t, p); !v.empty() {
+		return append(kids, vchild{edge: e, node: v})
+	}
+	return kids
 }
 
 func (n *vnode) empty() bool {
@@ -346,35 +369,6 @@ func hasOwnCheck(n *vnode) bool {
 		}
 	}
 	return false
-}
-
-func patternIndex(s *Struct, pattern string) int {
-	for i, p := range s.Patterns {
-		if p.Pattern == pattern {
-			return i
-		}
-	}
-	return -1
-}
-
-func patternName(s *Struct, want int) string {
-	taken := make(map[string]bool, len(s.Fields))
-	for _, f := range s.Fields {
-		taken[f.Name] = true
-	}
-	var name string
-	for i := range s.Patterns {
-		name = freeName("Pattern"+strconv.Itoa(i)+"Props", taken)
-		taken[name] = true
-		if i == want {
-			return name
-		}
-	}
-	return name
-}
-
-func tupleRestName(t *Tuple) string {
-	return freeName("Rest", tupleTaken(t))
 }
 
 func predicateName(e plan.PredicateExpr) string {

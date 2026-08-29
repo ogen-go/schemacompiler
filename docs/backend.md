@@ -588,6 +588,17 @@ name rather than an inlined tree. At each pair the split is taken again, because
 is a property of the pair and the pair at depth 3 is not the one the declaration was split
 against.
 
+The Go half of that walk is `Children`/`Edge` (issue #47's traversal), not a second one.
+A pass that grew its own vocabulary for "how a value is reached" would be a second answer
+to a question `walk.go` already answers, and the two would drift. The only thing the pairing
+adds is the direction: the plan says which property or which index, and the edges say what
+Go called it.
+
+For the same reason the name of a generated slot — a `patternProperties` map, the overflow
+map, a tuple slot — is computed once. It depends on the fields it sits beside, so the
+declaration, the codec and the validator have to agree, and it had been computed
+independently in four places.
+
 **Presence comes off before splitting.** Whether a slot may be absent or null is the
 enclosing shape's statement about the slot (design §7.1) — `PropertyCheck` carries it beside
 the plan, not inside it. Splitting a sub-plan against the wrapped Go type pairs a value that

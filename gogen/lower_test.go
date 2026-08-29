@@ -159,7 +159,12 @@ func TestLowerShapes(t *testing.T) {
 		{"format survives", `{"type":"string","format":"date-time"}`, `string`},
 		{"any", `{}`, `any`},
 		{"union", `{"oneOf":[{"type":"string"},{"type":"boolean"}]}`, `any`},
-		{"union with null alternative", `{"type":["string","boolean","null"]}`, `opt.Nullable[any]`},
+		// A sum is stored as `any`, which already holds a null, so the null is an
+		// alternative rather than a wrapper around one (§12).
+		{"union with null alternative", `{"type":["string","boolean","null"]}`, `any`},
+		// One alternative beside a null is not a sum, and a Go string cannot be nil, so
+		// this is the case the wrapper is actually for.
+		{"one alternative beside null", `{"type":["string","null"]}`, `opt.Nullable[string]`},
 		{
 			"nested object is anonymous", `{"type":"object","properties":{"a":{"type":"object","properties":{"b":{"type":"string"}},"required":["b"]}},"required":["a"]}`,
 			`struct { A struct { B string; AdditionalProps map[string]any }; AdditionalProps map[string]any }`,

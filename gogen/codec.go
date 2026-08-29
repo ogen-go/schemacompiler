@@ -18,9 +18,6 @@ import (
 // needs one because [Split] discharges `required` against the field not being optional,
 // which is a claim only a decoder can make true.
 func (r *renderer) codec(n *Named) string {
-	if !methodable(n.Underlying) {
-		return methodReason
-	}
 	switch u := n.Underlying.(type) {
 	case *Presence:
 		return r.presenceCodec(n, u)
@@ -59,6 +56,9 @@ func (r *renderer) presenceCodec(n *Named, p *Presence) string {
 // an enum entry is a JSON literal inside an array, not a schema, so it has nowhere to carry
 // an `x-go-name`. What it loses is the constants, never the check.
 func (r *renderer) enumCodec(n *Named, e *Enum) string {
+	if !methodable(n.Underlying) {
+		return methodReason
+	}
 	if lits, ok := goLiterals(e); ok {
 		r.primitiveEnumCodec(n, e, lits)
 		return ""
@@ -376,9 +376,10 @@ func (r *renderer) appendItem(value string, index int) {
 	p.WriteString("}\nb = append(b, d...)\n}\n")
 }
 
-// methodReason is why nothing is written for a type Go will not let a method hang off.
-// The declaration is still correct; what it cannot carry is behavior.
-const methodReason = "its Go type is a pointer or an interface, which cannot carry methods"
+// methodReason is why the admitted values of a heterogeneous enum go unenforced: the
+// alternatives share no Go type but `any`, and Go takes no method on a type declared as an
+// interface. The declaration is still correct; what it cannot carry is the check.
+const methodReason = "its Go type is an interface, which cannot carry a method"
 
 // patternReason is why a pattern-routing decoder is not written: Go's `regexp` is RE2 and
 // answers differently from ECMA-262 on the constructs that differ, which is issue #111 one

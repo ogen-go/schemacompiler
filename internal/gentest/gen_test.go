@@ -269,3 +269,17 @@ func TestValidateIsNotCalledByDecoding(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"","score":99}`), &g))
 	require.Error(t, g.Validate())
 }
+
+// TestNamedNullableRoundTrips is the fault the generated-code differential harness found
+// first: a defined type does not inherit the methods of the type it is defined as, so
+// `type Nickname opt.Nullable[string]` had no UnmarshalJSON and encoding/json saw a struct
+// of unexported fields — it rejected every document, admitted ones included.
+func TestNamedNullableRoundTrips(t *testing.T) {
+	for _, in := range []string{`"Rex"`, `null`} {
+		var n Nickname
+		require.NoError(t, json.Unmarshal([]byte(in), &n))
+		out, err := json.Marshal(n)
+		require.NoError(t, err)
+		require.JSONEq(t, in, string(out))
+	}
+}

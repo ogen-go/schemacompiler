@@ -401,5 +401,22 @@ func (l *lowerer) union(u *plan.UnionRepresentation) (GoType, error) {
 	default:
 		inner = &Interface{Variants: variants}
 	}
+
+	// A sum already holds a null: it is stored as `any` (§12), a nil interface is what
+	// [encoding/json] decodes `null` into, and it encodes one back. Saying so a second
+	// time with a presence wrapper costs more than it states — a declaration written over
+	// `opt.Nullable[any]` carries no methods at all, since a defined type does not inherit
+	// them from the type it is defined as, so it decodes nothing. The null goes in as an
+	// alternative instead, where a renderer that one day gives a sum a real shape will
+	// still find it.
+	if nullable {
+		switch inner.(type) {
+		case *Any:
+			nullable = false
+		case *Interface:
+			inner = &Interface{Variants: append(variants, &Primitive{Kind: PrimitiveNull})}
+			nullable = false
+		}
+	}
 	return withPresence(inner, false, nullable), nil
 }

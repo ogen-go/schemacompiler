@@ -18,7 +18,12 @@ import (
 // needs one because [Split] discharges `required` against the field not being optional,
 // which is a claim only a decoder can make true.
 func (r *renderer) codec(n *Named) string {
+	if !methodable(n.Underlying) {
+		return methodReason
+	}
 	switch u := n.Underlying.(type) {
+	case *Presence:
+		return r.presenceCodec(n, u)
 	case *Struct:
 		return r.structCodec(n, u)
 	case *Enum:
@@ -28,6 +33,20 @@ func (r *renderer) codec(n *Named) string {
 	default:
 		return ""
 	}
+}
+
+// presenceCodec forwards to the presence type the declaration is written over.
+//
+// A defined type does not inherit the methods of the type it is defined as, so
+// `type T opt.Nullable[any]` has no UnmarshalJSON at all and [encoding/json] sees a struct
+// whose fields are unexported — it rejects every document, including the ones the schema
+// admits, which is the one direction design §24 forbids.
+func (r *renderer) presenceCodec(n *Named, p *Presence) string {
+	r.need(r.optPkg)
+	under := TypeExpr(p)
+	fmt.Fprintf(&r.b, "// MarshalJSON implements json.Marshaler.\nfunc (v %s) MarshalJSON() ([]byte, error) {\nreturn %s(v).MarshalJSON()\n}\n\n", n.Name, under)
+	fmt.Fprintf(&r.b, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (v *%s) UnmarshalJSON(data []byte) error {\nreturn (*%s)(v).UnmarshalJSON(data)\n}\n\n", n.Name, under)
+	return ""
 }
 
 // enumCodec enforces the admitted values. Two ways, and the difference is only how the
@@ -356,6 +375,10 @@ func (r *renderer) appendItem(value string, index int) {
 	}
 	p.WriteString("}\nb = append(b, d...)\n}\n")
 }
+
+// methodReason is why nothing is written for a type Go will not let a method hang off.
+// The declaration is still correct; what it cannot carry is behavior.
+const methodReason = "its Go type is a pointer or an interface, which cannot carry methods"
 
 // patternReason is why a pattern-routing decoder is not written: Go's `regexp` is RE2 and
 // answers differently from ECMA-262 on the constructs that differ, which is issue #111 one

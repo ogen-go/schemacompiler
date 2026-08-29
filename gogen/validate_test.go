@@ -46,7 +46,8 @@ func TestValidateChecksWhatTheTypeDoesNotState(t *testing.T) {
 	}{
 		{"string_bounds", `{"type":"string","minLength":2,"maxLength":4}`},
 		{"integer_bounds", `{"type":"integer","minimum":1,"exclusiveMaximum":10}`},
-		{"float_domain", `{"type":"number","multipleOf":0.5,"minimum":0}`},
+		{"float_domain", `{"type":"number","multipleOf":2,"minimum":0}`},
+		{"inexact_multiple_of", `{"type":"number","multipleOf":0.5}`},
 		{"array_bounds", `{"type":"array","items":{"type":"string"},"minItems":1,"uniqueItems":true}`},
 		{"property_reached_through_presence", `{"type":"object","properties":{"a":{"type":"string","minLength":1}}}`},
 		{"index_known_only_at_run_time", `{"type":"array","items":{"type":"string","maxLength":2}}`},

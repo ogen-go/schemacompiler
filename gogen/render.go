@@ -395,8 +395,42 @@ func (r *renderer) enumConsts(n *Named) {
 	r.b.WriteString(")\n\n")
 }
 
+// methodable reports whether a method can be declared on a type declared as t. Go forbids
+// a receiver whose underlying type is a pointer or an interface, which is what a sum, an
+// `any` and a broken recursion cycle lower to.
+func methodable(t GoType) bool {
+	switch x := t.(type) {
+	case *Any, *Interface, *Pointer:
+		return false
+	case *Enum:
+		return methodable(x.Elem)
+	default:
+		return true
+	}
+}
+
+// constable reports whether a value of t can be spelled as a Go constant. The presence
+// wrappers and the null type are structs, and a struct is not a constant.
+func constable(t GoType) bool {
+	switch x := t.(type) {
+	case *Named:
+		return constable(x.Underlying)
+	case *Enum:
+		return constable(x.Elem)
+	case *Primitive:
+		return x.Kind != PrimitiveNull
+	default:
+		return false
+	}
+}
+
 // goLiteral is the Go source for one admitted value, or false when it has none.
 func goLiteral(v EnumValue, elem GoType) (string, bool) {
+	// A JSON null is admitted by the storage rather than by a constant beside it, and a
+	// type that cannot be a constant has no literal to write whatever the value is.
+	if v.Value == nil || !constable(elem) {
+		return "", false
+	}
 	p, ok := deref(elem).(*Primitive)
 	if !ok {
 		return "", false

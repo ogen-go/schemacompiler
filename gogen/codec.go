@@ -53,7 +53,8 @@ func (r *renderer) enumCodec(n *Named, e *Enum) string {
 		if len(s.Patterns) > 0 {
 			return patternReason
 		}
-		r.usesJSON, r.usesFmt, r.usesSort = true, true, true
+		r.need("encoding/json", "fmt")
+		r.needHelper("codec")
 		if s.Additional != nil {
 			r.marshalStruct(n, s)
 		}
@@ -67,7 +68,7 @@ func (r *renderer) enumCodec(n *Named, e *Enum) string {
 		return "an enum whose values include null needs a decoder that dispatches on kind"
 	}
 
-	r.usesJSON, r.usesFmt = true, true
+	r.need("encoding/json", "fmt")
 	p := &r.b
 	fmt.Fprintf(p, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (v *%s) UnmarshalJSON(data []byte) error {\n", n.Name)
 	r.enumGuard(n, cases)
@@ -87,7 +88,7 @@ func (r *renderer) enumCodec(n *Named, e *Enum) string {
 // disagree about what equal is. Nothing is stored: the admitted set is a list of string
 // cases in a switch, not a package variable holding decoded values.
 func (r *renderer) enumGuard(n *Named, cases []string) {
-	r.usesCanon = true
+	r.needHelper("canon")
 	quoted := make([]string, len(cases))
 	for i, c := range cases {
 		quoted[i] = strconv.Quote(c)
@@ -161,8 +162,7 @@ func (r *renderer) structCodec(n *Named, s *Struct) string {
 	if len(s.Patterns) > 0 {
 		return patternReason
 	}
-	r.usesJSON = true
-	r.usesFmt = true
+	r.need("encoding/json", "fmt")
 
 	// Encoding only needs writing when the overflow map has to be flattened into the same
 	// object, which is the one thing struct tags cannot say. Presence is already covered:
@@ -198,8 +198,8 @@ func (r *renderer) marshalStruct(n *Named, s *Struct) {
 	}
 
 	if s.Additional != nil {
-		r.usesSort = true
-		name := overflowName(s)
+		r.needHelper("codec")
+		name := slotsOf(s).Additional
 		fmt.Fprintf(p, "for _, k := range sortedKeys(s.%s) {\n", name)
 		r.encodeField("k", "s."+name+"[k]", "")
 		p.WriteString("}\n")
@@ -248,8 +248,8 @@ func (r *renderer) unmarshalStructBody(n *Named, s *Struct) {
 	}
 
 	if s.Additional != nil {
-		r.usesSort = true
-		name := overflowName(s)
+		r.needHelper("codec")
+		name := slotsOf(s).Additional
 		p.WriteString("if len(raw) > 0 {\n")
 		fmt.Fprintf(p, "out.%s = make(map[string]", name)
 		r.typ(s.Additional)
@@ -258,7 +258,7 @@ func (r *renderer) unmarshalStructBody(n *Named, s *Struct) {
 		p.WriteString("\nif err := json.Unmarshal(raw[k], &e); err != nil {\nreturn fmt.Errorf(\"decode %q: %w\", k, err)\n}\n")
 		fmt.Fprintf(p, "out.%s[k] = e\n}\n}\n", name)
 	} else {
-		r.usesSort = true
+		r.needHelper("codec")
 		p.WriteString("if len(raw) > 0 {\nreturn fmt.Errorf(\"unexpected property %q\", sortedKeys(raw)[0])\n}\n")
 	}
 
@@ -267,8 +267,7 @@ func (r *renderer) unmarshalStructBody(n *Named, s *Struct) {
 
 func (r *renderer) primitiveEnumCodec(n *Named, e *Enum, lits []string) {
 	prim := deref(e.Elem).(*Primitive)
-	r.usesJSON = true
-	r.usesFmt = true
+	r.need("encoding/json", "fmt")
 
 	p := &r.b
 	fmt.Fprintf(p, "// UnmarshalJSON implements json.Unmarshaler. Go constants restrict nothing,\n"+
@@ -276,19 +275,6 @@ func (r *renderer) primitiveEnumCodec(n *Named, e *Enum, lits []string) {
 	fmt.Fprintf(p, "var raw %s\nif err := json.Unmarshal(data, &raw); err != nil {\nreturn err\n}\n", goPrimitive(prim.Kind))
 	fmt.Fprintf(p, "switch raw {\ncase %s:\n*v = %s(raw)\nreturn nil\ndefault:\n", strings.Join(lits, ", "), n.Name)
 	fmt.Fprintf(p, "return fmt.Errorf(\"%%v is not a valid %s\", raw)\n}\n}\n\n", n.Name)
-}
-
-// overflowName repeats the name the struct renderer gave the overflow slot, which is the
-// declared fields' names plus a suffix when one of them took it.
-func overflowName(s *Struct) string {
-	taken := make(map[string]bool, len(s.Fields))
-	for _, f := range s.Fields {
-		taken[f.Name] = true
-	}
-	for i := range s.Patterns {
-		taken[freeName("Pattern"+strconv.Itoa(i)+"Props", taken)] = true
-	}
-	return freeName("AdditionalProps", taken)
 }
 
 // tupleCodec writes a tuple as the JSON array it is.
@@ -305,13 +291,13 @@ func (r *renderer) tupleCodec(n *Named, t *Tuple) string {
 	if len(t.Elems) == 0 {
 		return ""
 	}
-	r.usesJSON, r.usesFmt = true, true
+	r.need("encoding/json", "fmt")
 
 	p := &r.b
 	fmt.Fprintf(p, "// MarshalJSON implements json.Marshaler.\nfunc (s %s) MarshalJSON() ([]byte, error) {\n", n.Name)
 	p.WriteString("b := []byte{'['}\nn := 0\n")
 	for i, e := range t.Elems {
-		name := tupleField(t, i)
+		name := slotsOfTuple(t).Elems[i]
 		if pres, ok := e.(*Presence); ok && pres.Optional {
 			fmt.Fprintf(p, "if v, ok := s.%s.Get(); ok {\n", name)
 			r.appendItem("v", i)
@@ -322,7 +308,7 @@ func (r *renderer) tupleCodec(n *Named, t *Tuple) string {
 		r.appendItem("s."+name, i)
 	}
 	if t.Rest != nil {
-		fmt.Fprintf(p, "for _, v := range s.%s {\n", freeName("Rest", tupleTaken(t)))
+		fmt.Fprintf(p, "for _, v := range s.%s {\n", slotsOfTuple(t).Rest)
 		r.appendItem("v", -1)
 		p.WriteString("}\n")
 	}
@@ -332,7 +318,7 @@ func (r *renderer) tupleCodec(n *Named, t *Tuple) string {
 	p.WriteString("var raw []json.RawMessage\nif err := json.Unmarshal(data, &raw); err != nil {\nreturn err\n}\n")
 	fmt.Fprintf(p, "var out %s\n", n.Name)
 	for i, e := range t.Elems {
-		name := tupleField(t, i)
+		name := slotsOfTuple(t).Elems[i]
 		fmt.Fprintf(p, "if len(raw) > %d {\nif err := json.Unmarshal(raw[%d], &out.%s); err != nil {\n"+
 			"return fmt.Errorf(\"decode item %d: %%w\", err)\n}\n", i, i, name, i)
 		if pres, ok := e.(*Presence); !ok || !pres.Optional {
@@ -342,7 +328,7 @@ func (r *renderer) tupleCodec(n *Named, t *Tuple) string {
 		p.WriteString("}\n")
 	}
 	if t.Rest != nil {
-		rest := freeName("Rest", tupleTaken(t))
+		rest := slotsOfTuple(t).Rest
 		fmt.Fprintf(p, "if len(raw) > %d {\nout.%s = make([]", len(t.Elems), rest)
 		r.typ(t.Rest)
 		fmt.Fprintf(p, ", 0, len(raw)-%d)\nfor i, item := range raw[%d:] {\nvar e ", len(t.Elems), len(t.Elems))
@@ -369,28 +355,6 @@ func (r *renderer) appendItem(value string, index int) {
 		fmt.Fprintf(p, "return nil, fmt.Errorf(\"encode item %d: %%w\", err)\n", index)
 	}
 	p.WriteString("}\nb = append(b, d...)\n}\n")
-}
-
-// tupleField repeats the name the tuple renderer gave slot i.
-func tupleField(t *Tuple, i int) string {
-	taken := make(map[string]bool, len(t.Elems))
-	var name string
-	for j := range t.Elems {
-		name = freeName("F"+strconv.Itoa(j), taken)
-		taken[name] = true
-		if j == i {
-			return name
-		}
-	}
-	return name
-}
-
-func tupleTaken(t *Tuple) map[string]bool {
-	taken := make(map[string]bool, len(t.Elems))
-	for j := range t.Elems {
-		taken[freeName("F"+strconv.Itoa(j), taken)] = true
-	}
-	return taken
 }
 
 // patternReason is why a pattern-routing decoder is not written: Go's `regexp` is RE2 and

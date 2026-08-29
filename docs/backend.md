@@ -573,3 +573,59 @@ inside a declaration, and a nested plan is carried by a nested Go type, which ha
 slot — only `Named` does. It is the same boundary §10 counts predicates at, and it is a
 `gogen` limitation rather than something `plan` was not ready for: the plan says it, and a
 per-node pairing of the two trees is what would read it.
+
+## 15. Validation is a pairing of two trees
+
+`Checks` says, per declaration, what the Go type left undone. Nothing acted on it: generated
+code decoded and re-encoded and rejected nothing, which made it easy to mistake for a
+validator. `Render(…, Options{Validate: true})` now writes the `Validate() error` design
+§20.2 describes, for the types that need one.
+
+**The pass is a walk of two trees at once.** A predicate carries its sub-plans —
+`ObjectStructurePredicate` holds each property's `CompilationPlan` — so pairing them with
+the fields those properties were stored in needs no map of definitions, and a `$ref` stays a
+name rather than an inlined tree. At each pair the split is taken again, because §2's rule
+is a property of the pair and the pair at depth 3 is not the one the declaration was split
+against.
+
+The Go half of that walk is `Children`/`Edge` (issue #47's traversal), not a second one.
+A pass that grew its own vocabulary for "how a value is reached" would be a second answer
+to a question `walk.go` already answers, and the two would drift. The only thing the pairing
+adds is the direction: the plan says which property or which index, and the edges say what
+Go called it.
+
+For the same reason the name of a generated slot — a `patternProperties` map, the overflow
+map, a tuple slot — is computed once. It depends on the fields it sits beside, so the
+declaration, the codec and the validator have to agree, and it had been computed
+independently in four places.
+
+**Presence comes off before splitting.** Whether a slot may be absent or null is the
+enclosing shape's statement about the slot (design §7.1) — `PropertyCheck` carries it beside
+the plan, not inside it. Splitting a sub-plan against the wrapped Go type pairs a value that
+admits null with a plan that asserts it is a string, and every optional nullable property in
+the corpus — 439 of them — reported an unenforceable kind guard that was an artefact of the
+pairing rather than anything the schema said.
+
+**Which types get a method is a least fixpoint.** A type needs one when it checks something
+itself, or when it reaches one that does. It has to be the *least* fixpoint: starting from
+"everything needs one" keeps a recursive cycle whose members check nothing, and a call to a
+method that was not generated does not compile. The type checker (§9) is the witness again.
+
+**A path is carried, not reconstructed.** A map key and a slice index are only known at run
+time, so the path a message names is a format string and its arguments, filled in as the
+walk descends. A check with no run-time component gets `errors.New` and no formatting.
+
+**Measured.** Over the ogen corpus: 337 of 1592 types get a method, and 923 constraints are
+reported as unenforced. `format` is 659 of them — the single largest hole, and the next
+thing worth writing, since it needs a registry of format names rather than anything
+structural. `pattern` is 7 and needs an ECMA-262 engine in generated code, which is a
+dependency decision rather than a gap.
+
+**What this reaches that §14 did not.** Pairing the trees per node gives nested plans a place
+to report from, so a dispatch nested inside a declaration is admitted too: 93 kind, 45
+predicate-count, 12 property. That is not all 392 — a sum stored as `any` has no Go tree to
+pair against, so what is nested inside one still goes unreported.
+
+**Decoding does not call it.** A decoder that rejected would make two different answers to
+what is accepted, and the one it could give is the weaker. Validation stays the caller's
+call, as it is in ogen.

@@ -629,3 +629,46 @@ pair against, so what is nested inside one still goes unreported.
 **Decoding does not call it.** A decoder that rejected would make two different answers to
 what is accepted, and the one it could give is the weaker. Validation stays the caller's
 call, as it is in ogen.
+
+## 16. Generated code is the third validator
+
+§3 said generated code would join `planterp` and `nodetree` in the differential harness. It
+does now, and it needed the validators (§15) first: before them there was nothing to
+disagree about, since generated code accepted every document its Go type could hold.
+
+**It is compiled and run, not read.** `internal/gorun` writes the rendered package into a
+temporary module and runs it against the suite's instances. Type-checking (§9) says the
+package is legal Go; it says nothing about what the package accepts, and that is the whole
+question here.
+
+One program, not one per schema. Every suite case is lowered, its types renamed apart, and
+all of them rendered into a single package with a dispatch on the case index — 326 cases and
+342 types come to 36 KiB of Go, so the harness costs one compile. The presence types are
+copied in beside the generated source rather than imported from this module, so the build
+needs no module cache and no network.
+
+**The check is one-directional.** Generated code over-accepts by construction — §15's
+unenforced column is precisely the list of things it will not reject on — and design §24
+permits that while forbidding the other direction outright. So rejecting an instance
+`planterp` accepts is a failure; accepting one it rejects is a number. It is 290 of 1779
+instances, 16%.
+
+**What it found on the first run.** Eighteen under-accepts and two packages that did not
+compile, none of which any existing test could see:
+
+- A declaration written over a presence type — `type T opt.Nullable[any]` — decoded
+  nothing. A defined type does not inherit the methods of the type it is defined as, so it
+  had no `UnmarshalJSON` and `encoding/json` saw a struct of unexported fields. That is
+  every kind-agnostic schema in the suite: 13 of the 18.
+- A method on a type declared as `any` is not legal Go, and `enum` over a heterogeneous set
+  lowers to exactly that. Neither the codec nor the validator checked.
+- Constants over a `null`-admitting enum are not constants: `opt.Nullable[int64]` is a
+  struct, and the null literal rendered as `null`.
+- `multipleOf` compiled to `math.Mod` on float64, which rejects `12391239123` against
+  `1e-08` — `planterp` answers in `big.Rat` because binary floating point cannot. It is now
+  emitted only for an integral divisor and declared otherwise.
+
+What is left is one class, counted on its own line: a JSON number no Go numeric type can
+hold or parse (issue #163). Four instances of 1779 — two 51-digit integers, `1e308`, and
+`1.0` against `type: "integer"`, which is an integer to JSON Schema and not to
+`encoding/json`.

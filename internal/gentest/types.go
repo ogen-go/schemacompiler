@@ -13,16 +13,29 @@ import (
 	"github.com/ogen-go/schemacompiler/opt"
 )
 
+// Nickname has an unenforced kind dispatch: nothing generated selects a branch, so every alternative is admitted.
+type Nickname opt.Nullable[string]
+
+// MarshalJSON implements json.Marshaler.
+func (v Nickname) MarshalJSON() ([]byte, error) {
+	return opt.Nullable[string](v).MarshalJSON()
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (v *Nickname) UnmarshalJSON(data []byte) error {
+	return (*opt.Nullable[string])(v).UnmarshalJSON(data)
+}
+
 // Pet is a pet.
 type Pet struct {
-	Name     string               `json:"name"`
-	Age      opt.Opt[int64]       `json:"age,omitzero"`
-	Nickname opt.Nullable[string] `json:"nickname"`
-	Status   opt.Opt[Status]      `json:"status,omitzero"`
-	Tags     opt.Opt[[]Tag]       `json:"tags,omitzero"`
-	Parent   opt.Opt[*Pet]        `json:"parent,omitzero"`
-	Shape    opt.Opt[Shape]       `json:"shape,omitzero"`
-	At       opt.Opt[Point]       `json:"at,omitzero"`
+	Name     string                 `json:"name"`
+	Age      opt.Opt[int64]         `json:"age,omitzero"`
+	Nickname opt.Nullable[Nickname] `json:"nickname"`
+	Status   opt.Opt[Status]        `json:"status,omitzero"`
+	Tags     opt.Opt[[]Tag]         `json:"tags,omitzero"`
+	Parent   opt.Opt[*Pet]          `json:"parent,omitzero"`
+	Shape    opt.Opt[Shape]         `json:"shape,omitzero"`
+	At       opt.Opt[Point]         `json:"at,omitzero"`
 	// AdditionalProps holds the properties no field and no pattern covers.
 	AdditionalProps map[string]any
 }
@@ -440,6 +453,9 @@ func (s Tag) Validate() error {
 	}
 	return nil
 }
+
+// Not enforced by the generated validators:
+//       1 kind selects a branch nothing generated evaluates
 
 func encodeKey(b []byte, n *int, k string) ([]byte, error) {
 	if *n > 0 {

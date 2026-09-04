@@ -10,6 +10,7 @@
         {"kind": "square", "side": 2}
       ]
     },
+    "Nickname": {"type": ["string", "null"]},
     "Point": {
       "type": "array",
       "prefixItems": [{"type": "number"}, {"type": "number"}, {"type": "string"}],
@@ -31,7 +32,7 @@
       "properties": {
         "name": {"type": "string"},
         "age": {"type": "integer", "minimum": 0},
-        "nickname": {"type": ["string", "null"]},
+        "nickname": {"$ref": "#/$defs/Nickname"},
         "status": {"$ref": "#/$defs/Status"},
         "tags": {"type": "array", "items": {"$ref": "#/$defs/Tag"}, "maxItems": 3},
         "parent": {"$ref": "#/$defs/Pet"},

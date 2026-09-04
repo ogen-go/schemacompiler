@@ -19,6 +19,8 @@ import (
 // which is a claim only a decoder can make true.
 func (r *renderer) codec(n *Named) string {
 	switch u := n.Underlying.(type) {
+	case *Presence:
+		return r.presenceCodec(n, u)
 	case *Struct:
 		return r.structCodec(n, u)
 	case *Enum:
@@ -28,6 +30,20 @@ func (r *renderer) codec(n *Named) string {
 	default:
 		return ""
 	}
+}
+
+// presenceCodec forwards to the presence type the declaration is written over.
+//
+// A defined type does not inherit the methods of the type it is defined as, so
+// `type T opt.Nullable[any]` has no UnmarshalJSON at all and [encoding/json] sees a struct
+// whose fields are unexported — it rejects every document, including the ones the schema
+// admits, which is the one direction design §24 forbids.
+func (r *renderer) presenceCodec(n *Named, p *Presence) string {
+	r.need(r.optPkg)
+	under := TypeExpr(p)
+	fmt.Fprintf(&r.b, "// MarshalJSON implements json.Marshaler.\nfunc (v %s) MarshalJSON() ([]byte, error) {\nreturn %s(v).MarshalJSON()\n}\n\n", n.Name, under)
+	fmt.Fprintf(&r.b, "// UnmarshalJSON implements json.Unmarshaler.\nfunc (v *%s) UnmarshalJSON(data []byte) error {\nreturn (*%s)(v).UnmarshalJSON(data)\n}\n\n", n.Name, under)
+	return ""
 }
 
 // enumCodec enforces the admitted values. Two ways, and the difference is only how the
@@ -40,6 +56,9 @@ func (r *renderer) codec(n *Named) string {
 // an enum entry is a JSON literal inside an array, not a schema, so it has nowhere to carry
 // an `x-go-name`. What it loses is the constants, never the check.
 func (r *renderer) enumCodec(n *Named, e *Enum) string {
+	if !methodable(n.Underlying) {
+		return methodReason
+	}
 	if lits, ok := goLiterals(e); ok {
 		r.primitiveEnumCodec(n, e, lits)
 		return ""
@@ -356,6 +375,11 @@ func (r *renderer) appendItem(value string, index int) {
 	}
 	p.WriteString("}\nb = append(b, d...)\n}\n")
 }
+
+// methodReason is why the admitted values of a heterogeneous enum go unenforced: the
+// alternatives share no Go type but `any`, and Go takes no method on a type declared as an
+// interface. The declaration is still correct; what it cannot carry is the check.
+const methodReason = "its Go type is an interface, which cannot carry a method"
 
 // patternReason is why a pattern-routing decoder is not written: Go's `regexp` is RE2 and
 // answers differently from ECMA-262 on the constructs that differ, which is issue #111 one

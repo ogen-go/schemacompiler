@@ -209,12 +209,18 @@ func (r *renderer) bound(t GoType, expr string, p vpath, v float64, exclusive, l
 	return r.reject(p, fmt.Sprintf("%s %s %s", expr, op, lit), fmt.Sprintf("must be %s %s", word, numberText(v)))
 }
 
+// multipleOf is emitted only for a divisor Go can divide by exactly.
+//
+// `planterp` answers this in [math/big.Rat] because binary floating point cannot: 1e-08 is
+// not the number the document wrote, so `math.Mod(12391239123, 1e-08)` is not zero and the
+// check would reject a value the schema admits — the one direction design §24 forbids. An
+// integral divisor has no such gap, and everything else is declared rather than guessed at.
 func (r *renderer) multipleOf(t GoType, expr string, p vpath, v float64) string {
-	if !isNumberCore(t) || v == 0 {
+	if !isNumberCore(t) || v == 0 || v != math.Trunc(v) {
 		return ""
 	}
 	msg := "must be a multiple of " + numberText(v)
-	if isIntCore(t) && v == math.Trunc(v) {
+	if isIntCore(t) {
 		return r.reject(p, fmt.Sprintf("%s%%%d != 0", expr, int64(v)), msg)
 	}
 	r.need("math")

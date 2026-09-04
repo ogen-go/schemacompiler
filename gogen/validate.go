@@ -326,6 +326,7 @@ func validators(types []*Named) (nodes map[*Named]*vnode, needs map[*Named]bool,
 	nodes = make(map[*Named]*vnode, len(types))
 	deps := make(map[*Named]map[*Named]bool, len(types))
 	needs = make(map[*Named]bool, len(types))
+	blocked := map[*Named]bool{}
 	for _, n := range types {
 		v := vb.node(n.Underlying, n.Checks)
 		nodes[n] = v
@@ -333,11 +334,19 @@ func validators(types []*Named) (nodes map[*Named]*vnode, needs map[*Named]bool,
 		v.calls(d)
 		deps[n] = d
 		needs[n] = hasOwnCheck(v)
+		if needs[n] && !methodable(n.Underlying) {
+			// The checks are real and there is nowhere to put them: Go refuses a method
+			// on a type declared as a pointer or an interface. Saying so is the whole of
+			// what is left to do about them.
+			vb.admit("a check on a type that cannot carry a method")
+			needs[n] = false
+			blocked[n] = true
+		}
 	}
 	for changed := true; changed; {
 		changed = false
 		for _, n := range types {
-			if needs[n] {
+			if needs[n] || blocked[n] {
 				continue
 			}
 			for m := range deps[n] {

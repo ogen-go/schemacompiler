@@ -15,7 +15,7 @@ func validated(t *testing.T, schema string) string {
 	t.Helper()
 	types, err := gogen.Lower(definitions(t, schema))
 	require.NoError(t, err)
-	files, err := gogen.Render(types, gogen.Options{Validate: true})
+	files, err := gogen.Render(types, gogen.Options{Codec: true, Validate: true})
 	require.NoError(t, err)
 	require.NoError(t, gotypecheck.Check(files, "../opt"))
 	return string(files[0].Content)
@@ -38,7 +38,8 @@ func body(t *testing.T, src, name string) string {
 }
 
 // TestValidateChecksWhatTheTypeDoesNotState golden-files the whole rendered file rather
-// than the method body: what a check costs in imports is part of what it costs.
+// than the method body: what a check costs in imports, and what it sits beside in the
+// codec, is part of what it costs.
 func TestValidateChecksWhatTheTypeDoesNotState(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -46,13 +47,15 @@ func TestValidateChecksWhatTheTypeDoesNotState(t *testing.T) {
 	}{
 		{"string_bounds", `{"type":"string","minLength":2,"maxLength":4}`},
 		{"integer_bounds", `{"type":"integer","minimum":1,"exclusiveMaximum":10}`},
-		{"float_domain", `{"type":"number","multipleOf":0.5,"minimum":0}`},
+		{"float_domain", `{"type":"number","multipleOf":2,"minimum":0}`},
+		{"inexact_multiple_of", `{"type":"number","multipleOf":0.5}`},
 		{"array_bounds", `{"type":"array","items":{"type":"string"},"minItems":1,"uniqueItems":true}`},
 		{"property_reached_through_presence", `{"type":"object","properties":{"a":{"type":"string","minLength":1}}}`},
 		{"index_known_only_at_run_time", `{"type":"array","items":{"type":"string","maxLength":2}}`},
 		{"dependent_required", `{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}},"dependentRequired":{"a":["b"]}}`},
 		{"object_property_count", `{"type":"object","properties":{"a":{"type":"string"}},"minProperties":1,"maxProperties":3}`},
 		{"map_property_count", `{"type":"object","additionalProperties":{"type":"string"},"minProperties":2}`},
+		{"named_nullable", `{"type":["string","null"],"minLength":2}`},
 		{"pattern_properties", `{"type":"object","patternProperties":{"^a":{"type":"string","minLength":2}}}`},
 	}
 	for _, tt := range tests {
